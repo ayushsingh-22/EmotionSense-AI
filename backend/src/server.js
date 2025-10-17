@@ -22,6 +22,8 @@ import textRoutes from './routes/textRoutes.js';
 import voiceRoutes from './routes/voiceRoutes.js';
 import multiModalRoutes from './routes/multiModalRoutes.js';
 import responseRoutes from './routes/responseRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
+import ttsRoutes from './routes/ttsRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 
 // Load environment variables
@@ -92,6 +94,12 @@ const configureRoutes = () => {
   // Response generation routes
   app.use('/api/response', responseRoutes);
 
+  // Chat routes
+  app.use('/api/chat', chatRoutes);
+
+  // TTS routes
+  app.use('/api/tts', ttsRoutes);
+
   // Root endpoint
   app.get('/', (req, res) => {
     res.json({
@@ -103,7 +111,9 @@ const configureRoutes = () => {
         textAnalysis: '/api/analyze/text',
         voiceAnalysis: '/api/analyze/voice',
         multiModalAnalysis: '/api/analyze/multimodal',
-        responseGeneration: '/api/response/generate'
+        responseGeneration: '/api/response/generate',
+        chat: '/api/chat/message',
+        tts: '/api/tts'
       }
     });
   });
