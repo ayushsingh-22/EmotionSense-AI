@@ -55,21 +55,31 @@ export interface MultiModalResult {
 }
 
 export interface ChatMessageResult {
+  sessionId: string;
   userMessage: {
-    text: string;
-    processedText: string;
+    id: string;
+    message: string;
     emotion: string;
+    confidence: number;
+    timestamp: string;
+  };
+  aiResponse: {
+    id: string;
+    message: string;
+    model?: string;
+    timestamp: string;
+  };
+  emotion: {
+    detected: string;
     confidence: number;
     scores: Record<string, number>;
   };
-  aiResponse: {
-    text: string;
-    audioUrl?: string;
-    generationTime?: number;
-    model?: string;
+  hasContext: boolean;
+  contextLength: number;
+  audio?: {
+    url: string;
+    duration?: number;
   };
-  recordId?: string;
-  timestamp: string;
 }
 
 export interface AnalysisHistory {

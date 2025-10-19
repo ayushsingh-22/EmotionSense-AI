@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { EMOTION_CONFIG, type AnalysisHistory, type EmotionType } from '@/types';
+import { EMOTION_CONFIG, type AnalysisHistory, type EmotionType, type TextAnalysisResult, type VoiceAnalysisResult, type MultiModalResult } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { FileText, Mic, Layers } from 'lucide-react';
 
@@ -29,14 +29,14 @@ export function EmotionTimeline({ history, maxItems = 10 }: EmotionTimelineProps
   };
 
   const getEmotion = (item: AnalysisHistory) => {
-    if ('main_emotion' in item.result) {
-      return item.result.main_emotion.emotion;
+    if (item.type === 'text') {
+      return (item.result as TextAnalysisResult).emotion;
     }
-    if ('combined_emotion' in item.result) {
-      return item.result.combined_emotion.emotion;
+    if (item.type === 'voice') {
+      return (item.result as VoiceAnalysisResult).combined_emotion?.emotion;
     }
-    if ('weighted_emotion' in item.result) {
-      return item.result.weighted_emotion.emotion;
+    if (item.type === 'multimodal') {
+      return (item.result as MultiModalResult).weighted_emotion?.emotion;
     }
     return 'neutral';
   };

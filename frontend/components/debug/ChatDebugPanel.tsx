@@ -18,7 +18,7 @@ export function ChatDebugPanel() {
           <div>Last 3 messages:</div>
           {messages.slice(-3).map((msg, i) => (
             <div key={i} className="text-xs opacity-70">
-              {msg.message_type}: {msg.content.slice(0, 30)}...
+              {msg.role}: {msg.message.slice(0, 30)}...
             </div>
           ))}
         </div>

@@ -1,12 +1,13 @@
 /**
  * Text Service Module
- * Handles text preprocessing and emotion detection
+ * Handles text preprocessing and emotion detection with caching
  * 
  * This module:
  * 1. Preprocesses text (cleaning, tokenization)
  * 2. Detects emotions using BiLSTM ONNX model (custom) and HuggingFace API
  * 3. Combines results from both models
  * 4. Returns emotion labels with confidence scores
+ * 5. Implements caching for improved performance
  */
 
 import axios from 'axios';
@@ -17,6 +18,43 @@ import config from '../config/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Simple cache implementation
+const emotionCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Cache utility functions
+ */
+const getCacheKey = (text) => {
+  return text.toLowerCase().trim().replace(/\s+/g, ' ');
+};
+
+const getCachedResult = (key) => {
+  const cached = emotionCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
+  return null;
+};
+
+const setCachedResult = (key, data) => {
+  emotionCache.set(key, {
+    data,
+    timestamp: Date.now()
+  });
+  
+  // Clean up old cache entries
+  if (emotionCache.size > 1000) {
+    const entries = Array.from(emotionCache.entries());
+    const cutoff = Date.now() - CACHE_DURATION;
+    for (const [key, value] of entries) {
+      if (value.timestamp < cutoff) {
+        emotionCache.delete(key);
+      }
+    }
+  }
+};
 
 /**
  * Preprocess text input
@@ -50,11 +88,19 @@ export const tokenizeText = (text) => {
 };
 
 /**
- * Detect emotion from text using HuggingFace API
+ * Detect emotion from text using HuggingFace API with caching
  * Uses BERT/RoBERTa model for emotion classification
  */
 export const detectEmotionFromText = async (text) => {
   try {
+    const cacheKey = getCacheKey(text);
+    const cached = getCachedResult(cacheKey);
+    
+    if (cached) {
+      console.log(`💾 Using cached HuggingFace result for text emotion detection`);
+      return cached;
+    }
+
     const apiKey = config.huggingface.apiKey;
     const model = config.huggingface.textEmotionModel;
     const apiUrl = `${config.huggingface.apiUrl}/${model}`;
@@ -70,7 +116,7 @@ export const detectEmotionFromText = async (text) => {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 30000 // 30 second timeout
+        timeout: 15000 // Reduced timeout for better UX
       }
     );
 
@@ -90,11 +136,16 @@ export const detectEmotionFromText = async (text) => {
       scores[pred.label] = pred.score;
     });
 
-    return {
+    const result = {
       emotion: dominantEmotion.label,
       confidence: dominantEmotion.score,
       scores: scores
     };
+
+    // Cache the result
+    setCachedResult(cacheKey, result);
+
+    return result;
   } catch (error) {
     console.error('❌ Error calling HuggingFace API:', error.message);
     

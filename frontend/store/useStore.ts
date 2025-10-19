@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
 import type {
   AnalysisHistory,
   UserPreferences,
@@ -34,22 +35,34 @@ interface AppState {
 
 export const useStore = create<AppState>()(
   persist(
-    (set) => ({
+    immer((set) => ({
       // History
       history: [],
       addToHistory: (type, result) =>
-        set((state) => ({
-          history: [
-            {
-              id: `${type}-${Date.now()}`,
+        set((state) => {
+          // Check if this analysis already exists to prevent duplicates
+          const existingIndex = state.history.findIndex(
+            item => item.type === type && 
+            JSON.stringify(item.result) === JSON.stringify(result)
+          );
+          
+          if (existingIndex === -1) {
+            state.history.unshift({
+              id: `${type}-${Date.now()}-${Math.random()}`,
               type,
               result,
               timestamp: new Date().toISOString(),
-            },
-            ...state.history,
-          ].slice(0, 50), // Keep last 50 analyses
-        })),
-      clearHistory: () => set({ history: [] }),
+            });
+            
+            // Keep only last 25 analyses for better performance
+            if (state.history.length > 25) {
+              state.history = state.history.slice(0, 25);
+            }
+          }
+        }),
+      clearHistory: () => set((state) => {
+        state.history = [];
+      }),
 
       // Preferences
       preferences: {
@@ -59,18 +72,22 @@ export const useStore = create<AppState>()(
         ttsEnabled: true,
       },
       updatePreferences: (newPreferences) =>
-        set((state) => ({
-          preferences: { ...state.preferences, ...newPreferences },
-        })),
+        set((state) => {
+          Object.assign(state.preferences, newPreferences);
+        }),
 
       // UI state
       isLoading: false,
-      setIsLoading: (loading) => set({ isLoading: loading }),
+      setIsLoading: (loading) => set((state) => {
+        state.isLoading = loading;
+      }),
 
       // Current analysis
       currentAnalysis: null,
-      setCurrentAnalysis: (analysis) => set({ currentAnalysis: analysis }),
-    }),
+      setCurrentAnalysis: (analysis) => set((state) => {
+        state.currentAnalysis = analysis;
+      }),
+    })),
     {
       name: 'emotion-ai-storage',
       partialize: (state) => ({

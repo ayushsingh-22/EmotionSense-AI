@@ -11,6 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { EMOTION_CONFIG } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+import { DeleteAccountDialog, DeleteDataDialog } from '@/components/auth/DeleteConfirmationDialog';
 
 interface EmotionStats {
   emotion: string;
@@ -33,8 +35,12 @@ export default function ProfilePage() {
   const [fullName, setFullName] = useState('');
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteDataDialogOpen, setDeleteDataDialogOpen] = useState(false);
+  const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
+  const [isDeletingData, setIsDeletingData] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   
-  const { user, profile, updateProfile, signOut } = useAuth();
+  const { user, profile, updateProfile, signOut, deleteAccount, deleteAllData: deleteAllUserData } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -139,36 +145,21 @@ export default function ProfilePage() {
     setIsEditing(false);
   };
 
-  const deleteAllData = async () => {
-    if (!user) return;
-
-    const confirmed = window.confirm(
-      'Are you sure you want to delete all your emotion data? This action cannot be undone.'
-    );
-
-    if (!confirmed) return;
-
+  const handleDeleteAllData = async () => {
+    setIsDeletingData(true);
     try {
-      // Delete emotion sessions
-      await supabase
-        .from('emotion_sessions')
-        .delete()
-        .eq('user_id', user.id);
-
-      // Delete chat messages
-      await supabase
-        .from('chat_messages')
-        .delete()
-        .eq('user_id', user.id);
-
-      toast({
-        title: 'Data Deleted',
-        description: 'All your emotion data has been deleted.',
-      });
-
-      // Refresh stats
-      fetchUserStats();
-
+      const result = await deleteAllUserData();
+      if (!result.error) {
+        setDeleteDataDialogOpen(false);
+        // Refresh stats to show empty state
+        fetchUserStats();
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to delete data. Please try again.',
+          variant: 'destructive',
+        });
+      }
     } catch (error) {
       console.error('Error deleting data:', error);
       toast({
@@ -176,6 +167,34 @@ export default function ProfilePage() {
         description: 'Failed to delete data. Please try again.',
         variant: 'destructive',
       });
+    } finally {
+      setIsDeletingData(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      const result = await deleteAccount();
+      if (!result.error) {
+        setDeleteAccountDialogOpen(false);
+        // User will be automatically signed out and redirected
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to delete account. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete account. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -187,62 +206,60 @@ export default function ProfilePage() {
     return EMOTION_CONFIG[emotion as keyof typeof EMOTION_CONFIG]?.emoji || '😐';
   };
 
-  // Redirect if not authenticated
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Card className="max-w-md">
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">
-              Please sign in to access your profile.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold mb-2">Your Profile</h1>
-        <p className="text-muted-foreground">
-          Manage your account and view your emotional journey analytics
-        </p>
+    <AuthGuard requireAuth={true}>
+      <div className="max-w-4xl mx-auto space-y-8 p-6">
+      {/* Header */}
+      <div className="text-center space-y-4">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 mb-4">
+          <User className="h-8 w-8 text-white" />
+        </div>
+        <div>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+            Your Profile
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            Manage your account and view your emotional journey analytics
+          </p>
+        </div>
       </div>
 
       {/* Profile Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <User className="h-5 w-5 mr-2" />
+      <Card className="backdrop-blur-sm bg-white/80 border-white/20 shadow-xl">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-t-lg">
+          <CardTitle className="flex items-center text-lg">
+            <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 mr-3">
+              <User className="h-4 w-4 text-white" />
+            </div>
             Profile Information
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="email">Email</Label>
+        <CardContent className="space-y-6 p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium">Email</Label>
               <Input
                 id="email"
-                value={user.email || ''}
+                value={user?.email || ''}
                 disabled
-                className="bg-muted"
+                className="bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200"
               />
             </div>
-            <div>
-              <Label htmlFor="fullName">Full Name</Label>
+            <div className="space-y-2">
+              <Label htmlFor="fullName" className="text-sm font-medium">Full Name</Label>
               <div className="flex space-x-2">
                 <Input
                   id="fullName"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   disabled={!isEditing}
+                  className={isEditing ? "border-blue-300 focus:border-blue-500" : "bg-gradient-to-r from-gray-50 to-gray-100"}
                 />
                 <Button
                   onClick={isEditing ? handleUpdateProfile : () => setIsEditing(true)}
                   variant={isEditing ? 'default' : 'outline'}
                   size="icon"
+                  className={isEditing ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700" : ""}
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
@@ -250,9 +267,9 @@ export default function ProfilePage() {
             </div>
           </div>
           
-          <div>
-            <Label>Member Since</Label>
-            <p className="text-sm text-muted-foreground">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Member Since</Label>
+            <p className="text-sm text-muted-foreground bg-gradient-to-r from-gray-50 to-gray-100 p-3 rounded-lg">
               {profile ? new Date(profile.created_at).toLocaleDateString() : 'N/A'}
             </p>
           </div>
@@ -260,78 +277,88 @@ export default function ProfilePage() {
       </Card>
 
       {/* Emotion Analytics */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <BarChart3 className="h-5 w-5 mr-2" />
+      <Card className="backdrop-blur-sm bg-white/80 border-white/20 shadow-xl">
+        <CardHeader className="bg-gradient-to-r from-green-50 to-blue-50 rounded-t-lg">
+          <CardTitle className="flex items-center text-lg">
+            <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-r from-green-600 to-blue-600 mr-3">
+              <BarChart3 className="h-4 w-4 text-white" />
+            </div>
             Emotion Analytics
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           {isLoading ? (
-            <div className="text-center py-8">
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 mb-4 animate-spin">
+                <BarChart3 className="h-6 w-6 text-white" />
+              </div>
               <p className="text-muted-foreground">Loading analytics...</p>
             </div>
           ) : !stats || stats.totalSessions === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground mb-2">No emotion data yet</p>
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 mb-4">
+                <BarChart3 className="h-8 w-8 text-gray-500" />
+              </div>
+              <p className="text-lg font-medium text-muted-foreground mb-2">No emotion data yet</p>
               <p className="text-sm text-muted-foreground">
                 Start using the app to see your emotional journey analytics
               </p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-8">
               {/* Overview Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{stats.totalSessions}</div>
-                  <div className="text-sm text-muted-foreground">Total Sessions</div>
+                <div className="text-center p-4 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200">
+                  <div className="text-3xl font-bold text-blue-600">{stats.totalSessions}</div>
+                  <div className="text-sm text-blue-700 font-medium">Total Sessions</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{stats.thisWeek}</div>
-                  <div className="text-sm text-muted-foreground">This Week</div>
+                <div className="text-center p-4 rounded-xl bg-gradient-to-br from-green-50 to-green-100 border border-green-200">
+                  <div className="text-3xl font-bold text-green-600">{stats.thisWeek}</div>
+                  <div className="text-sm text-green-700 font-medium">This Week</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{stats.thisMonth}</div>
-                  <div className="text-sm text-muted-foreground">This Month</div>
+                <div className="text-center p-4 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200">
+                  <div className="text-3xl font-bold text-purple-600">{stats.thisMonth}</div>
+                  <div className="text-sm text-purple-700 font-medium">This Month</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold">
+                <div className="text-center p-4 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200">
+                  <div className="text-3xl font-bold text-orange-600">
                     {Math.round(stats.averageConfidence * 100)}%
                   </div>
-                  <div className="text-sm text-muted-foreground">Avg Confidence</div>
+                  <div className="text-sm text-orange-700 font-medium">Avg Confidence</div>
                 </div>
               </div>
 
               {/* Most Frequent Emotion */}
-              <div className="text-center p-4 bg-muted rounded-lg">
-                <div className="text-3xl mb-2">
+              <div className="text-center p-8 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-xl border border-indigo-200">
+                <div className="text-6xl mb-4 animate-pulse">
                   {getEmotionEmoji(stats.mostFrequentEmotion)}
                 </div>
-                <h3 className="text-lg font-medium">Most Frequent Emotion</h3>
-                <p className="text-2xl font-bold capitalize">
+                <h3 className="text-xl font-semibold text-indigo-800 mb-2">Most Frequent Emotion</h3>
+                <p className="text-3xl font-bold capitalize bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                   {stats.mostFrequentEmotion}
                 </p>
               </div>
 
               {/* Emotion Breakdown */}
-              <div>
-                <h4 className="font-medium mb-3">Emotion Breakdown</h4>
-                <div className="space-y-2">
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
+                <h4 className="text-lg font-semibold mb-4 text-gray-800">Emotion Breakdown</h4>
+                <div className="space-y-3">
                   {stats.emotionBreakdown.map((emotion) => (
-                    <div key={emotion.emotion} className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span>{getEmotionEmoji(emotion.emotion)}</span>
-                        <span className="capitalize">{emotion.emotion}</span>
+                    <div key={emotion.emotion} className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl">{getEmotionEmoji(emotion.emotion)}</span>
+                        <span className="capitalize font-medium text-gray-800">{emotion.emotion}</span>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <div className="text-sm text-muted-foreground">
+                      <div className="flex items-center space-x-3">
+                        <div className="text-sm text-gray-600 font-medium">
                           {emotion.count} sessions
                         </div>
                         <Badge
+                          className="px-3 py-1 font-semibold"
                           style={{
                             backgroundColor: getEmotionColor(emotion.emotion) + '20',
                             color: getEmotionColor(emotion.emotion),
+                            border: `1px solid ${getEmotionColor(emotion.emotion)}40`,
                           }}
                         >
                           {Math.round(emotion.percentage)}%
@@ -347,32 +374,56 @@ export default function ProfilePage() {
       </Card>
 
       {/* Account Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-red-600">Danger Zone</CardTitle>
+      <Card className="backdrop-blur-sm bg-white/80 border-red-200 shadow-xl">
+        <CardHeader className="bg-gradient-to-r from-red-50 to-pink-50 rounded-t-lg">
+          <CardTitle className="text-red-600 flex items-center text-lg">
+            <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-r from-red-600 to-pink-600 mr-3">
+              <Trash2 className="h-4 w-4 text-white" />
+            </div>
+            Danger Zone
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 border border-red-200 rounded-lg">
+        <CardContent className="space-y-4 p-6">
+          <div className="flex items-center justify-between p-4 border-2 border-orange-200 rounded-xl bg-gradient-to-r from-orange-50 to-yellow-50 hover:from-orange-100 hover:to-yellow-100 transition-all duration-200">
             <div>
-              <h4 className="font-medium">Delete All Emotion Data</h4>
-              <p className="text-sm text-muted-foreground">
+              <h4 className="font-semibold text-orange-800">Delete All Emotion Data</h4>
+              <p className="text-sm text-orange-600">
                 Permanently delete all your emotion sessions and chat history
               </p>
             </div>
             <Button
-              onClick={deleteAllData}
+              onClick={() => setDeleteDataDialogOpen(true)}
               variant="destructive"
               size="sm"
+              className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete Data
             </Button>
           </div>
 
-          <div className="flex items-center justify-between p-4 border border-red-200 rounded-lg">
+          <div className="flex items-center justify-between p-4 border-2 border-red-200 rounded-xl bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 transition-all duration-200">
             <div>
-              <h4 className="font-medium">Sign Out</h4>
-              <p className="text-sm text-muted-foreground">
+              <h4 className="font-semibold text-red-800">Delete Account</h4>
+              <p className="text-sm text-red-600">
+                Permanently delete your account and all associated data
+              </p>
+            </div>
+            <Button
+              onClick={() => setDeleteAccountDialogOpen(true)}
+              variant="destructive"
+              size="sm"
+              className="bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Account
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl bg-gradient-to-r from-gray-50 to-slate-50 hover:from-gray-100 hover:to-slate-100 transition-all duration-200">
+            <div>
+              <h4 className="font-semibold text-gray-800">Sign Out</h4>
+              <p className="text-sm text-gray-600">
                 Sign out of your account
               </p>
             </div>
@@ -380,12 +431,30 @@ export default function ProfilePage() {
               onClick={signOut}
               variant="outline"
               size="sm"
+              className="border-gray-300 hover:bg-gray-100"
             >
               Sign Out
             </Button>
           </div>
         </CardContent>
       </Card>
-    </div>
+
+      {/* Delete Confirmation Dialogs */}
+      <DeleteDataDialog
+        open={deleteDataDialogOpen}
+        onOpenChange={setDeleteDataDialogOpen}
+        onConfirm={handleDeleteAllData}
+        isLoading={isDeletingData}
+      />
+
+      <DeleteAccountDialog
+        open={deleteAccountDialogOpen}
+        onOpenChange={setDeleteAccountDialogOpen}
+        onConfirm={handleDeleteAccount}
+        userEmail={user?.email || ''}
+        isLoading={isDeletingAccount}
+      />
+      </div>
+    </AuthGuard>
   );
 }

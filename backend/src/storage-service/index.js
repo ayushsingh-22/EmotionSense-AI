@@ -181,6 +181,264 @@ export const saveToSQLite = async (data) => {
 };
 
 /**
+ * Chat Session and Message Management Functions
+ */
+
+/**
+ * Create a new chat session
+ */
+export const createChatSession = async (userId, sessionTitle = 'New Chat') => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    const { data, error } = await supabaseClient
+      .from('chat_sessions')
+      .insert({
+        user_id: userId,
+        session_title: sessionTitle
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create session: ${error.message}`);
+    }
+
+    console.log(`✅ Created chat session: ${data.id}`);
+    return data;
+  } catch (error) {
+    console.error('❌ Error creating chat session:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Save a chat message to a session
+ */
+export const saveChatMessage = async (userId, sessionId, role, message, emotionData = null) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    const messageData = {
+      user_id: userId,
+      session_id: sessionId,
+      role: role, // 'user' or 'assistant'
+      message: message
+    };
+
+    // Add emotion data if provided
+    if (emotionData) {
+      messageData.emotion_detected = emotionData.emotion;
+      messageData.confidence_score = emotionData.confidence;
+    }
+
+    const { data, error } = await supabaseClient
+      .from('chat_messages')
+      .insert(messageData)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to save message: ${error.message}`);
+    }
+
+    console.log(`✅ Saved chat message: ${data.id}`);
+    return data;
+  } catch (error) {
+    console.error('❌ Error saving chat message:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Get chat sessions for a user
+ */
+export const getUserChatSessions = async (userId) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    const { data, error } = await supabaseClient
+      .from('chat_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Failed to fetch sessions: ${error.message}`);
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('❌ Error fetching chat sessions:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Get messages for a specific chat session
+ */
+export const getChatMessages = async (userId, sessionId, limit = null) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    let query = supabaseClient
+      .from('chat_messages')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true });
+
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`Failed to fetch messages: ${error.message}`);
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('❌ Error fetching chat messages:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Get recent chat messages for context (for LLM memory)
+ */
+export const getRecentChatMessages = async (userId, sessionId, limit = 10) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    const { data, error } = await supabaseClient
+      .from('chat_messages')
+      .select('role, message, emotion_detected, confidence_score, created_at')
+      .eq('user_id', userId)
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new Error(`Failed to fetch recent messages: ${error.message}`);
+    }
+
+    // Return in chronological order (oldest first) for context
+    return (data || []).reverse();
+  } catch (error) {
+    console.error('❌ Error fetching recent chat messages:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Update session title
+ */
+export const updateChatSessionTitle = async (userId, sessionId, newTitle) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    const { data, error } = await supabaseClient
+      .from('chat_sessions')
+      .update({ session_title: newTitle })
+      .eq('user_id', userId)
+      .eq('id', sessionId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update session title: ${error.message}`);
+    }
+
+    console.log(`✅ Updated session title: ${sessionId}`);
+    return data;
+  } catch (error) {
+    console.error('❌ Error updating session title:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Delete a chat session and all its messages
+ */
+export const deleteChatSession = async (userId, sessionId) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    // Delete messages first (due to foreign key constraint)
+    const { error: messagesError } = await supabaseClient
+      .from('chat_messages')
+      .delete()
+      .eq('user_id', userId)
+      .eq('session_id', sessionId);
+
+    if (messagesError) {
+      throw new Error(`Failed to delete messages: ${messagesError.message}`);
+    }
+
+    // Delete session
+    const { error: sessionError } = await supabaseClient
+      .from('chat_sessions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('id', sessionId);
+
+    if (sessionError) {
+      throw new Error(`Failed to delete session: ${sessionError.message}`);
+    }
+
+    console.log(`✅ Deleted chat session: ${sessionId}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error deleting chat session:', error.message);
+    throw error;
+  }
+};
+
+/**
  * Main function: Save analysis result
  * This is the primary export used by routes
  */

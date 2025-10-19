@@ -1,150 +1,362 @@
-'use client';
+﻿'use client';
 
-import { useStore } from '@/store/useStore';
-import { Card } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { EMOTION_CONFIG, type AnalysisHistory, type EmotionType } from '@/types';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { getChatSessions, getChatMessages } from '@/lib/api';
+import { ChatSession, ChatMessage } from '@/lib/supabase';
+import { Search, MessageCircle, Calendar, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
-import { FileText, Mic, Layers, Trash2 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { EMOTION_CONFIG } from '@/types';
+import { cn } from '@/lib/utils';
+import Link from 'next/link';
+
+interface ExtendedChatSession extends ChatSession {
+  lastMessage?: string;
+  messageCount?: number;
+}
 
 export default function HistoryPage() {
-  const { history, clearHistory } = useStore();
+  const [sessions, setSessions] = useState<ExtendedChatSession[]>([]);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const { user } = useAuth();
 
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'text':
-        return FileText;
-      case 'voice':
-        return Mic;
-      case 'multimodal':
-        return Layers;
-      default:
-        return FileText;
+  useEffect(() => {
+    if (user?.id) {
+      loadChatSessions();
+    }
+  }, [user?.id]);
+
+  const loadChatSessions = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setIsLoading(true);
+      const data = await getChatSessions(user.id);
+      
+      const enhancedSessions = await Promise.all(
+        data.sessions.map(async (session: ChatSession) => {
+          try {
+            const messagesData = await getChatMessages(session.id, user.id);
+            const sessionMessages = messagesData.messages || [];
+            
+            return {
+              ...session,
+              lastMessage: sessionMessages[sessionMessages.length - 1]?.message || 'No messages',
+              messageCount: sessionMessages.length
+            };
+          } catch (error) {
+            console.error('Failed to load messages for session:', session.id, error);
+            return {
+              ...session,
+              lastMessage: 'Failed to load',
+              messageCount: 0
+            };
+          }
+        })
+      );
+      
+      setSessions(enhancedSessions);
+    } catch (error) {
+      console.error('Failed to load chat sessions:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load chat history.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const getEmotion = (item: AnalysisHistory): EmotionType => {
-    if ('main_emotion' in item.result) {
-      return item.result.main_emotion.emotion;
+  const loadSessionMessages = async (sessionId: string) => {
+    if (!user?.id) return;
+    
+    try {
+      const data = await getChatMessages(sessionId, user.id);
+      setMessages(data.messages || []);
+      setSelectedSession(sessionId);
+    } catch (error) {
+      console.error('Failed to load session messages:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load chat messages.",
+        variant: "destructive"
+      });
     }
-    if ('combined_emotion' in item.result) {
-      return item.result.combined_emotion.emotion;
-    }
-    if ('weighted_emotion' in item.result) {
-      return item.result.weighted_emotion.emotion;
-    }
-    return 'neutral';
   };
 
-  const getConfidence = (item: AnalysisHistory): number => {
-    if ('main_emotion' in item.result) {
-      return item.result.main_emotion.confidence;
-    }
-    if ('combined_emotion' in item.result) {
-      return item.result.combined_emotion.confidence;
-    }
-    if ('weighted_emotion' in item.result) {
-      return item.result.weighted_emotion.confidence;
-    }
-    return 0;
+  const getEmotionColor = (emotion: string) => {
+    return EMOTION_CONFIG[emotion as keyof typeof EMOTION_CONFIG]?.color || '#666';
   };
+
+  const getEmotionEmoji = (emotion: string) => {
+    return EMOTION_CONFIG[emotion as keyof typeof EMOTION_CONFIG]?.emoji || '🤔';
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    return format(new Date(timestamp), 'MMM dd, yyyy HH:mm');
+  };
+
+  const formatMessageTime = (timestamp: string) => {
+    return format(new Date(timestamp), 'HH:mm');
+  };
+
+  const filteredSessions = sessions.filter(session =>
+    session.session_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    session.lastMessage?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="max-w-md border-0 shadow-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-md">
+          <CardContent className="pt-8 pb-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mx-auto mb-4">
+              <MessageCircle className="h-8 w-8 text-white" />
+            </div>
+            <p className="text-muted-foreground text-lg">
+              Please sign in to view your chat history.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analysis History</h1>
-          <p className="text-muted-foreground mt-2">
-            View your past emotion analyses
-          </p>
+    <div className="space-y-8">
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-600/5 rounded-2xl"></div>
+        <div className="relative bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                Chat History
+              </h1>
+              <p className="text-muted-foreground mt-3 text-lg">
+                Review your past conversations with MantrAI and track your emotional journey
+              </p>
+            </div>
+            <Link href="/chat">
+              <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+                <MessageCircle className="mr-2 h-4 w-4" />
+                New Chat
+              </Button>
+            </Link>
+          </div>
         </div>
-        {history.length > 0 && (
-          <Button variant="destructive" onClick={clearHistory}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Clear History
-          </Button>
-        )}
       </div>
 
-      {/* History List */}
-      {history.length > 0 ? (
-        <div className="space-y-4">
-          {history.map((item) => {
-            const Icon = getIcon(item.type);
-            const emotion = getEmotion(item);
-            const confidence = getConfidence(item);
-            const config = EMOTION_CONFIG[emotion];
-
-            return (
-              <Card key={item.id} className="p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start gap-4">
-                  {/* Icon */}
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `${config.color}20` }}
-                  >
-                    <Icon className="h-6 w-6" style={{ color: config.color }} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1 space-y-6">
+          <Card className="border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-3 text-xl">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-calendar-500 to-calendar-600 flex items-center justify-center">
+                  <Calendar className="h-5 w-5 text-white" />
+                </div>
+                Chat Sessions ({sessions.length})
+              </CardTitle>
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search conversations..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-12 h-12 rounded-xl border-2 focus:border-blue-500 transition-all duration-300"
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[600px]">
+                {isLoading ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    Loading chat history...
                   </div>
+                ) : filteredSessions.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg font-medium mb-2">
+                      {searchQuery ? 'No conversations found' : 'No chat history yet'}
+                    </p>
+                    <p className="text-sm">
+                      {searchQuery ? 'Try a different search term' : 'Start a conversation to see it here'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 p-6">
+                    {filteredSessions.map((session) => (
+                      <Card
+                        key={session.id}
+                        className={cn(
+                          'cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 border-0',
+                          selectedSession === session.id 
+                            ? 'bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 shadow-lg scale-105' 
+                            : 'bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800'
+                        )}
+                        onClick={() => loadSessionMessages(session.id)}
+                      >
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between">
+                              <h3 className="font-semibold text-sm line-clamp-1">
+                                {session.session_title}
+                              </h3>
+                              <ChevronRight className={cn(
+                                "h-4 w-4 flex-shrink-0 transition-transform duration-300",
+                                selectedSession === session.id ? "text-blue-500 rotate-90" : "text-muted-foreground"
+                              )} />
+                            </div>
+                            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                              {session.lastMessage}
+                            </p>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">{formatTimestamp(session.created_at)}</span>
+                              <Badge 
+                                variant="secondary" 
+                                className={cn(
+                                  "text-xs",
+                                  selectedSession === session.id 
+                                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                                    : ""
+                                )}
+                              >
+                                {session.messageCount} msgs
+                              </Badge>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="secondary" className="capitalize">
-                        {item.type}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {format(new Date(item.timestamp), 'PPpp')}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-4 mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">{config.emoji}</span>
-                        <div>
-                          <p
-                            className="font-semibold capitalize"
-                            style={{ color: config.color }}
-                          >
-                            {emotion}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {Math.round(confidence * 100)}% confidence
-                          </p>
-                        </div>
+        <div className="lg:col-span-2">
+          <Card className="h-[740px] border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-3 text-xl">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                  <MessageCircle className="h-5 w-5 text-white" />
+                </div>
+                {selectedSession ? 
+                  sessions.find(s => s.id === selectedSession)?.session_title || 'Conversation' :
+                  'Select a conversation'
+                }
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {selectedSession ? (
+                <ScrollArea className="h-[640px] p-6 bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-900/50 dark:to-gray-900">
+                  <div className="space-y-6">
+                    {messages.length === 0 ? (
+                      <div className="text-center text-muted-foreground py-16">
+                        <MessageCircle className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium">No messages in this conversation</p>
                       </div>
-                    </div>
+                    ) : (
+                      messages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={cn(
+                            'flex items-start gap-3',
+                            message.role === 'user' ? 'justify-end' : 'justify-start'
+                          )}
+                        >
+                          {/* Avatar - Left side for assistant */}
+                          {message.role === 'assistant' && (
+                            <div className="flex-shrink-0">
+                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                                <MessageCircle className="h-5 w-5 text-white" />
+                              </div>
+                            </div>
+                          )}
 
-                    {/* AI Response Preview */}
-                    {'ai_response' in item.result && (
-                      <>
-                        <Separator className="my-3" />
-                        <div className="text-sm text-muted-foreground line-clamp-2">
-                          {item.result.ai_response}
+                          {/* Message Content */}
+                          <div className={cn(
+                            "flex flex-col max-w-[70%] space-y-2",
+                            message.role === 'user' ? "items-end" : "items-start"
+                          )}>
+                            {/* Message Bubble */}
+                            <div className={cn(
+                              'px-6 py-4 rounded-2xl shadow-lg',
+                              message.role === 'user'
+                                ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-br-md'
+                                : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-md'
+                            )}>
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                                {message.message}
+                              </p>
+                            </div>
+
+                            {/* Metadata */}
+                            <div className={cn(
+                              "flex items-center gap-2 text-xs text-muted-foreground",
+                              message.role === 'user' ? "flex-row-reverse" : "flex-row"
+                            )}>
+                              <span>{formatMessageTime(message.created_at)}</span>
+                              {message.emotion_detected && (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-xs px-2 py-1 rounded-full"
+                                  style={{
+                                    backgroundColor: getEmotionColor(message.emotion_detected) + '20',
+                                    borderColor: getEmotionColor(message.emotion_detected)
+                                  }}
+                                >
+                                  {getEmotionEmoji(message.emotion_detected)} {message.emotion_detected}
+                                  {message.confidence_score && (
+                                    <span className="ml-1">
+                                      ({Math.round(message.confidence_score * 100)}%)
+                                    </span>
+                                  )}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Avatar - Right side for user */}
+                          {message.role === 'user' && (
+                            <div className="flex-shrink-0">
+                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
+                                <MessageCircle className="h-5 w-5 text-white" />
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </>
+                      ))
                     )}
                   </div>
+                </ScrollArea>
+              ) : (
+                <div className="flex items-center justify-center h-[640px] text-muted-foreground">
+                  <div className="text-center">
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mx-auto mb-6">
+                      <MessageCircle className="h-12 w-12 opacity-50" />
+                    </div>
+                    <h3 className="text-xl font-semibold mb-2">Select a conversation</h3>
+                    <p>Choose a conversation from the sidebar to view messages</p>
+                  </div>
                 </div>
-              </Card>
-            );
-          })}
+              )}
+            </CardContent>
+          </Card>
         </div>
-      ) : (
-        <Card className="p-12 text-center">
-          <div className="max-w-md mx-auto space-y-4">
-            <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto">
-              <Layers className="h-10 w-10 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-semibold">No History Yet</h3>
-            <p className="text-muted-foreground">
-              Your analysis history will appear here after you perform analyses
-            </p>
-          </div>
-        </Card>
-      )}
+      </div>
     </div>
   );
 }

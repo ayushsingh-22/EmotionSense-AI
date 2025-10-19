@@ -5,6 +5,7 @@
 
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -59,13 +60,16 @@ const createRequiredDirectories = () => {
  * Configure middleware
  */
 const configureMiddleware = () => {
+  // Enable gzip compression for better performance
+  app.use(compression());
+
   // Enable CORS for frontend communication
   app.use(cors({
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true
   }));
 
-  // Parse JSON bodies
+  // Parse JSON bodies with increased limit
   app.use(express.json({ limit: '10mb' }));
 
   // Parse URL-encoded bodies

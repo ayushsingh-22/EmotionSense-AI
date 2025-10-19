@@ -38,14 +38,21 @@ export interface EmotionSession {
   created_at: string;
 }
 
+export interface ChatSession {
+  id: string;
+  user_id: string;
+  session_title: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ChatMessage {
   id: string;
-  session_id: string;
   user_id: string;
-  message_type: 'user' | 'assistant';
-  content: string;
+  session_id: string;
+  role: 'user' | 'assistant';
+  message: string;
   emotion_detected?: string;
   confidence_score?: number;
-  audio_url?: string;
   created_at: string;
 }

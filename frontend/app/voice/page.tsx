@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { EMOTION_CONFIG } from '@/types';
 import type { VoiceAnalysisResult } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { AuthGuard } from '@/components/auth/AuthGuard';
 
 export default function VoicePage() {
   const [isRecording, setIsRecording] = useState(false);
@@ -226,37 +227,36 @@ export default function VoicePage() {
     return EMOTION_CONFIG[emotion as keyof typeof EMOTION_CONFIG]?.emoji || '😐';
   };
 
-  // Redirect if not authenticated
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Card className="max-w-md">
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">
-              Please sign in to access voice analysis.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold mb-2">Voice Emotion Analysis</h1>
-        <p className="text-muted-foreground">
-          Speak to express your emotions and get empathetic AI responses with voice playback
-        </p>
+    <AuthGuard requireAuth={true}>
+      <div className="max-w-4xl mx-auto space-y-8 p-6">
+      {/* Header */}
+      <div className="text-center space-y-4">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 mb-4">
+          <Mic className="h-8 w-8 text-white" />
+        </div>
+        <div>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+            Voice Emotion Analysis
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            Speak to express your emotions and get empathetic AI responses with voice playback
+          </p>
+        </div>
       </div>
 
       {/* Recording Controls */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Voice Recording</CardTitle>
+      <Card className="backdrop-blur-sm bg-white/80 border-white/20 shadow-xl">
+        <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-t-lg">
+          <CardTitle className="flex items-center text-lg">
+            <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 mr-3">
+              <Mic className="h-4 w-4 text-white" />
+            </div>
+            Voice Recording
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center space-y-4">
+        <CardContent className="p-8">
+          <div className="flex flex-col items-center space-y-6">
             {/* Recording Button */}
             <div className="relative">
               <Button
@@ -264,52 +264,66 @@ export default function VoicePage() {
                 variant={isRecording ? 'destructive' : 'default'}
                 onClick={isRecording ? stopRecording : startRecording}
                 disabled={isAnalyzing || audioPermission === false}
-                className="h-20 w-20 rounded-full"
+                className={`h-24 w-24 rounded-full text-white font-semibold transition-all duration-300 ${
+                  isRecording 
+                    ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-lg shadow-red-200' 
+                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg shadow-purple-200'
+                }`}
               >
                 {isRecording ? (
-                  <MicOff className="h-8 w-8" />
+                  <MicOff className="h-10 w-10" />
                 ) : (
-                  <Mic className="h-8 w-8" />
+                  <Mic className="h-10 w-10" />
                 )}
               </Button>
               
               {isRecording && (
-                <div className="absolute -inset-2 rounded-full border-2 border-red-500 animate-pulse" />
+                <div className="absolute -inset-3 rounded-full border-3 border-red-400 animate-ping" />
               )}
             </div>
 
             {/* Recording Status */}
             <div className="text-center">
               {isRecording ? (
-                <div className="space-y-2">
-                  <p className="text-lg font-medium text-red-600">
-                    Recording... {formatTime(recordingTime)}
-                  </p>
+                <div className="space-y-3">
+                  <div className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-red-50 to-red-100 rounded-full border border-red-200">
+                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mr-2"></div>
+                    <p className="text-lg font-semibold text-red-700">
+                      Recording... {formatTime(recordingTime)}
+                    </p>
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Tap the microphone to stop recording
                   </p>
                 </div>
               ) : audioBlob ? (
-                <div className="space-y-2">
-                  <p className="text-lg font-medium text-green-600">
-                    Recording ready ({formatTime(recordingTime)})
-                  </p>
-                  <div className="flex items-center space-x-2">
+                <div className="space-y-4">
+                  <div className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-green-50 to-green-100 rounded-full border border-green-200">
+                    <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                    <p className="text-lg font-semibold text-green-700">
+                      Recording ready ({formatTime(recordingTime)})
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center space-x-3">
                     <Button
                       onClick={analyzeAudio}
                       disabled={isAnalyzing}
-                      className="min-w-[120px]"
+                      className="min-w-[140px] bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
                     >
                       {isAnalyzing ? 'Analyzing...' : 'Analyze Voice'}
                     </Button>
-                    <Button variant="outline" onClick={resetSession}>
+                    <Button 
+                      variant="outline" 
+                      onClick={resetSession}
+                      className="border-gray-300 hover:bg-gray-50"
+                    >
                       Record Again
                     </Button>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <p className="text-lg font-medium">
+                <div className="space-y-3">
+                  <p className="text-xl font-semibold text-gray-800">
                     Tap the microphone to start recording
                   </p>
                   <p className="text-sm text-muted-foreground">
@@ -321,10 +335,15 @@ export default function VoicePage() {
 
             {/* Progress bar for recording */}
             {isRecording && (
-              <Progress 
-                value={Math.min((recordingTime / 30) * 100, 100)} 
-                className="w-full max-w-md"
-              />
+              <div className="w-full max-w-md">
+                <Progress 
+                  value={Math.min((recordingTime / 30) * 100, 100)} 
+                  className="h-2 bg-red-100"
+                />
+                <p className="text-xs text-center text-red-600 mt-1">
+                  {Math.max(0, 30 - recordingTime)}s remaining
+                </p>
+              </div>
             )}
           </div>
         </CardContent>
@@ -334,23 +353,30 @@ export default function VoicePage() {
       {result && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Emotion Results */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Emotion Analysis</CardTitle>
+          <Card className="backdrop-blur-sm bg-white/80 border-white/20 shadow-xl">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-lg">
+              <CardTitle className="flex items-center text-lg">
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 mr-3">
+                  <span className="text-white font-bold text-sm">😊</span>
+                </div>
+                Emotion Analysis
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6 p-6">
               {/* Main Combined Emotion */}
-              <div className="text-center p-4 rounded-lg border">
-                <div className="text-4xl mb-2">
+              <div className="text-center p-6 rounded-xl bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200">
+                <div className="text-6xl mb-3 animate-bounce">
                   {getEmotionEmoji(result.combined_emotion.emotion)}
                 </div>
-                <h3 className="text-2xl font-bold mb-1">
+                <h3 className="text-2xl font-bold mb-2 capitalize text-indigo-800">
                   {result.combined_emotion.emotion}
                 </h3>
                 <Badge
+                  className="px-4 py-2 text-sm font-semibold"
                   style={{
                     backgroundColor: getEmotionColor(result.combined_emotion.emotion) + '20',
                     color: getEmotionColor(result.combined_emotion.emotion),
+                    border: `1px solid ${getEmotionColor(result.combined_emotion.emotion)}40`,
                   }}
                 >
                   {Math.round(result.combined_emotion.confidence * 100)}% confidence
@@ -358,63 +384,81 @@ export default function VoicePage() {
               </div>
 
               {/* Individual Emotion Scores */}
-              <div className="space-y-2">
-                <h4 className="font-medium">Voice Emotion</h4>
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center">
-                    {getEmotionEmoji(result.voice_emotion.emotion)}{' '}
-                    {result.voice_emotion.emotion}
-                  </span>
-                  <Badge variant="secondary">
-                    {Math.round(result.voice_emotion.confidence * 100)}%
-                  </Badge>
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-green-100 border border-green-200">
+                  <h4 className="font-semibold text-green-800 mb-2">Voice Emotion</h4>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center text-green-700 font-medium">
+                      <span className="text-xl mr-2">{getEmotionEmoji(result.voice_emotion.emotion)}</span>
+                      {result.voice_emotion.emotion}
+                    </span>
+                    <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-300">
+                      {Math.round(result.voice_emotion.confidence * 100)}%
+                    </Badge>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <h4 className="font-medium">Text Emotion</h4>
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center">
-                    {getEmotionEmoji(result.text_emotion.emotion)}{' '}
-                    {result.text_emotion.emotion}
-                  </span>
-                  <Badge variant="secondary">
-                    {Math.round(result.text_emotion.confidence * 100)}%
-                  </Badge>
+                <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200">
+                  <h4 className="font-semibold text-blue-800 mb-2">Text Emotion</h4>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center text-blue-700 font-medium">
+                      <span className="text-xl mr-2">{getEmotionEmoji(result.text_emotion.emotion)}</span>
+                      {result.text_emotion.emotion}
+                    </span>
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">
+                      {Math.round(result.text_emotion.confidence * 100)}%
+                    </Badge>
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* AI Response */}
-          <Card>
-            <CardHeader>
-              <CardTitle>AI Response</CardTitle>
+          <Card className="backdrop-blur-sm bg-white/80 border-white/20 shadow-xl">
+            <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-t-lg">
+              <CardTitle className="flex items-center text-lg">
+                <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 mr-3">
+                  <Volume2 className="h-4 w-4 text-white" />
+                </div>
+                AI Response
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6 p-6">
               {/* Transcript */}
-              <div>
-                <h4 className="font-medium mb-2">What you said:</h4>
-                <p className="text-sm bg-muted p-3 rounded italic">
+              <div className="p-4 rounded-xl bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200">
+                <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  What you said:
+                </h4>
+                <p className="text-sm bg-white p-4 rounded-lg italic text-gray-700 border border-gray-200 shadow-sm">
                   &quot;{result.transcript}&quot;
                 </p>
               </div>
 
               {/* AI Response */}
-              <div>
-                <h4 className="font-medium mb-2">Empathetic Response:</h4>
-                <p className="text-sm bg-primary/5 p-3 rounded">
+              <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200">
+                <h4 className="font-semibold text-purple-800 mb-3 flex items-center">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                  Empathetic Response:
+                </h4>
+                <p className="text-sm bg-white p-4 rounded-lg text-gray-700 border border-purple-200 shadow-sm leading-relaxed">
                   {result.ai_response}
                 </p>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center justify-center space-x-3">
                 <Button
                   onClick={playResponse}
                   disabled={isPlayingResponse}
                   variant="outline"
                   size="sm"
+                  className={`min-w-[140px] ${
+                    isPlayingResponse 
+                      ? 'bg-gradient-to-r from-orange-50 to-orange-100 border-orange-300 text-orange-700' 
+                      : 'bg-gradient-to-r from-green-50 to-green-100 border-green-300 text-green-700 hover:from-green-100 hover:to-green-150'
+                  }`}
                 >
                   {isPlayingResponse ? (
                     <>
@@ -433,6 +477,7 @@ export default function VoicePage() {
                   variant="outline"
                   size="sm"
                   disabled={isAnalyzing}
+                  className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-300 text-blue-700 hover:from-blue-100 hover:to-blue-150"
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Regenerate
@@ -446,11 +491,18 @@ export default function VoicePage() {
       {/* New Session Button */}
       {(result || audioBlob) && (
         <div className="text-center">
-          <Button onClick={resetSession} variant="outline" size="lg">
+          <Button 
+            onClick={resetSession} 
+            variant="outline" 
+            size="lg"
+            className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-300 text-indigo-700 hover:from-indigo-100 hover:to-purple-100 px-8 py-3 text-lg font-semibold"
+          >
+            <Mic className="h-5 w-5 mr-2" />
             Start New Voice Session
           </Button>
         </div>
       )}
     </div>
+    </AuthGuard>
   );
 }
