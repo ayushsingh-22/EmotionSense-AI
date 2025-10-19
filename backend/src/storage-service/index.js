@@ -108,7 +108,7 @@ export const saveToSupabase = async (data) => {
 
     const recordId = data.id || uuidv4();
     
-    // Prepare data for Supabase
+    // Prepare data for Supabase (FIXED: JSONB fields should be objects, not strings)
     const record = {
       id: recordId,
       user_id: data.userId,
@@ -117,8 +117,8 @@ export const saveToSupabase = async (data) => {
       transcript: data.transcript || null,
       emotion: data.emotion,
       confidence: data.confidence,
-      scores: data.scores ? JSON.stringify(data.scores) : null,
-      audio_features: data.audioFeatures ? JSON.stringify(data.audioFeatures) : null,
+      scores: data.scores || null,  // FIXED: Keep as object for JSONB
+      audio_features: data.audioFeatures || null,  // FIXED: Keep as object for JSONB
       timestamp: data.timestamp || new Date().toISOString(),
       created_at: new Date().toISOString()
     };

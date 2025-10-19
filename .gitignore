@@ -1,36 +1,70 @@
-# Dependencies
+# Root gitignore for polyrepo structure# Dependencies
+
 node_modules/
-package-lock.json
-yarn.lock
 
-# Environment variables
-.env
+# Backend artifactspackage-lock.json
 
-# Temporary files
+backend/node_modules/yarn.lock
+
+backend/package-lock.json
+
+backend/temp/# Environment variables
+
+backend/logs/.env
+
+backend/data/*.db
+
+backend/.env# Temporary files
+
 temp/
-*.tmp
 
-# Logs
-logs/
-*.log
-npm-debug.log*
+# Frontend artifacts*.tmp
+
+frontend/node_modules/
+
+frontend/package-lock.json# Logs
+
+frontend/dist/logs/
+
+frontend/build/*.log
+
+frontend/.envnpm-debug.log*
+
+frontend/.env.local
 
 # Database
-data/*.db
-*.sqlite
 
-# Model files (too large for git)
-models/
+# OS filesdata/*.db
 
-# OS files
-.DS_Store
+.DS_Store*.sqlite
+
 Thumbs.db
 
-# IDE
+# Model files (too large for git)
+
+# IDEmodels/
+
 .vscode/
-.idea/
+
+.idea/# OS files
+
+*.swp.DS_Store
+
+*.swoThumbs.db
+
+
+
+# Logs# IDE
+
+*.log.vscode/
+
+npm-debug.log*.idea/
+
 *.swp
-*.swo
+
+# Optional: Keep models out of git (large files)*.swo
+
+backend/models/
 
 # Firebase
 firebase-credentials.json
