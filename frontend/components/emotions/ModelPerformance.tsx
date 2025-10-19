@@ -2,7 +2,7 @@
 
 import { Card } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import type { AnalysisHistory } from '@/types';
+import type { AnalysisHistory, TextAnalysisResult } from '@/types';
 
 interface ModelPerformanceProps {
   history: AnalysisHistory[];
@@ -16,11 +16,14 @@ export function ModelPerformance({ history }: ModelPerformanceProps) {
   let disagreements = 0;
 
   textAnalyses.forEach((item) => {
-    if ('bilstm_result' in item.result && 'huggingface_result' in item.result) {
-      if (item.result.bilstm_result.emotion === item.result.huggingface_result.emotion) {
-        agreements++;
-      } else {
-        disagreements++;
+    if (item.type === 'text') {
+      const result = item.result as TextAnalysisResult;
+      if (result.individual_results?.bilstm && result.individual_results?.huggingface) {
+        if (result.individual_results.bilstm.emotion === result.individual_results.huggingface.emotion) {
+          agreements++;
+        } else {
+          disagreements++;
+        }
       }
     }
   });

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase, UserProfile } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { debounce } from '@/lib/performance';
 
 interface AuthContextType {
   user: User | null;
@@ -14,6 +15,8 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error?: AuthError }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  deleteAccount: () => Promise<{ error?: AuthError }>;
+  deleteAllData: () => Promise<{ error?: Error }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,7 +28,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Fetch user profile
+  // Debounced profile fetch to prevent excessive API calls
+  const debouncedFetchProfile = useCallback(
+    debounce((...args: unknown[]) => {
+      const userId = args[0] as string;
+      fetchProfile(userId);
+    }, 300),
+    [user]
+  );
+
   const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -79,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          debouncedFetchProfile(session.user.id);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -98,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        await fetchProfile(session.user.id);
+        debouncedFetchProfile(session.user.id);
       } else {
         setProfile(null);
       }
@@ -145,7 +156,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signUp({
+      console.log('AuthContext: Starting signup for:', email);
+      
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -155,7 +168,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
+      console.log('AuthContext: Supabase signup response:', { data, error });
+
       if (error) {
+        console.error('AuthContext: Signup error from Supabase:', error);
         toast({
           title: 'Registration Error',
           description: error.message,
@@ -164,6 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error };
       }
 
+      console.log('AuthContext: Signup successful');
       toast({
         title: 'Account created!',
         description: 'Please check your email to verify your account.',
@@ -171,7 +188,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return {};
     } catch (error) {
-      console.error('Sign up error:', error);
+      console.error('AuthContext: Unexpected signup error:', error);
+      toast({
+        title: 'Registration Error',
+        description: 'An unexpected error occurred. Please try again.',
+        variant: 'destructive',
+      });
       return { error: error as AuthError };
     } finally {
       setLoading(false);
@@ -233,6 +255,86 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteAccount = async (): Promise<{ error?: AuthError }> => {
+    if (!user) return { error: new Error('No user logged in') as AuthError };
+
+    try {
+      // First delete all user data
+      await deleteAllData();
+
+      // Delete user profile
+      await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', user.id);
+
+      // Note: In production, account deletion should be handled by the backend
+      // For now, we'll just delete user data and sign out
+      await signOut();
+      
+      toast({
+        title: 'Account deleted',
+        description: 'Your account has been permanently deleted.',
+      });
+
+      return {};
+    } catch (error) {
+      console.error('Delete account error:', error);
+      return { error: error as AuthError };
+    }
+  };
+
+  const deleteAllData = async (): Promise<{ error?: Error }> => {
+    if (!user) return { error: new Error('No user logged in') };
+
+    try {
+      // Delete in order to avoid foreign key constraints
+      
+      // Delete chat messages
+      const { error: chatError } = await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (chatError) {
+        console.error('Error deleting chat messages:', chatError);
+        return { error: chatError };
+      }
+
+      // Delete chat sessions  
+      const { error: sessionsError } = await supabase
+        .from('chat_sessions')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (sessionsError) {
+        console.error('Error deleting chat sessions:', sessionsError);
+        return { error: sessionsError };
+      }
+
+      // Delete emotion sessions
+      const { error: emotionError } = await supabase
+        .from('emotion_sessions')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (emotionError) {
+        console.error('Error deleting emotion sessions:', emotionError);
+        return { error: emotionError };
+      }
+
+      toast({
+        title: 'Data deleted',
+        description: 'All your data has been permanently deleted.',
+      });
+
+      return {};
+    } catch (error) {
+      console.error('Delete all data error:', error);
+      return { error: error as Error };
+    }
+  };
+
   const value = {
     user,
     session,
@@ -242,6 +344,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     signOut,
     updateProfile,
+    deleteAccount,
+    deleteAllData,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

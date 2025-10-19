@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { withCache, PerformanceMonitor } from './performance';
 import type {
   TextAnalysisResult,
   VoiceAnalysisResult,
@@ -6,19 +7,21 @@ import type {
   ChatMessageResult,
 } from '@/types';
 
-// Create axios instance with default config
+// Create axios instance with optimized config
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 seconds timeout
+  timeout: 15000, // Reduced timeout for faster failure
 });
 
-// Request interceptor for logging
+// Request interceptor for performance monitoring
 api.interceptors.request.use(
   (config) => {
-    console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
+    const requestId = `${config.method?.toUpperCase()}-${config.url}`;
+    PerformanceMonitor.start(requestId);
+    console.log(`[API Request] ${requestId}`);
     return config;
   },
   (error) => {
@@ -27,13 +30,16 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
+// Response interceptor with performance logging
 api.interceptors.response.use(
   (response) => {
-    console.log(`[API Response] ${response.config.url} - ${response.status}`);
+    const requestId = `${response.config.method?.toUpperCase()}-${response.config.url}`;
+    PerformanceMonitor.end(requestId);
     return response;
   },
   (error) => {
+    const requestId = `${error.config?.method?.toUpperCase()}-${error.config?.url}`;
+    PerformanceMonitor.end(requestId);
     console.error('[API Response Error]', error.response?.data || error.message);
     return Promise.reject(error);
   }
@@ -42,34 +48,38 @@ api.interceptors.response.use(
 // API Functions
 
 /**
- * Analyze text for emotions
+ * Analyze text for emotions with caching
  */
 export const analyzeText = async (text: string): Promise<TextAnalysisResult> => {
-  const response = await api.post<{ 
-    success: boolean; 
-    data: { 
-      emotion: string; 
-      confidence: number; 
-      scores: Record<string, number>; 
-      recordId?: string;
-    } 
-  }>('/api/analyze/text', { text });
+  const cacheKey = `text-analysis-${text.slice(0, 50)}`;
   
-  // Backend returns { success: true, data: { emotion, confidence, scores, recordId } }
-  // But we expect the full analysis result structure
-  const backendData = response.data.data;
-  
-  // Transform the simplified backend response to match our expected structure
-  return {
-    originalText: text,
-    processedText: text,
-    emotion: backendData.emotion,
-    confidence: backendData.confidence,
-    scores: backendData.scores,
-    models_used: ['BiLSTM', 'HuggingFace'],
-    combination_strategy: 'Weighted Average',
-    individual_results: undefined // Not provided by current backend
-  };
+  return withCache(cacheKey, async () => {
+    const response = await api.post<{ 
+      success: boolean; 
+      data: { 
+        emotion: string; 
+        confidence: number; 
+        scores: Record<string, number>; 
+        recordId?: string;
+      } 
+    }>('/api/analyze/text', { text });
+    
+    // Backend returns { success: true, data: { emotion, confidence, scores, recordId } }
+    // But we expect the full analysis result structure
+    const backendData = response.data.data;
+    
+    // Transform the simplified backend response to match our expected structure
+    return {
+      originalText: text,
+      processedText: text.toLowerCase().trim(),
+      emotion: backendData.emotion,
+      confidence: backendData.confidence,
+      scores: backendData.scores,
+      models_used: ['BiLSTM', 'HuggingFace'],
+      combination_strategy: 'Weighted Average',
+      individual_results: undefined // Not provided by current backend
+    };
+  });
 };
 
 /**
@@ -140,18 +150,78 @@ export const textToSpeech = async (text: string): Promise<Blob> => {
 export const sendChatMessage = async (
   message: string,
   userId?: string,
+  sessionId?: string,
   includeAudio = false
 ): Promise<ChatMessageResult> => {
   const response = await api.post<{ 
     success: boolean; 
-    data: ChatMessageResult 
+    data?: ChatMessageResult;
+    error?: string;
   }>('/api/chat/message', { 
     message, 
-    userId, 
-    includeAudio 
+    userId,
+    sessionId,
+    includeAudio,
+    memoryLength: 10
   });
   
+  if (!response.data.success || !response.data.data) {
+    throw new Error(response.data.error || 'Failed to send chat message');
+  }
+  
   return response.data.data;
+};
+
+/**
+ * Get chat sessions for a user
+ */
+export const getChatSessions = async (userId: string) => {
+  const response = await api.get(`/api/chat/sessions`, {
+    params: { userId }
+  });
+  return response.data.data;
+};
+
+/**
+ * Get messages for a specific chat session
+ */
+export const getChatMessages = async (sessionId: string, userId: string) => {
+  const response = await api.get(`/api/chat/sessions/${sessionId}/messages`, {
+    params: { userId }
+  });
+  return response.data.data;
+};
+
+/**
+ * Create a new chat session
+ */
+export const createChatSession = async (userId: string, sessionTitle?: string) => {
+  const response = await api.post('/api/chat/sessions', {
+    userId,
+    sessionTitle
+  });
+  return response.data.data;
+};
+
+/**
+ * Update session title
+ */
+export const updateChatSessionTitle = async (sessionId: string, userId: string, title: string) => {
+  const response = await api.put(`/api/chat/sessions/${sessionId}/title`, {
+    userId,
+    title
+  });
+  return response.data.data;
+};
+
+/**
+ * Delete a chat session
+ */
+export const deleteChatSession = async (sessionId: string, userId: string) => {
+  const response = await api.delete(`/api/chat/sessions/${sessionId}`, {
+    params: { userId }
+  });
+  return response.data;
 };
 
 /**

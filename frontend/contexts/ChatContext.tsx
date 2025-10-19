@@ -63,8 +63,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         id: `temp_${Date.now()}`,
         session_id: sessionId,
         user_id: user.id,
-        message_type: 'user',
-        content,
+        role: 'user',
+        message: content,
         created_at: new Date().toISOString(),
       };
 
@@ -72,13 +72,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
       // Call the chat API that handles everything (emotion analysis + AI response + database save)
       console.log('🚀 Sending chat message to backend...');
-      const chatResult = await sendChatMessage(content, user.id, false);
+      const chatResult = await sendChatMessage(content, user.id, sessionId);
       console.log('✅ Chat API response received:', chatResult);
 
       // Update user message with emotion data from backend
       const updatedUserMessage: ChatMessage = {
         ...userMessage,
-        id: chatResult.recordId || userMessage.id, // Use backend record ID if available
+        id: chatResult.userMessage.id || userMessage.id, // Use backend record ID if available
         emotion_detected: chatResult.userMessage.emotion,
         confidence_score: chatResult.userMessage.confidence,
       };
@@ -88,8 +88,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         id: `ai_${Date.now()}`,
         session_id: sessionId,
         user_id: user.id,
-        message_type: 'assistant',
-        content: chatResult.aiResponse.text,
+        role: 'assistant',
+        message: chatResult.aiResponse.message,
         emotion_detected: chatResult.userMessage.emotion,
         confidence_score: chatResult.userMessage.confidence,
         created_at: new Date().toISOString(),
@@ -124,8 +124,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Regenerate last AI response (SIMPLIFIED - no database update)
   const regenerateLastResponse = async () => {
-    const lastUserMessage = [...messages].reverse().find(msg => msg.message_type === 'user');
-    const lastAssistantMessage = [...messages].reverse().find(msg => msg.message_type === 'assistant');
+    const lastUserMessage = [...messages].reverse().find(msg => msg.role === 'user');
+    const lastAssistantMessage = [...messages].reverse().find(msg => msg.role === 'assistant');
     
     if (!lastUserMessage || !lastAssistantMessage || !user) return;
 
@@ -136,7 +136,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       console.log('🔄 Regenerating AI response...');
       const { response } = await regenerateResponse(
         lastAssistantMessage.emotion_detected || 'neutral',
-        lastUserMessage.content
+        lastUserMessage.message
       );
 
       // Update the last assistant message in frontend state only
@@ -275,12 +275,37 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Initialize chat on mount
+  // Initialize chat on mount and check for new users
   useEffect(() => {
     if (user && !currentSessionId) {
       startNewSession();
+      // Check if this is a new user (no previous chat history)
+      checkIfNewUser();
     }
   }, [user]);
+
+  // Check if user is new and show welcome message
+  const checkIfNewUser = async () => {
+    if (!user) return;
+    
+    // For now, we'll consider any user with no messages as new
+    // You could enhance this by checking profile creation date or a dedicated flag
+    const isNewUser = messages.length === 0;
+    
+    if (isNewUser) {
+      // Add a welcome message from MantrAI
+      const welcomeMessage: ChatMessage = {
+        id: `welcome_${Date.now()}`,
+        session_id: currentSessionId || 'welcome',
+        user_id: 'system',
+        role: 'assistant',
+        message: "Welcome to MantrAI! 👋 I'm here to listen, understand, and support you through our conversations. Feel free to share anything on your mind - whether you're celebrating, struggling, or just want to chat. What would you like to talk about today?",
+        created_at: new Date().toISOString(),
+      };
+      
+      setMessages([welcomeMessage]);
+    }
+  };
 
   const value = {
     messages,

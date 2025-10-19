@@ -31,6 +31,7 @@ export function AIResponseBox({ response, emotion, context }: AIResponseBoxProps
       });
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
       toast({
         title: 'Error',
         description: 'Failed to copy to clipboard',
@@ -62,6 +63,7 @@ export function AIResponseBox({ response, emotion, context }: AIResponseBoxProps
       
       await audio.play();
     } catch (error) {
+      console.error('Failed to play TTS audio:', error);
       setIsSpeaking(false);
       toast({
         title: 'Error',
@@ -83,6 +85,7 @@ export function AIResponseBox({ response, emotion, context }: AIResponseBoxProps
         description: 'Response regenerated',
       });
     } catch (error) {
+      console.error('Failed to regenerate response:', error);
       toast({
         title: 'Error',
         description: 'Failed to regenerate response',

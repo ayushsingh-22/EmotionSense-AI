@@ -1,7 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui/card';
-import { EMOTION_CONFIG, type AnalysisHistory, type EmotionType } from '@/types';
+import { EMOTION_CONFIG, type AnalysisHistory, type EmotionType, type TextAnalysisResult, type VoiceAnalysisResult, type MultiModalResult } from '@/types';
 import { Activity, TrendingUp } from 'lucide-react';
 
 interface SessionStatsProps {
@@ -15,12 +15,12 @@ export function SessionStats({ history }: SessionStatsProps) {
   const emotionCounts: Record<string, number> = {};
   history.forEach((item) => {
     let emotion = 'neutral';
-    if ('main_emotion' in item.result) {
-      emotion = item.result.main_emotion.emotion;
-    } else if ('combined_emotion' in item.result) {
-      emotion = item.result.combined_emotion.emotion;
-    } else if ('weighted_emotion' in item.result) {
-      emotion = item.result.weighted_emotion.emotion;
+    if (item.type === 'text') {
+      emotion = (item.result as TextAnalysisResult).emotion;
+    } else if (item.type === 'voice') {
+      emotion = (item.result as VoiceAnalysisResult).combined_emotion?.emotion || 'neutral';
+    } else if (item.type === 'multimodal') {
+      emotion = (item.result as MultiModalResult).weighted_emotion?.emotion || 'neutral';
     }
     emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
   });

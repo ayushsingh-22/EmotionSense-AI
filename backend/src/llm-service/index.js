@@ -15,11 +15,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import config from '../config/index.js';
 
 /**
- * Create empathetic prompt based on emotion and context
+ * Create empathetic prompt based on emotion, context, and chat history
+ * Enhanced to provide better continuity and context awareness
+ * IMPORTANT: Uses conversation history to understand the actual topic, not just emotion
  */
-export const createEmpatheticPrompt = (emotion, context, transcript) => {
+export const createEmpatheticPrompt = (emotion, context, transcript, chatHistory = []) => {
   const emotionPrompts = {
-    happy: "The user is expressing happiness and joy. Respond with warmth and encouragement. Celebrate their positive moment.",
+    happy: "The user might be expressing some positivity, but FIRST check the conversation history to understand the actual situation. They may be asking HOW to be happy, or seeking hope despite difficulties.",
     sad: "The user is feeling sad or down. Respond with empathy, understanding, and gentle support. Validate their feelings.",
     angry: "The user is expressing anger or frustration. Respond with calm understanding and help them process their feelings.",
     fear: "The user is experiencing fear or anxiety. Respond with reassurance, comfort, and practical support.",
@@ -29,28 +31,97 @@ export const createEmpatheticPrompt = (emotion, context, transcript) => {
   };
 
   const emotionGuidance = emotionPrompts[emotion] || emotionPrompts.neutral;
+  
+  // Determine the actual underlying topic from conversation history
+  let underlyingTopic = "general conversation";
+  if (chatHistory && chatHistory.length > 0) {
+    const recentUserMessages = chatHistory.filter(msg => msg.role === 'user').map(msg => msg.message.toLowerCase());
+    
+    if (recentUserMessages.some(msg => msg.includes('money') || msg.includes('afford') || msg.includes('celebrate') || msg.includes('festival'))) {
+      underlyingTopic = "financial hardship and wanting to celebrate a festival";
+    } else if (recentUserMessages.some(msg => msg.includes('die') || msg.includes('suicide') || msg.includes('harm'))) {
+      underlyingTopic = "suicidal thoughts or severe distress";
+    } else if (recentUserMessages.some(msg => msg.includes('break') || msg.includes('betray') || msg.includes('friend') || msg.includes('hurt'))) {
+      underlyingTopic = "relationship betrayal or emotional pain";
+    } else if (recentUserMessages.some(msg => msg.includes('work') || msg.includes('job') || msg.includes('boss'))) {
+      underlyingTopic = "work-related stress or issues";
+    }
+  }
 
-  let prompt = `You are an empathetic AI assistant designed to provide emotional support and understanding.
+  // Start with system context and guidelines
+  let prompt = `You are an empathetic AI assistant designed to provide emotional support and understanding through ongoing conversations.
 
-CONTEXT:
+IMPORTANT: This is a CONTINUOUS conversation about: ${underlyingTopic}
+
+You have access to previous messages in this conversation thread. Use them to provide coherent, contextual responses that reference the conversation thread when appropriate.
+
+CRITICAL: Focus on the UNDERLYING TOPIC (${underlyingTopic}), not just the detected emotion. The emotion detection helps understand HOW the user feels, but the conversation history shows WHAT they're dealing with.
+
+CURRENT MESSAGE CONTEXT:
+- Underlying Topic: ${underlyingTopic}
 - Detected Emotion: ${emotion}
 - Confidence: ${context?.confidence || 'N/A'}
-${transcript ? `- User said: "${transcript}"` : ''}
+${transcript ? `- User's current message: "${transcript}"` : ''}
 ${context?.context ? `- Additional context: ${context.context}` : ''}
 
-GUIDELINES:
-${emotionGuidance}
+EMOTIONAL GUIDANCE:
+${emotionGuidance}`;
+
+  // Add chat history for context - make it prominent and well-formatted
+  if (chatHistory && chatHistory.length > 0) {
+    prompt += `\n\n${'═'.repeat(70)}
+CONVERSATION HISTORY - UNDERSTANDING THE SITUATION
+${'═'.repeat(70)}
+
+Situation: The user is dealing with: ${underlyingTopic}
+
+Previous messages in conversation:`;
+    
+    chatHistory.forEach((msg, index) => {
+      const role = msg.role === 'user' ? '👤 User' : '🤖 Assistant';
+      const emotion = msg.emotion_detected ? ` [${msg.emotion_detected.toUpperCase()}]` : '';
+      const timestamp = msg.created_at ? new Date(msg.created_at).toLocaleTimeString() : '';
+      prompt += `\n\n[${index + 1}] ${role}${emotion}${timestamp ? ` (${timestamp})` : ''}:\n"${msg.message}"`;
+    });
+    
+    prompt += `\n\n${'═'.repeat(70)}
+CRITICAL INSTRUCTIONS FOR RESPONDING:
+${'═'.repeat(70)}
+
+✓ UNDERSTAND THE REAL SITUATION: The user is dealing with ${underlyingTopic}
+✓ RESPOND TO THE TOPIC, NOT JUST EMOTION: Focus on their actual problem/need
+✓ REFERENCE THE CONVERSATION: Show you remember what they've told you
+✓ BUILD ON PREVIOUS MESSAGES: Connect your response to their earlier statements
+✓ MAINTAIN CONTINUITY: Keep supporting them on this specific journey
+✓ BE SPECIFIC: Use examples from their story, not generic advice
+✓ ACKNOWLEDGE THEIR FEELINGS: Validate their emotions in context of their situation
+✓ PROVIDE PRACTICAL HELP: When they ask "how to overcome", give specific suggestions related to their situation
+
+EXAMPLE:
+- If they mention financial hardship → suggest practical solutions (saving, budgeting, community resources)
+- If they mention loneliness → suggest connection strategies
+- If they mention loss → offer grieving support
+- NOT: Change topic or respond to a different emotion`;
+  }
+
+  prompt += `
 
 RESPONSE REQUIREMENTS:
-- Be warm, genuine, and human-like
-- Keep response concise (2-3 sentences)
+- Be warm, genuine, and conversational
+- Keep response concise (2-3 sentences, or more if continuing an important thread)
 - Use simple, natural language
-- Show understanding of their emotional state
+- Show you understand their emotional journey AND their real-life situation
 - Offer support or encouragement as appropriate
-- Do NOT mention that you're an AI unless relevant
-- Do NOT explain emotion detection or confidence scores
+- Reference previous messages and the underlying topic when helpful
+- Do NOT start fresh - treat this as an ongoing conversation
+- Do NOT ignore the real topic in favor of emotion detection
+- Do NOT provide generic advice - be specific to THEIR situation
+- Do NOT say "I don't remember" - you have the conversation history above
 
-Please provide an empathetic response:`;
+Now respond to help them with: ${underlyingTopic}
+Current message: "${transcript}"
+
+RESPOND NATURALLY AND CONTEXTUALLY:`;
 
   return prompt;
 };
@@ -212,8 +283,8 @@ export const generateFallbackResponse = (emotion) => {
 export const generateResponse = async ({ emotion, confidence, context, transcript, conversationHistory = [] }) => {
   console.log(`💬 Generating empathetic response for emotion: ${emotion}`);
 
-  // Create prompt
-  const prompt = createEmpatheticPrompt(emotion, { confidence, context }, transcript);
+  // Create prompt with conversation history
+  const prompt = createEmpatheticPrompt(emotion, { confidence, context }, transcript, conversationHistory);
 
   // Try Gemini first
   try {
