@@ -231,3 +231,50 @@ export const healthCheck = async (): Promise<{ status: string; timestamp: string
   const response = await api.get<{ status: string; timestamp: string }>('/api/health');
   return response.data;
 };
+
+/**
+ * Send voice chat message with audio
+ */
+export const sendVoiceMessage = async (
+  audioFile: File,
+  transcript: string,
+  userId: string,
+  sessionId?: string,
+  language: string = 'en-US'
+): Promise<ChatMessageResult> => {
+  const formData = new FormData();
+  formData.append('audio', audioFile);
+  formData.append('transcript', transcript);
+  formData.append('userId', userId);
+  formData.append('language', language);
+  
+  if (sessionId) {
+    formData.append('sessionId', sessionId);
+  }
+
+  const response = await api.post<{ success: boolean; data: ChatMessageResult }>(
+    '/api/chat/voice',
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }
+  );
+
+  return response.data.data;
+};
+
+/**
+ * Request microphone permission
+ */
+export const requestMicrophonePermission = async (): Promise<boolean> => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Close the stream immediately after getting permission
+    stream.getTracks().forEach((track) => track.stop());
+    return true;
+  } catch {
+    return false;
+  }
+};

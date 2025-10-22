@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import chat enhancements */
+@import '../styles/chat-enhancements.css';
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -19,6 +22,17 @@
   
   .optimize-rendering {
     contain: layout style paint;
+  }
+  
+  /* Enhanced text wrapping utilities */
+  .break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    hyphens: auto;
+  }
+  
+  .text-wrap-pretty {
+    text-wrap: pretty;
   }
 }
 

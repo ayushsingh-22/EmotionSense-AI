@@ -16,6 +16,11 @@ interface ChatBubbleProps {
   isLoading?: boolean;
   hasContext?: boolean;
   contextLength?: number;
+  // Language detection props
+  detectedLanguage?: string;
+  languageName?: string;
+  wasTranslated?: boolean;
+  translationMethod?: string;
 }
 
 export function ChatBubble({ 
@@ -26,7 +31,11 @@ export function ChatBubble({
   confidence,
   isLoading = false,
   hasContext = false,
-  contextLength = 0
+  contextLength = 0,
+  detectedLanguage,
+  languageName,
+  wasTranslated = false,
+  translationMethod
 }: ChatBubbleProps) {
   const handleCopy = async () => {
     try {
@@ -69,12 +78,18 @@ export function ChatBubble({
 
       {/* Message Content */}
       <div className={cn(
-        "flex flex-col max-w-[70%] space-y-2",
-        isUser ? "items-end" : "items-start"
+        "flex flex-col space-y-2",
+        isUser ? "items-end" : "items-start",
+        // Responsive max width to ensure proper wrapping
+        "w-full max-w-[85%] sm:max-w-[75%] lg:max-w-[70%]"
       )}>
         {/* Message Bubble */}
         <div className={cn(
-          "relative px-6 py-4 rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl",
+          "relative px-4 py-3 sm:px-6 sm:py-4 rounded-2xl shadow-lg transition-all duration-300 group-hover:shadow-xl",
+          // Ensure text wraps properly with word-break
+          "break-words hyphens-auto overflow-wrap-anywhere",
+          // Responsive width handling
+          "min-w-0 max-w-full",
           isUser
             ? "bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-br-md"
             : "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-md"
@@ -89,7 +104,16 @@ export function ChatBubble({
               <span className="text-sm opacity-70">MantrAI is thinking...</span>
             </div>
           ) : (
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{message}</p>
+            <p className={cn(
+              "text-sm leading-relaxed chat-message",
+              // Enhanced text wrapping and readability
+              "whitespace-pre-wrap break-anywhere text-wrap-pretty",
+              "max-w-none min-w-0",
+              // Better line spacing for longer messages
+              "text-base sm:text-sm leading-relaxed sm:leading-normal"
+            )}>
+              {message}
+            </p>
           )}
 
           {/* Message Actions */}
@@ -156,6 +180,17 @@ export function ChatBubble({
               title={`Response considers ${contextLength} previous message${contextLength > 1 ? 's' : ''}`}
             >
               🧠 Context: {contextLength}
+            </Badge>
+          )}
+          
+          {/* Language detection info */}
+          {detectedLanguage && detectedLanguage !== 'en' && (
+            <Badge 
+              variant="outline" 
+              className="text-xs px-2 py-1 rounded-full bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
+              title={wasTranslated ? `Translated from ${languageName} using ${translationMethod === 'gemini_fallback' ? 'Gemini AI' : 'Google Translate'}` : `Detected language: ${languageName}`}
+            >
+              🌐 {languageName} {wasTranslated && '→ English'}
             </Badge>
           )}
         </div>

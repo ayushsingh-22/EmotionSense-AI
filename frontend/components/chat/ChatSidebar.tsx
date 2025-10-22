@@ -16,7 +16,7 @@ import {
   Search
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { getChatSessions, createChatSession, updateChatSessionTitle, deleteChatSession } from '@/lib/api';
+import { getChatSessions, updateChatSessionTitle, deleteChatSession } from '@/lib/api';
 import { ChatSession } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -25,13 +25,15 @@ interface ChatSidebarProps {
   onSessionSelect: (sessionId: string) => void;
   onNewSession: () => void;
   className?: string;
+  refreshTrigger?: number; // Add prop to trigger refresh when new session is created
 }
 
 export function ChatSidebar({ 
   currentSessionId, 
   onSessionSelect, 
   onNewSession, 
-  className 
+  className,
+  refreshTrigger = 0
 }: ChatSidebarProps) {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -43,7 +45,7 @@ export function ChatSidebar({
   // Load chat sessions
   useEffect(() => {
     loadSessions();
-  }, [user]);
+  }, [user, refreshTrigger]);
 
   const loadSessions = async () => {
     if (!user?.id) return;
@@ -59,16 +61,10 @@ export function ChatSidebar({
     }
   };
 
-  const handleNewSession = async () => {
-    if (!user?.id) return;
-    
-    try {
-      const newSession = await createChatSession(user.id, 'New Chat');
-      setSessions(prev => [newSession, ...prev]);
-      onNewSession();
-    } catch (error) {
-      console.error('Failed to create session:', error);
-    }
+  const handleNewSession = () => {
+    // Don't create a session here - let the chat message handler create it
+    // when the user sends their first message
+    onNewSession();
   };
 
   const handleEditSession = (session: ChatSession) => {
@@ -142,15 +138,22 @@ export function ChatSidebar({
   };
 
   return (
-    <div className={cn('h-full flex flex-col bg-background border-r', className)}>
+    <div className={cn(
+      "h-full flex flex-col bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 border-r border-gray-200 dark:border-gray-700",
+      "w-80 min-w-[280px] max-w-[320px]", // Fixed width constraints
+      className
+    )}>
       {/* Header */}
-      <div className="p-4 border-b">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Chat History</h2>
+      <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <MessageCircle className="h-5 w-5 text-blue-500" />
+            Chat History
+          </h2>
           <Button
             onClick={handleNewSession}
             size="sm"
-            className="gap-2"
+            className="gap-2 bg-blue-500 hover:bg-blue-600 text-white shadow-sm"
           >
             <Plus className="h-4 w-4" />
             New
@@ -164,21 +167,30 @@ export function ChatSidebar({
             placeholder="Search conversations..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
+            className="pl-9 bg-white/80 dark:bg-gray-800/80 border-gray-200 dark:border-gray-600"
           />
         </div>
       </div>
 
       {/* Sessions List */}
-      <ScrollArea className="flex-1">
-        <div className="p-2">
+      <ScrollArea className="flex-1 bg-white/30 dark:bg-gray-800/30">
+        <div className="p-3">
           {loading ? (
             <div className="text-center text-muted-foreground py-8">
+              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
               Loading conversations...
             </div>
           ) : filteredSessions.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
-              {searchTerm ? 'No conversations found' : 'No conversations yet'}
+              <MessageCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p className="text-sm">
+                {searchTerm ? 'No conversations found' : 'No conversations yet'}
+              </p>
+              {!searchTerm && (
+                <p className="text-xs mt-1 opacity-70">
+                  Start a new chat to begin
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -186,14 +198,15 @@ export function ChatSidebar({
                 <Card
                   key={session.id}
                   className={cn(
-                    'cursor-pointer transition-colors hover:bg-accent',
-                    currentSessionId === session.id && 'bg-accent border-primary'
+                    'cursor-pointer transition-all duration-200 hover:bg-accent hover:shadow-md group',
+                    'border-gray-200 dark:border-gray-600 bg-white/60 dark:bg-gray-800/60',
+                    currentSessionId === session.id && 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-500 shadow-sm'
                   )}
                   onClick={() => !editingSessionId && onSessionSelect(session.id)}
                 >
                   <CardContent className="p-3">
                     <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 pr-2">
                         {editingSessionId === session.id ? (
                           <div className="flex items-center gap-2">
                             <Input
@@ -206,14 +219,14 @@ export function ChatSidebar({
                                   handleCancelEdit();
                                 }
                               }}
-                              className="h-7 text-sm"
+                              className="h-7 text-sm bg-white dark:bg-gray-700"
                               autoFocus
                             />
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={() => handleSaveTitle(session.id)}
-                              className="h-7 w-7 p-0"
+                              className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
                             >
                               <Check className="h-3 w-3" />
                             </Button>
@@ -221,29 +234,31 @@ export function ChatSidebar({
                               size="sm"
                               variant="ghost"
                               onClick={handleCancelEdit}
-                              className="h-7 w-7 p-0"
+                              className="h-7 w-7 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                             >
                               <X className="h-3 w-3" />
                             </Button>
                           </div>
                         ) : (
                           <>
-                            <div className="flex items-center gap-2 mb-2">
-                              <MessageCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <h3 className="font-medium text-sm truncate">
+                            <div className="flex items-start gap-2 mb-2">
+                              <MessageCircle className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                              <h3 className="font-medium text-sm text-gray-900 dark:text-gray-100 break-words leading-tight">
                                 {session.session_title}
                               </h3>
                             </div>
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              {formatDate(session.updated_at)}
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground ml-6">
+                              <Clock className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate">
+                                {formatDate(session.updated_at)}
+                              </span>
                             </div>
                           </>
                         )}
                       </div>
                       
                       {!editingSessionId && (
-                        <div className="flex items-center gap-1 ml-2">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                           <Button
                             size="sm"
                             variant="ghost"
@@ -251,7 +266,7 @@ export function ChatSidebar({
                               e.stopPropagation();
                               handleEditSession(session);
                             }}
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-7 w-7 p-0 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                           >
                             <Edit2 className="h-3 w-3" />
                           </Button>
@@ -262,7 +277,7 @@ export function ChatSidebar({
                               e.stopPropagation();
                               handleDeleteSession(session.id);
                             }}
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                            className="h-7 w-7 p-0 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
@@ -278,9 +293,14 @@ export function ChatSidebar({
       </ScrollArea>
       
       {/* Footer */}
-      <div className="p-4 border-t">
-        <div className="text-xs text-muted-foreground text-center">
-          {sessions.length} conversation{sessions.length !== 1 ? 's' : ''}
+      <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50">
+        <div className="text-xs text-center">
+          <div className="text-muted-foreground mb-1">
+            {sessions.length} conversation{sessions.length !== 1 ? 's' : ''}
+          </div>
+          <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+            MantrAI • Empathetic Support
+          </div>
         </div>
       </div>
     </div>

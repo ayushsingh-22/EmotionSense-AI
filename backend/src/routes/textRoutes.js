@@ -1,12 +1,16 @@
 /**
  * Text Analysis Routes
- * Handles text-based emotion detection requests
+ * Handles text-based emotion detection requests with multi-language support
  */
 
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { analyzeTextEmotion } from '../text-service/index.js';
 import { saveAnalysisResult } from '../storage-service/index.js';
+import { 
+  translateToEnglishIfNeeded, 
+  getLanguageName 
+} from '../utils/translationHelper.js';
 
 const router = express.Router();
 
@@ -40,8 +44,34 @@ router.post('/', asyncHandler(async (req, res) => {
 
   console.log(`🔤 Processing text emotion analysis for user: ${userId || 'anonymous'}`);
 
-  // Analyze text emotion
-  const emotionResult = await analyzeTextEmotion(text);
+  // Language detection and translation
+  console.log(`🌐 Detecting language and translating if needed...`);
+  const translationResult = await translateToEnglishIfNeeded(text);
+  
+  const {
+    translatedText: englishText,
+    sourceLang: detectedLanguage,
+    needsTranslation,
+    usedFallback: usedTranslationFallback,
+    translationFailed
+  } = translationResult;
+
+  console.log(`✅ Language detection: ${detectedLanguage} (${getLanguageName(detectedLanguage)})`);
+  
+  if (needsTranslation) {
+    console.log(`🔄 Text translated for processing: "${englishText}"`);
+  }
+
+  if (usedTranslationFallback) {
+    console.log(`⚠️ Used Gemini fallback for translation`);
+  }
+
+  if (translationFailed) {
+    console.log(`⚠️ Translation failed, proceeding with original text`);
+  }
+
+  // Analyze text emotion using English text
+  const emotionResult = await analyzeTextEmotion(englishText);
 
   // Save to database (if userId provided)
   let recordId = null;
@@ -49,10 +79,18 @@ router.post('/', asyncHandler(async (req, res) => {
     recordId = await saveAnalysisResult({
       userId,
       type: 'text',
-      input: text,
+      input: text, // Save original text
+      translatedInput: needsTranslation ? englishText : null,
       emotion: emotionResult.emotion,
       confidence: emotionResult.confidence,
       scores: emotionResult.scores,
+      language: {
+        detected: detectedLanguage,
+        name: getLanguageName(detectedLanguage),
+        wasTranslated: needsTranslation,
+        translationMethod: usedTranslationFallback ? 'gemini_fallback' : 'google_translate',
+        translationFailed: translationFailed
+      },
       timestamp: new Date().toISOString()
     });
   }
@@ -63,6 +101,15 @@ router.post('/', asyncHandler(async (req, res) => {
       emotion: emotionResult.emotion,
       confidence: emotionResult.confidence,
       scores: emotionResult.scores,
+      language: {
+        detected: detectedLanguage,
+        name: getLanguageName(detectedLanguage),
+        wasTranslated: needsTranslation,
+        originalText: text,
+        translatedText: needsTranslation ? englishText : null,
+        translationMethod: usedTranslationFallback ? 'gemini_fallback' : 'google_translate',
+        translationFailed: translationFailed
+      },
       recordId: recordId
     }
   });

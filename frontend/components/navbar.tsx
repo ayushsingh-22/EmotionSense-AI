@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Moon, Sun, Activity, User, LogOut, Settings } from 'lucide-react';
@@ -23,9 +24,15 @@ const navigation = [
 ];
 
 export function Navbar() {
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const { user, profile, signOut, loading } = useAuth();
+
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <nav className="border-b bg-white/80 dark:bg-gray-950/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-gray-950/60 fixed top-0 w-full z-50 shadow-sm">
@@ -41,8 +48,8 @@ export function Navbar() {
           </span>
         </Link>
 
-        {/* Navigation Links - Only show when authenticated */}
-        {user && (
+        {/* Navigation Links - Only show when authenticated and mounted */}
+        {mounted && user && (
           <div className="hidden md:flex items-center space-x-2">
             {navigation.map((item) => {
               const isActive = pathname === item.href;
@@ -65,20 +72,22 @@ export function Navbar() {
 
         {/* Right side controls */}
         <div className="flex items-center space-x-3">
-          {/* Theme Toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="relative hover:bg-accent/50 transition-all duration-300 hover:scale-110"
-          >
-            <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span className="sr-only">Toggle theme</span>
-          </Button>
+          {/* Theme Toggle - only show when mounted */}
+          {mounted && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="relative hover:bg-accent/50 transition-all duration-300 hover:scale-110"
+            >
+              <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+              <span className="sr-only">Toggle theme</span>
+            </Button>
+          )}
 
-          {/* User Menu */}
-          {user && !loading ? (
+          {/* User Menu - only show when mounted */}
+          {mounted && user && !loading ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-accent/50 transition-all duration-300 hover:scale-110">
@@ -113,7 +122,7 @@ export function Navbar() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          ) : !loading ? (
+          ) : mounted && !loading ? (
             <div className="flex items-center space-x-2">
               <Link href="/auth/login">
                 <Button variant="ghost">Sign In</Button>
@@ -122,7 +131,10 @@ export function Navbar() {
                 <Button>Sign Up</Button>
               </Link>
             </div>
-          ) : null}
+          ) : (
+            // Placeholder during SSR/mounting
+            <div className="w-24 h-10" />
+          )}
         </div>
       </div>
     </nav>

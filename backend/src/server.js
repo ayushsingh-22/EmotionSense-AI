@@ -77,6 +77,12 @@ const configureMiddleware = () => {
 
   // Request logging
   app.use(requestLogger);
+
+  // Serve audio files from temp directory
+  app.use('/audio', express.static(join(__dirname, '..', 'temp', 'audio'), {
+    maxAge: '1h',
+    etag: false
+  }));
 };
 
 /**

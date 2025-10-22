@@ -1,10 +1,13 @@
 /**
  * Chat Routes
  * Handles chat-specific requests combining emotion analysis and response generation
- * Supports user-specific sessions and contextual conversations
+ * Supports user-specific sessions and contextual conversations with multi-language support
  */
 
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { analyzeTextEmotion } from '../text-service/index.js';
 import { generateResponse } from '../llm-service/index.js';
@@ -19,7 +22,33 @@ import {
   updateChatSessionTitle, 
   deleteChatSession 
 } from '../storage-service/index.js';
+import { 
+  translateToEnglishIfNeeded, 
+  translateBackToUserLanguage,
+  getLanguageName,
+  isLanguageSupported
+} from '../utils/translationHelper.js';
+import { textToSpeech } from '../utils/voiceHelper.js';
 import config from '../config/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Configure multer for audio file uploads
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    // Allow audio files
+    const allowedMimes = ['audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/ogg', 'audio/webm'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid audio format: ${file.mimetype}`));
+    }
+  }
+});
 
 const router = express.Router();
 
@@ -64,68 +93,164 @@ router.post('/message', asyncHandler(async (req, res) => {
   console.log(`📝 Message: "${message}"`);
 
   try {
-    // Step 1: Get or create session
-    let currentSessionId = sessionId;
-    if (!currentSessionId) {
-      console.log(`🆕 Creating new chat session...`);
-      const newSession = await createChatSession(userId, message.length > 50 ? message.substring(0, 50) + '...' : message);
-      currentSessionId = newSession.id;
+    // Step 1: Language Detection & Translation to English
+    console.log(`🌐 Detecting language and translating if needed...`);
+    const translationResult = await translateToEnglishIfNeeded(message);
+    
+    const {
+      translatedText: englishText,
+      sourceLang: detectedLanguage,
+      needsTranslation,
+      usedFallback: usedTranslationFallback,
+      translationFailed
+    } = translationResult;
+
+    console.log(`✅ Language detection: ${detectedLanguage} (${getLanguageName(detectedLanguage)})`);
+    
+    if (needsTranslation) {
+      console.log(`🔄 Text translated for processing: "${englishText}"`);
     }
 
-    // Step 2: Get recent messages for context
+    if (usedTranslationFallback) {
+      console.log(`⚠️ Used Gemini fallback for translation`);
+    }
+
+    if (translationFailed) {
+      console.log(`⚠️ Translation failed, proceeding with original text`);
+    }
+
+    // Step 2: Get or create session ONLY when user sends actual message
+    let currentSessionId = sessionId;
+    let isNewSession = false;
+    
+    if (!currentSessionId) {
+      console.log(`🆕 Creating new chat session with user message...`);
+      
+      // Create meaningful title from the original user message (not translated)
+      // Use first 40 characters for better readability in different languages
+      const sessionTitle = message.length > 40 
+        ? message.substring(0, 40).trim() + '...' 
+        : message.trim();
+      
+      const newSession = await createChatSession(userId, sessionTitle);
+      currentSessionId = newSession.id;
+      isNewSession = true;
+      
+      console.log(`✅ Created new session "${sessionTitle}" for first user message`);
+    }
+
+    // Step 3: Get recent messages for context (empty for new sessions)
     const memoryLength = parseInt(process.env.CHAT_MEMORY_LENGTH || 10);
     console.log(`🧠 Fetching last ${memoryLength} messages for context...`);
     const conversationHistory = await getRecentChatMessages(userId, currentSessionId, memoryLength);
 
-    // Step 3: Analyze emotion from the message
-    console.log(`🔤 Analyzing emotion...`);
-    const emotionResult = await analyzeTextEmotion(message);
+    // Step 4: Analyze emotion from the English text
+    console.log(`🔤 Analyzing emotion from processed text...`);
+    const emotionResult = await analyzeTextEmotion(englishText);
     
     console.log(`✅ Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
 
-    // Step 4: Save user message to database
+    // Step 5: Save user message to database (save original message, not translated)
     console.log(`💾 Saving user message...`);
     const userMessage = await saveChatMessage(
       userId, 
       currentSessionId, 
       'user', 
-      message, 
+      message, // Save original message
       {
         emotion: emotionResult.emotion,
-        confidence: emotionResult.confidence
+        confidence: emotionResult.confidence,
+        detectedLanguage: detectedLanguage,
+        languageName: getLanguageName(detectedLanguage),
+        wasTranslated: needsTranslation,
+        translatedText: needsTranslation ? englishText : null
       }
     );
 
-    // Step 5: Generate empathetic AI response based on emotion and context
+    // Step 6: Generate empathetic AI response based on emotion and context (using English text)
     console.log(`🤖 Generating AI response with conversation context...`);
     const llmResponse = await generateResponse({
       emotion: emotionResult.emotion,
       confidence: emotionResult.confidence,
       context: {
-        userMessage: message,
-        processedText: emotionResult.processedText
+        userMessage: englishText, // Use translated English text for LLM
+        processedText: emotionResult.processedText,
+        originalMessage: message, // Keep original for context
+        userLanguage: detectedLanguage
       },
-      transcript: message,
+      transcript: englishText, // Use English for processing
       conversationHistory: conversationHistory
     });
 
     console.log(`✅ AI response generated: "${llmResponse.text ? llmResponse.text.substring(0, 100) : 'No response'}..."`);
 
-    // Step 6: Save AI response to database
+    // Step 7: Translate AI response back to user's language
+    let finalResponse = llmResponse.text;
+    let responseTranslated = false;
+    let responseTranslationFailed = false;
+
+    if (needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown') {
+      console.log(`🔄 Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
+      
+      try {
+        finalResponse = await translateBackToUserLanguage(llmResponse.text, detectedLanguage);
+        responseTranslated = true;
+        console.log(`✅ Response translated back to user's language`);
+      } catch (error) {
+        console.error(`❌ Failed to translate response back to user language:`, error.message);
+        finalResponse = llmResponse.text; // Keep English response
+        responseTranslationFailed = true;
+      }
+    }
+
+    // Step 8: Save AI response to database (save in user's language)
     console.log(`💾 Saving AI response...`);
     const assistantMessage = await saveChatMessage(
       userId, 
       currentSessionId, 
       'assistant', 
-      llmResponse.text
+      finalResponse, // Save in user's language
+      {
+        originalEnglishText: responseTranslated ? llmResponse.text : null,
+        targetLanguage: detectedLanguage,
+        wasTranslated: responseTranslated,
+        translationFailed: responseTranslationFailed
+      }
     );
 
-    // Step 7: Generate audio response if requested
+    // Step 8.5: Update session title with better title for new sessions
+    if (isNewSession) {
+      try {
+        console.log(`🏷️ Generating better session title for new session...`);
+        
+        // Create a more meaningful title based on the conversation context
+        const titleText = message.length > 60 ? message.substring(0, 60).trim() + '...' : message.trim();
+        
+        // If it's a non-English conversation, keep the original language title
+        let betterTitle = titleText;
+        
+        // For very short messages, try to create a more descriptive title
+        if (message.trim().length <= 10) {
+          const emotionContext = emotionResult.emotion === 'neutral' ? 'Chat' : `${emotionResult.emotion} conversation`;
+          const languageContext = detectedLanguage !== 'en' ? ` (${getLanguageName(detectedLanguage)})` : '';
+          betterTitle = `${emotionContext}${languageContext}`;
+        }
+        
+        await updateChatSessionTitle(userId, currentSessionId, betterTitle);
+        console.log(`✅ Updated session title to: "${betterTitle}"`);
+        
+      } catch (error) {
+        console.warn(`⚠️ Failed to update session title:`, error.message);
+        // Don't fail the request if title update fails
+      }
+    }
+
+    // Step 9: Generate audio response if requested (using translated text in user's language)
     let audioResponse = null;
-    if (includeAudio && llmResponse.text) {
+    if (includeAudio && finalResponse) {
       console.log(`🔊 Generating audio response...`);
       try {
-        audioResponse = await generateSpeech(llmResponse.text);
+        audioResponse = await generateSpeech(finalResponse);
         console.log(`✅ Audio response generated`);
       } catch (audioError) {
         console.warn(`⚠️ Audio generation failed:`, audioError.message);
@@ -133,7 +258,7 @@ router.post('/message', asyncHandler(async (req, res) => {
       }
     }
 
-    // Step 8: Return comprehensive response
+    // Step 10: Return comprehensive response with translation info
     const response = {
       success: true,
       data: {
@@ -143,18 +268,37 @@ router.post('/message', asyncHandler(async (req, res) => {
           message: message,
           emotion: emotionResult.emotion,
           confidence: emotionResult.confidence,
-          timestamp: userMessage.created_at
+          timestamp: userMessage.created_at,
+          // Language detection info
+          detectedLanguage: detectedLanguage,
+          languageName: getLanguageName(detectedLanguage),
+          wasTranslated: needsTranslation,
+          translatedText: needsTranslation ? englishText : null,
+          translationMethod: usedTranslationFallback ? 'gemini_fallback' : 'google_translate'
         },
         aiResponse: {
           id: assistantMessage.id,
-          message: llmResponse.text,
+          message: finalResponse, // Response in user's language
           model: llmResponse.model,
-          timestamp: assistantMessage.created_at
+          timestamp: assistantMessage.created_at,
+          // Translation info for response
+          originalEnglishText: responseTranslated ? llmResponse.text : null,
+          wasTranslated: responseTranslated,
+          translationFailed: responseTranslationFailed,
+          targetLanguage: detectedLanguage
         },
         emotion: {
           detected: emotionResult.emotion,
           confidence: emotionResult.confidence,
           scores: emotionResult.scores
+        },
+        language: {
+          detected: detectedLanguage,
+          name: getLanguageName(detectedLanguage),
+          supported: isLanguageSupported(detectedLanguage),
+          inputTranslated: needsTranslation,
+          outputTranslated: responseTranslated,
+          translationFailed: translationFailed || responseTranslationFailed
         },
         hasContext: conversationHistory.length > 0,
         contextLength: conversationHistory.length
@@ -347,6 +491,376 @@ router.delete('/sessions/:sessionId', asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to delete chat session',
+      details: error.message
+    });
+  }
+}));
+
+/**
+ * POST /api/chat/voice
+ * Process voice message: STT -> Emotion -> LLM -> TTS with context
+ * 
+ * Request:
+ * - multipart/form-data
+ * - audio: Audio file (WAV, MP3, OGG, WEBM)
+ * - userId: User ID (required)
+ * - sessionId: Session ID (optional - creates new if not provided)
+ * - language: User language code (optional, default: en-US)
+ */
+router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
+  const { userId, sessionId, language = 'en-US' } = req.body;
+
+  // Validate input
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      error: 'User ID is required'
+    });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      error: 'Audio file is required'
+    });
+  }
+
+  console.log(`🎙️ Processing voice message for user: ${userId}`);
+  console.log(`📁 Audio file: ${req.file.originalname} (${req.file.mimetype}, ${req.file.size} bytes)`);
+  console.log(`🌐 Language: ${language}`);
+
+  try {
+    // Step 1: Convert speech to text (will be done in frontend primarily)
+    // Backend receives transcript from frontend or provides fallback
+    // For now, we'll use the transcript from frontend in the message body
+    // or implement backend STT as fallback
+    
+    const transcript = req.body.transcript;
+    if (!transcript || transcript.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Transcript is required. Frontend must provide STT result.'
+      });
+    }
+
+    console.log(`📝 Transcript: "${transcript}"`);
+
+    // Step 2: Language Detection & Translation to English
+    console.log(`🌐 Detecting language and translating if needed...`);
+    const translationResult = await translateToEnglishIfNeeded(transcript);
+    
+    const {
+      translatedText: englishText,
+      sourceLang: detectedLanguage,
+      needsTranslation,
+      usedFallback: usedTranslationFallback,
+      translationFailed
+    } = translationResult;
+
+    console.log(`✅ Language detection: ${detectedLanguage} (${getLanguageName(detectedLanguage)})`);
+
+    // Step 3: Get or create session
+    let currentSessionId = sessionId;
+    let isNewSession = false;
+    
+    if (!currentSessionId) {
+      console.log(`🆕 Creating new voice chat session...`);
+      
+      const sessionTitle = transcript.length > 40 
+        ? transcript.substring(0, 40).trim() + '...' 
+        : transcript.trim();
+      
+      const newSession = await createChatSession(userId, sessionTitle);
+      currentSessionId = newSession.id;
+      isNewSession = true;
+      
+      console.log(`✅ Created new session for voice message`);
+    }
+
+    // Step 4: Get recent messages for context
+    const memoryLength = parseInt(process.env.CHAT_MEMORY_LENGTH || 10);
+    console.log(`🧠 Fetching last ${memoryLength} messages for context...`);
+    const conversationHistory = await getRecentChatMessages(userId, currentSessionId, memoryLength);
+
+    // Step 5: Analyze emotion from the English text
+    console.log(`🔤 Analyzing emotion from transcript...`);
+    const emotionResult = await analyzeTextEmotion(englishText);
+    
+    console.log(`✅ Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
+
+    // Step 6: Save user message (voice transcript)
+    console.log(`💾 Saving voice message...`);
+    const userMessage = await saveChatMessage(
+      userId, 
+      currentSessionId, 
+      'user', 
+      transcript,
+      {
+        emotion: emotionResult.emotion,
+        confidence: emotionResult.confidence,
+        detectedLanguage: detectedLanguage,
+        languageName: getLanguageName(detectedLanguage),
+        wasTranslated: needsTranslation,
+        translatedText: needsTranslation ? englishText : null,
+        messageType: 'voice',
+        audioFileName: req.file.originalname
+      }
+    );
+
+    // Step 7: Generate empathetic AI response based on emotion and context
+    console.log(`🤖 Generating AI response with conversation context...`);
+    const llmResponse = await generateResponse({
+      emotion: emotionResult.emotion,
+      confidence: emotionResult.confidence,
+      context: {
+        userMessage: englishText,
+        processedText: emotionResult.processedText,
+        originalMessage: transcript,
+        userLanguage: detectedLanguage
+      },
+      transcript: englishText,
+      conversationHistory: conversationHistory
+    });
+
+    console.log(`✅ AI response generated`);
+
+    // Step 8: Translate AI response back to user's language
+    let finalResponse = llmResponse.text;
+    let responseTranslated = false;
+    let responseTranslationFailed = false;
+
+    if (needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown') {
+      console.log(`🔄 Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
+      
+      try {
+        finalResponse = await translateBackToUserLanguage(llmResponse.text, detectedLanguage);
+        responseTranslated = true;
+        console.log(`✅ Response translated back to user's language`);
+      } catch (error) {
+        console.error(`❌ Failed to translate response:`, error.message);
+        finalResponse = llmResponse.text;
+        responseTranslationFailed = true;
+      }
+    }
+
+    // Step 9: Save AI response to database
+    console.log(`💾 Saving AI response...`);
+    const assistantMessage = await saveChatMessage(
+      userId, 
+      currentSessionId, 
+      'assistant', 
+      finalResponse,
+      {
+        originalEnglishText: responseTranslated ? llmResponse.text : null,
+        targetLanguage: detectedLanguage,
+        wasTranslated: responseTranslated,
+        translationFailed: responseTranslationFailed,
+        messageType: 'voice_response'
+      }
+    );
+
+    // Step 10: Update session title for new sessions
+    if (isNewSession) {
+      try {
+        const titleText = transcript.length > 60 ? transcript.substring(0, 60).trim() + '...' : transcript.trim();
+        let betterTitle = titleText;
+        
+        if (transcript.trim().length <= 10) {
+          const emotionContext = emotionResult.emotion === 'neutral' ? 'Voice chat' : `${emotionResult.emotion} voice chat`;
+          const languageContext = detectedLanguage !== 'en' ? ` (${getLanguageName(detectedLanguage)})` : '';
+          betterTitle = `${emotionContext}${languageContext}`;
+        }
+        
+        await updateChatSessionTitle(userId, currentSessionId, betterTitle);
+        console.log(`✅ Updated session title to: "${betterTitle}"`);
+      } catch (error) {
+        console.warn(`⚠️ Failed to update session title:`, error.message);
+      }
+    }
+
+    // Step 11: Generate audio response using TTS
+    let audioResponse = null;
+    if (finalResponse) {
+      console.log(`🔊 Generating audio response with TTS...`);
+      try {
+        // Use the detected/translated language for TTS
+        const ttsLanguage = getLanguageCodeForTTS(detectedLanguage);
+        audioResponse = await textToSpeech(finalResponse, ttsLanguage);
+        console.log(`✅ Audio response generated`);
+      } catch (audioError) {
+        console.warn(`⚠️ Audio generation failed:`, audioError.message);
+        // Continue without audio - don't fail the entire request
+      }
+    }
+
+    // Step 12: Return comprehensive response
+    const response = {
+      success: true,
+      data: {
+        sessionId: currentSessionId,
+        userMessage: {
+          id: userMessage.id,
+          transcript: transcript,
+          emotion: emotionResult.emotion,
+          confidence: emotionResult.confidence,
+          timestamp: userMessage.created_at,
+          detectedLanguage: detectedLanguage,
+          languageName: getLanguageName(detectedLanguage),
+          wasTranslated: needsTranslation
+        },
+        aiResponse: {
+          id: assistantMessage.id,
+          message: finalResponse,
+          model: llmResponse.model,
+          timestamp: assistantMessage.created_at,
+          originalEnglishText: responseTranslated ? llmResponse.text : null,
+          wasTranslated: responseTranslated,
+          targetLanguage: detectedLanguage
+        },
+        emotion: {
+          detected: emotionResult.emotion,
+          confidence: emotionResult.confidence,
+          scores: emotionResult.scores
+        },
+        language: {
+          detected: detectedLanguage,
+          name: getLanguageName(detectedLanguage),
+          supported: isLanguageSupported(detectedLanguage)
+        },
+        audio: audioResponse ? {
+          url: audioResponse.audioUrl,
+          duration: audioResponse.duration,
+          provider: audioResponse.provider
+        } : null,
+        contextLength: conversationHistory.length
+      }
+    };
+
+    console.log(`🎉 Voice message processing completed successfully`);
+    res.json(response);
+
+  } catch (error) {
+    console.error('❌ Error processing voice message:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process voice message',
+      details: error.message
+    });
+  }
+}));
+
+/**
+ * Helper function to map language codes for TTS
+ * @param {string} language - Language code (e.g., 'en', 'es', 'fr')
+ * @returns {string} TTS-compatible language code (e.g., 'en-US', 'es-ES', 'fr-FR')
+ */
+function getLanguageCodeForTTS(language) {
+  const languageMap = {
+    'en': 'en-US',
+    'es': 'es-ES',
+    'fr': 'fr-FR',
+    'de': 'de-DE',
+    'it': 'it-IT',
+    'pt': 'pt-BR',
+    'ja': 'ja-JP',
+    'ko': 'ko-KR',
+    'zh': 'zh-CN',
+    'ar': 'ar-SA',
+    'hi': 'hi-IN',
+    'ru': 'ru-RU'
+  };
+
+  // If exact match exists, return it
+  if (languageMap[language]) {
+    return languageMap[language];
+  }
+
+  // If it's a locale like 'en-US', return as is
+  if (language.includes('-')) {
+    return language;
+  }
+
+  // Default to English US if not found
+  return 'en-US';
+}
+
+/**
+ * POST /api/chat/transcribe
+ * Transcribe audio using Whisper API (Groq or OpenAI)
+ * Supports cross-browser audio recording with MediaRecorder
+ * 
+ * Request: multipart/form-data
+ *   - audio: Audio file (WebM, MP3, WAV, OGG)
+ *   - language?: Language code (optional, auto-detect if not provided)
+ * 
+ * Response: { success: true, data: { text: string, confidence: number, language: string } }
+ */
+router.post('/transcribe', upload.single('audio'), asyncHandler(async (req, res) => {
+  console.log('🎙️ Transcribe endpoint called');
+
+  // Validate audio file
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      error: 'Audio file is required'
+    });
+  }
+
+  console.log(`📁 Audio file received: ${req.file.originalname} (${req.file.mimetype}, ${req.file.size} bytes)`);
+
+  try {
+    // Import voice service for Groq Whisper
+    const { speechToTextGroq } = await import('../voice-service/index.js');
+    
+    // Save audio buffer to temporary file
+    const fs = await import('fs');
+    const tempDir = path.join(__dirname, '../../temp/audio');
+    
+    // Ensure temp directory exists
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    // Create temporary file with original extension
+    const fileExt = path.extname(req.file.originalname) || '.webm';
+    const tempFilePath = path.join(tempDir, `transcribe-${Date.now()}${fileExt}`);
+    
+    // Write buffer to file
+    fs.writeFileSync(tempFilePath, req.file.buffer);
+    console.log(`💾 Saved to temp file: ${tempFilePath}`);
+
+    // Transcribe using Groq Whisper
+    const transcriptionResult = await speechToTextGroq(tempFilePath);
+
+    // Clean up temp file
+    try {
+      fs.unlinkSync(tempFilePath);
+      console.log(`🗑️ Cleaned up temp file`);
+    } catch (cleanupError) {
+      console.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
+    }
+
+    // Return transcription result
+    res.json({
+      success: true,
+      data: {
+        text: transcriptionResult.transcript,
+        confidence: transcriptionResult.confidence,
+        language: transcriptionResult.language,
+        provider: transcriptionResult.provider,
+        duration: transcriptionResult.duration
+      }
+    });
+
+    console.log(`✅ Transcription successful: "${transcriptionResult.transcript.substring(0, 50)}..."`);
+
+  } catch (error) {
+    console.error('❌ Transcription failed:', error);
+    
+    // Return error response
+    res.status(500).json({
+      success: false,
+      error: 'Speech transcription failed',
       details: error.message
     });
   }

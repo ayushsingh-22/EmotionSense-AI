@@ -69,20 +69,8 @@ const config = {
     apiUrl: 'https://api-inference.huggingface.co/models'
   },
 
-  // Custom Voice Emotion Model Configuration
-  // ⚠️ WARNING: The BiLSTM model (emotion_bilstm_final.h5) is a TEXT model, not an audio model
-  // It uses an Embedding layer for tokenized text input, NOT audio features
-  // See CUSTOM_MODEL_ISSUE.md for details
-  customVoiceModel: {
-    enabled: process.env.CUSTOM_MODEL_ENABLED === 'true', // Disabled by default (model is for text, not audio)
-    modelPath: process.env.CUSTOM_MODEL_PATH || './src/models/emotion_bilstm_final.h5',
-    scriptPath: './src/voice-service/emotion_inference.py',
-    emotionLabels: (process.env.CUSTOM_MODEL_LABELS || 'angry,disgust,fear,happy,neutral,sad,surprise').split(','),
-    confidenceThreshold: parseFloat(process.env.CUSTOM_MODEL_THRESHOLD) || 0.5
-  },
-
   // BiLSTM ONNX Text Emotion Model Configuration
-  // This is the CORRECT usage: BiLSTM model for TEXT emotion detection
+  // This is the PRIMARY emotion detection model using ONNX format for better performance
   bilstmTextModel: {
     enabled: process.env.BILSTM_TEXT_ENABLED !== 'false', // Enabled by default
     modelPath: process.env.BILSTM_MODEL_PATH || './src/models/emotion_bilstm_final.onnx',

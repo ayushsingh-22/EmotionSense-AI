@@ -36,11 +36,21 @@ export const initializeSupabase = async () => {
 
     supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-    // Test the connection
-    const { data, error } = await supabaseClient.from('emotion_analysis').select('count').limit(1);
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "table doesn't exist" which is OK for first run
-      console.error('❌ Supabase connection test failed:', error.message);
-      return null;
+    // Test the connection - use a simpler test that doesn't depend on specific tables
+    try {
+      const { data, error } = await supabaseClient.from('emotion_analysis').select('count').limit(1);
+      if (error) {
+        if (error.code === 'PGRST116' || error.message.includes('table') || error.message.includes('schema cache')) {
+          console.log('⚠️ emotion_analysis table not found - this is OK if running for the first time');
+          console.log('📝 Please run the database migration script to create all required tables');
+        } else {
+          console.error('❌ Supabase connection test failed:', error.message);
+          return null;
+        }
+      }
+    } catch (testError) {
+      console.log('⚠️ Connection test failed but continuing - this may be a first-time setup');
+      console.log('📝 If you see persistent errors, please run the database migration script');
     }
 
     console.log('✅ Supabase initialized successfully');
