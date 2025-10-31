@@ -629,6 +629,11 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
     let responseTranslated = false;
     let responseTranslationFailed = false;
 
+    console.log(`📊 Translation Check:`);
+    console.log(`   - Detected Language: ${detectedLanguage}`);
+    console.log(`   - Needs Translation: ${needsTranslation}`);
+    console.log(`   - LLM Response (English): "${llmResponse.text.substring(0, 100)}..."`);
+
     if (needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown') {
       console.log(`🔄 Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
       
@@ -636,11 +641,14 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
         finalResponse = await translateBackToUserLanguage(llmResponse.text, detectedLanguage);
         responseTranslated = true;
         console.log(`✅ Response translated back to user's language`);
+        console.log(`   - Translated Response: "${finalResponse.substring(0, 100)}..."`);
       } catch (error) {
         console.error(`❌ Failed to translate response:`, error.message);
         finalResponse = llmResponse.text;
         responseTranslationFailed = true;
       }
+    } else {
+      console.log(`ℹ️  No translation needed - using English response`);
     }
 
     // Step 9: Save AI response to database
@@ -694,6 +702,10 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
     }
 
     // Step 12: Return comprehensive response
+    console.log(`📤 Preparing response to frontend:`);
+    console.log(`   📝 User Transcript (${detectedLanguage}): "${transcript.substring(0, 80)}"`);
+    console.log(`   🤖 AI Message (${detectedLanguage}): "${finalResponse.substring(0, 80)}"`);
+    
     const response = {
       success: true,
       data: {

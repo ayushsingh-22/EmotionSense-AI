@@ -1,16 +1,18 @@
 /**
  * Text-to-Speech (TTS) Service Module
- * Converts text responses to audio using Piper (offline)
+ * Converts text responses to audio using OpenAI TTS (primary) or Piper (fallback)
  * 
  * This module:
  * 1. Receives text response from LLM
- * 2. Converts to audio using Piper TTS CLI (offline, fast, neural)
- * 3. Returns audio data (base64 or Buffer)
+ * 2. Tries OpenAI TTS API first (cloud, high-quality, neural)
+ * 3. Falls back to Piper TTS if OpenAI fails (offline, fast, neural)
+ * 4. Returns audio data (base64 or Buffer)
  */
 
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import axios from 'axios';
 import { fileURLToPath } from 'url';
 import config from '../config/index.js';
 
@@ -18,11 +20,104 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
+ * Get best Google TTS voice for a language
+ */
+const getGoogleVoiceForLanguage = (languageCode) => {
+  const voiceMap = {
+    'en-US': 'en-US-Neural2-C',
+    'en-GB': 'en-GB-Neural2-C',
+    'es-ES': 'es-ES-Neural2-B',
+    'es-US': 'es-US-Neural2-A',
+    'fr-FR': 'fr-FR-Neural2-C',
+    'de-DE': 'de-DE-Neural2-B',
+    'it-IT': 'it-IT-Neural2-A',
+    'pt-BR': 'pt-BR-Neural2-A',
+    'ja-JP': 'ja-JP-Neural2-C',
+    'ko-KR': 'ko-KR-Neural2-A',
+    'zh-CN': 'cmn-CN-Wavenet-C',
+    'ar-SA': 'ar-XA-Wavenet-C',
+    'hi-IN': 'hi-IN-Neural2-C',
+    'ru-RU': 'ru-RU-Wavenet-C'
+  };
+  return voiceMap[languageCode] || 'en-US-Neural2-C';
+};
+
+/**
+ * Generate speech using Google Cloud TTS API
+ * Supports Neural2 voices and high-quality output
+ * Docs: https://cloud.google.com/text-to-speech/docs/reference/rest
+ */
+export const generateSpeechGoogle = async (text, languageCode = 'en-US', voice = null) => {
+  const selectedVoice = voice || getGoogleVoiceForLanguage(languageCode);
+  console.log(`🔊 Generating speech using Google TTS (language: ${languageCode}, voice: ${selectedVoice})...`);
+
+  if (!config.tts.google.apiKey) {
+    throw new Error('Google TTS API key not configured');
+  }
+
+  try {
+    const response = await axios.post(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${config.tts.google.apiKey}`,
+      {
+        input: { text: text },
+        voice: {
+          languageCode: languageCode,
+          name: selectedVoice,
+          ssmlGender: 'NEUTRAL'
+        },
+        audioConfig: {
+          audioEncoding: config.tts.google.audioEncoding, // MP3, LINEAR16, OGG_OPUS
+          speakingRate: config.tts.google.speakingRate || 1.0,
+          pitch: config.tts.google.pitch || 0.0
+        }
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000 // 30 seconds timeout
+      }
+    );
+
+    // Google TTS returns base64 encoded audio in the response
+    const audioContent = response.data.audioContent;
+    const audioBuffer = Buffer.from(audioContent, 'base64');
+    
+    console.log(`✅ Google TTS synthesis complete (${audioBuffer.length} bytes)`);
+
+    return {
+      audio: audioContent, // Already base64 encoded
+      format: config.tts.google.audioEncoding.toLowerCase(),
+      duration: estimateDuration(text),
+      provider: 'google',
+      voice: selectedVoice,
+      language: languageCode,
+      sampleRate: 24000 // Google TTS typically uses 24kHz
+    };
+  } catch (error) {
+    console.error('❌ Google TTS Error Details:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+    
+    if (error.response) {
+      throw new Error(`Google TTS API error: ${error.response.status} - ${error.response.statusText}`);
+    } else if (error.request) {
+      throw new Error('Google TTS API request failed - no response received');
+    } else {
+      throw new Error(`OpenAI TTS error: ${error.message}`);
+    }
+  }
+};
+
+/**
  * Check if Piper model and executable exists
  */
 const checkPiperModel = () => {
-  const modelPath = config.tts.piperModelPath;
-  const configPath = config.tts.piperConfigPath;
+  const modelPath = config.tts.piper.modelPath;
+  const configPath = config.tts.piper.configPath;
   
   if (!fs.existsSync(modelPath)) {
     console.warn(`⚠️  Piper model not found at: ${modelPath}`);
@@ -68,11 +163,14 @@ export const generateSpeechPiper = async (text) => {
     }
 
     // Spawn Piper process
+    const speakerId = config.tts.piper.speakerId || 0;
+    console.log('🔍 DEBUG - config.tts.piper:', JSON.stringify(config.tts.piper, null, 2));
+    console.log('🔍 DEBUG - speakerId value:', speakerId, 'type:', typeof speakerId);
     const piper = spawn(piperCmd, [
-      '--model', config.tts.piperModelPath,
-      '--config', config.tts.piperConfigPath,
+      '--model', config.tts.piper.modelPath,
+      '--config', config.tts.piper.configPath,
       '--output_file', outputPath,
-      '--speaker', config.tts.piperSpeakerId.toString()
+      '--speaker', String(speakerId)
     ]);
 
     // Send text to stdin
@@ -137,8 +235,9 @@ const estimateDuration = (text) => {
 /**
  * Main function: Generate speech from text
  * This is the primary export used by routes
+ * Strategy: Try Google TTS first, fallback to Piper if it fails
  */
-export const generateSpeech = async (text) => {
+export const generateSpeech = async (text, voice = null, languageCode = null) => {
   console.log(`🎙️ Converting text to speech...`);
 
   if (!config.tts.enabled) {
@@ -152,16 +251,53 @@ export const generateSpeech = async (text) => {
   }
 
   try {
-    // Use Piper TTS (offline)
-    let speechResult;
-    
-    if (config.tts.provider === 'piper') {
-      speechResult = await generateSpeechPiper(text);
-    } else {
-      console.warn(`⚠️  Unknown TTS provider: ${config.tts.provider}, defaulting to Piper`);
-      speechResult = await generateSpeechPiper(text);
+    // Check provider and use appropriate TTS
+    if (config.tts.provider === 'google') {
+      // Strategy 1: Try Google TTS first
+      const hasValidGoogleKey = config.tts.google.apiKey && 
+                                 config.tts.google.apiKey !== 'your_google_tts_api_key_here' &&
+                                 config.tts.google.apiKey.length > 0;
+      
+      if (hasValidGoogleKey) {
+        try {
+          console.log(`🌐 Attempting Google TTS...`);
+          const selectedVoice = voice || config.tts.google.voice;
+          const selectedLanguage = languageCode || config.tts.google.languageCode;
+          const speechResult = await generateSpeechGoogle(
+            text, 
+            selectedLanguage,
+            selectedVoice
+          );
+          
+          console.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
+          
+          return {
+            audioData: speechResult.audio,
+            format: speechResult.format,
+            duration: speechResult.duration,
+            provider: speechResult.provider,
+            voice: speechResult.voice,
+            text: text
+          };
+        } catch (googleError) {
+          console.warn(`⚠️  Google TTS failed: ${googleError.message}`);
+          console.log(`🔄 Falling back to Piper TTS...`);
+          // Continue to fallback below
+        }
+      } else {
+        console.log(`ℹ️  Google API key not configured, using Piper...`);
+      }
     }
 
+    // Strategy 2: Use Piper TTS (offline, fast, reliable)
+    // Note: Piper only supports English - non-English will be spoken with English voice
+    if (languageCode && !languageCode.startsWith('en')) {
+      console.log(`⚠️  Piper TTS only supports English. Non-English text (${languageCode}) will use English voice.`);
+      console.log(`💡 Tip: Enable Google TTS for multi-language support.`);
+    }
+    console.log(`🔊 Generating speech using Piper TTS (offline)...`);
+    const speechResult = await generateSpeechPiper(text);
+    
     console.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
 
     return {
@@ -169,10 +305,11 @@ export const generateSpeech = async (text) => {
       format: speechResult.format,
       duration: speechResult.duration,
       provider: speechResult.provider,
+      language: languageCode || 'en-US',
       text: text
     };
   } catch (error) {
-    console.error('❌ Failed to generate speech:', error.message);
+    console.error('❌ All TTS methods failed:', error.message);
     // Return null instead of throwing - TTS is optional
     return null;
   }

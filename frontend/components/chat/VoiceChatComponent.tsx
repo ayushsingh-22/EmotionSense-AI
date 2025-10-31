@@ -323,7 +323,7 @@ export function VoiceChatComponent({
           headers: {
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 30000,
+          timeout: 120000, // Increased to 120 seconds for TTS processing
         }
       );
 

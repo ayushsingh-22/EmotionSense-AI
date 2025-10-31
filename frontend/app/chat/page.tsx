@@ -246,7 +246,8 @@ export default function ChatPage() {
     // Add user and AI messages to the chat
     const userMessage = response.userMessage as {
       id?: string;
-      message: string;
+      message?: string;
+      transcript?: string;
       emotion?: string;
       confidence?: number;
       timestamp?: string;
@@ -261,12 +262,15 @@ export default function ChatPage() {
     const sessionId = response.sessionId as string;
 
     if (userMessage) {
+      // Use transcript if available, fallback to message
+      const messageText = userMessage.transcript || userMessage.message || '';
+      
       const userMsg: ExtendedChatMessage = {
         id: userMessage.id || `voice-user-${Date.now()}`,
         user_id: user?.id || '',
         session_id: sessionId,
         role: 'user',
-        message: userMessage.message,
+        message: messageText,
         emotion_detected: userMessage.emotion,
         confidence_score: userMessage.confidence,
         created_at: userMessage.timestamp || new Date().toISOString()

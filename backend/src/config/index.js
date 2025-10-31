@@ -52,13 +52,34 @@ const config = {
     }
   },
 
-  // Text-to-Speech Configuration (Piper - Offline)
+  // Text-to-Speech Configuration
   tts: {
-    enabled: process.env.TTS_ENABLED === 'true',
-    provider: process.env.TTS_PROVIDER || 'piper',
-    piperModelPath: process.env.PIPER_MODEL_PATH || './models/piper/en_US-lessac-medium.onnx',
-    piperConfigPath: process.env.PIPER_CONFIG_PATH || './models/piper/en_US-lessac-medium.onnx.json',
-    piperSpeakerId: parseInt(process.env.PIPER_SPEAKER_ID) || 0
+    enabled: process.env.TTS_ENABLED !== 'false', // Enabled by default
+    provider: process.env.TTS_PROVIDER || 'piper', // Primary: Piper (offline), Fallback: Google
+    google: {
+      apiKey: process.env.GOOGLE_TTS_API_KEY || process.env.GEMINI_API_KEY, // Google TTS API key
+      voice: process.env.GOOGLE_TTS_VOICE || 'en-US-Neural2-C', // Neural2 voices for better quality
+      languageCode: process.env.GOOGLE_TTS_LANGUAGE || 'en-US',
+      audioEncoding: process.env.GOOGLE_TTS_AUDIO_ENCODING || 'MP3', // MP3, LINEAR16, OGG_OPUS
+      speakingRate: parseFloat(process.env.GOOGLE_TTS_SPEED) || 1.0, // 0.25 to 4.0
+      pitch: parseFloat(process.env.GOOGLE_TTS_PITCH) || 0.0 // -20.0 to 20.0
+    },
+    openai: {
+      apiKey: process.env.OPENAI_API_KEY, // OpenAI API key (if needed as fallback)
+      model: process.env.TTS_MODEL || 'tts-1', // tts-1 (faster) or tts-1-hd (higher quality)
+      voice: process.env.TTS_VOICE || 'alloy', // alloy, echo, fable, onyx, nova, shimmer
+      speed: parseFloat(process.env.TTS_SPEED) || 1.0 // 0.25 to 4.0
+    },
+    piper: {
+      modelPath: process.env.PIPER_MODEL_PATH || './models/piper/en_US-lessac-medium.onnx',
+      configPath: process.env.PIPER_CONFIG_PATH || './models/piper/en_US-lessac-medium.onnx.json',
+      speakerId: (() => {
+        const envValue = process.env.PIPER_SPEAKER_ID;
+        const parsed = parseInt(envValue || '0') || 0;
+        console.log('🔍 CONFIG DEBUG - PIPER_SPEAKER_ID env:', envValue, '-> parsed:', parsed);
+        return parsed;
+      })()
+    }
   },
 
   // HuggingFace API Configuration

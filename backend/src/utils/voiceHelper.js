@@ -208,15 +208,19 @@ export async function piperTTS(text) {
     }
 
     // Spawn Piper process
+    const speakerId = config.tts?.piper?.speakerId || 0;
+    const modelPath = config.tts?.piper?.modelPath || config.tts?.piperModelPath || './models/piper/en_US-lessac-medium.onnx';
+    const configPath = config.tts?.piper?.configPath || config.tts?.piperConfigPath || './models/piper/en_US-lessac-medium.onnx.json';
+    
     const piper = spawn(piperCmd, [
       '--model',
-      config.tts.piperModelPath,
+      modelPath,
       '--config',
-      config.tts.piperConfigPath,
+      configPath,
       '--output_file',
       outputPath,
       '--speaker',
-      config.tts.piperSpeakerId.toString(),
+      String(speakerId),
     ]);
 
     // Send text to stdin
@@ -348,20 +352,45 @@ export async function speechToText(audioBuffer, language = 'en-US') {
  */
 export async function textToSpeech(text, language = 'en-US') {
   try {
-    // Primary: Google TTS
-    const apiKey = process.env.GOOGLE_TTS_API_KEY;
-    if (apiKey) {
-      try {
-        return await googleTTS(text, language);
-      } catch (googleError) {
-        console.warn('⚠️ Google TTS failed, trying Piper:', googleError.message);
-      }
+    // Import the updated TTS service
+    const { generateSpeech } = await import('../tts-service/index.js');
+    
+    console.log(`🔊 Converting text to speech using TTS service (language: ${language})...`);
+    // Pass language to TTS service for multi-language support
+    const result = await generateSpeech(text, null, language);
+    
+    if (!result || !result.audioData) {
+      throw new Error('TTS service returned no audio');
     }
-
-    // Fallback: Piper TTS
-    return await piperTTS(text);
+    
+    // Save audio to file and generate URL
+    const audioBuffer = Buffer.from(result.audioData, 'base64');
+    const fileName = `tts-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${result.format || 'mp3'}`;
+    const outputPath = path.join(__dirname, '../../temp/audio', fileName);
+    
+    // Ensure temp directory exists
+    const tempDir = path.dirname(outputPath);
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    // Write audio file
+    fs.writeFileSync(outputPath, audioBuffer);
+    
+    // Generate public URL
+    const audioUrl = `${process.env.API_BASE_URL || 'http://localhost:8080'}/audio/${fileName}`;
+    
+    console.log(`✅ TTS conversion complete: ${audioUrl} (${result.provider})`);
+    
+    return {
+      audioUrl: audioUrl,
+      audioData: audioBuffer,
+      duration: result.duration,
+      provider: result.provider,
+      format: result.format
+    };
   } catch (error) {
-    console.error('❌ All TTS methods failed:', error.message);
+    console.error('❌ TTS service failed:', error.message);
     throw error;
   }
 }
