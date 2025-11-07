@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import { generateSpeech } from '../tts-service/index.js';
+import { generateSpeech, generateSpeechSarvam } from '../tts-service/index.js';
 import config from '../config/index.js';
 
 const router = express.Router();
@@ -170,6 +170,74 @@ router.get('/health', (req, res) => {
       status: 'OK'
     }
   });
+});
+
+/**
+ * POST /api/tts/sarvam
+ * Generate speech using Sarvam AI directly (bypass Google TTS)
+ * Useful for testing or when you specifically want Sarvam's voice
+ */
+router.post('/sarvam', async (req, res) => {
+  try {
+    const { text, language_code } = req.body;
+
+    // Validate request
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Text parameter is required and must be a string'
+      });
+    }
+
+    const langCode = language_code || 'en-IN';
+    console.log(`🔊 Sarvam AI TTS request: language=${langCode}`);
+    console.log(`   Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+
+    try {
+      // Generate speech using Sarvam AI
+      const speechResult = await generateSpeechSarvam(text, langCode);
+
+      if (!speechResult || !speechResult.audio) {
+        throw new Error('Sarvam AI TTS returned no audio data');
+      }
+
+      // Convert base64 to buffer
+      const audioBuffer = Buffer.from(speechResult.audio, 'base64');
+
+      // Return JSON with audio URL
+      res.json({
+        success: true,
+        audioUrl: `data:audio/${speechResult.format};base64,${speechResult.audio}`,
+        audioData: speechResult.audio,
+        format: speechResult.format,
+        size: audioBuffer.length,
+        duration: speechResult.duration,
+        provider: 'sarvam',
+        language: speechResult.language
+      });
+
+      console.log(`✅ Sarvam AI TTS completed (${audioBuffer.length} bytes)`);
+
+    } catch (sarvamError) {
+      console.error(`❌ Sarvam AI TTS failed: ${sarvamError.message}`);
+      
+      return res.status(503).json({
+        success: false,
+        error: 'Sarvam AI TTS service failed',
+        details: sarvamError.message,
+        suggestion: 'Check SARVAM_API_KEY in .env file'
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Sarvam TTS Route Error:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Sarvam AI TTS failed',
+      details: config.development ? error.message : 'Internal server error'
+    });
+  }
 });
 
 export default router;
