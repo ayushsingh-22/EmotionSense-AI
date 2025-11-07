@@ -15,6 +15,7 @@ import path from 'path';
 import axios from 'axios';
 import { fileURLToPath } from 'url';
 import config from '../config/index.js';
+import { SarvamAIClient } from 'sarvamai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -163,6 +164,100 @@ export const generateSpeechGoogle = async (text, languageCode = 'en-US', voice =
 };
 
 /**
+ * Convert language code to Sarvam AI format
+ * Sarvam AI supports Indian languages with specific codes
+ */
+const convertToSarvamLanguageCode = (languageCode) => {
+  // If already in full format (en-IN), extract base code
+  let baseCode = languageCode;
+  if (languageCode && languageCode.includes('-')) {
+    baseCode = languageCode.split('-')[0];
+  }
+  
+  // Sarvam AI language codes (Indian language focus)
+  const sarvamLanguageMap = {
+    'en': 'en-IN',      // English (Indian)
+    'hi': 'hi-IN',      // Hindi
+    'bn': 'bn-IN',      // Bengali
+    'ta': 'ta-IN',      // Tamil
+    'te': 'te-IN',      // Telugu
+    'mr': 'mr-IN',      // Marathi
+    'gu': 'gu-IN',      // Gujarati
+    'kn': 'kn-IN',      // Kannada
+    'ml': 'ml-IN',      // Malayalam
+    'or': 'od-IN',      // Odia (Sarvam uses 'od' instead of 'or')
+    'pa': 'pa-IN',      // Punjabi
+    'mai': 'hi-IN'      // Maithili (fallback to Hindi)
+  };
+  
+  return sarvamLanguageMap[baseCode] || 'en-IN';
+};
+
+/**
+ * Generate speech using Sarvam AI TTS (Bulbul v1)
+ * Indian language-focused TTS with neural voice quality
+ * Docs: https://docs.sarvam.ai/api-reference-docs/endpoints/text-to-speech
+ */
+export const generateSpeechSarvam = async (text, languageCode = 'en-IN') => {
+  const sarvamLanguage = convertToSarvamLanguageCode(languageCode);
+  console.log(`🔊 Generating speech using Sarvam AI TTS (language: ${sarvamLanguage})...`);
+
+  const apiKey = process.env.SARVAM_API_KEY;
+  
+  if (!apiKey || apiKey === 'your_sarvam_api_key_here') {
+    throw new Error('Sarvam AI API key not configured. Set SARVAM_API_KEY in .env file.');
+  }
+
+  try {
+    // Initialize Sarvam AI client
+    const client = new SarvamAIClient({
+      apiSubscriptionKey: apiKey,
+    });
+
+    // Call Sarvam TTS API - using the correct method 'convert'
+    const response = await client.textToSpeech.convert({
+      text: text,
+      target_language_code: sarvamLanguage
+    });
+
+    // Response contains base64 encoded audio in 'audios' array
+    if (!response || !response.audios || response.audios.length === 0) {
+      throw new Error('Sarvam AI returned no audio content');
+    }
+
+    // Sarvam AI returns base64 encoded audio
+    const audioBase64 = response.audios[0];
+    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    
+    console.log(`✅ Sarvam AI TTS synthesis complete (${audioBuffer.length} bytes)`);
+
+    return {
+      audio: audioBase64, // Already base64 encoded
+      format: 'wav',      // Sarvam AI returns WAV format
+      duration: estimateDuration(text),
+      provider: 'sarvam',
+      language: sarvamLanguage,
+      sampleRate: 8000    // Sarvam AI default sample rate
+    };
+  } catch (error) {
+    console.error('❌ Sarvam AI TTS Error Details:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+    
+    if (error.response) {
+      throw new Error(`Sarvam AI TTS API error: ${error.response.status} - ${error.response.statusText}`);
+    } else if (error.request) {
+      throw new Error('Sarvam AI TTS API request failed - no response received');
+    } else {
+      throw new Error(`Sarvam AI TTS error: ${error.message}`);
+    }
+  }
+};
+
+/**
  * Check if Piper model and executable exists
  */
 const checkPiperModel = () => {
@@ -285,7 +380,7 @@ const estimateDuration = (text) => {
 /**
  * Main function: Generate speech from text
  * This is the primary export used by routes
- * Strategy: Try Google TTS first, fallback to Piper if it fails
+ * Strategy: Use Google TTS with Sarvam AI fallback
  */
 export const generateSpeech = async (text, voice = null, languageCode = null) => {
   console.log(`🎙️ Converting text to speech...`);
@@ -300,74 +395,86 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
     return null;
   }
 
-  try {
-    // Check provider and use appropriate TTS
-    if (config.tts.provider === 'google') {
-      // Strategy 1: Try Google TTS first
-      const hasValidGoogleKey = config.tts.google.apiKey && 
-                                 config.tts.google.apiKey !== 'your_google_tts_api_key_here' &&
-                                 config.tts.google.apiKey.length > 0;
-      
-      if (hasValidGoogleKey) {
-        try {
-          console.log(`🌐 Attempting Google TTS with multilingual support...`);
-          const selectedVoice = voice || null; // Let auto-selection pick best voice
-          const selectedLanguage = languageCode || config.tts.google.languageCode || 'en-US';
-          console.log(`   Language: ${selectedLanguage}`);
-          console.log(`   API Key present: ${config.tts.google.apiKey ? 'Yes (length: ' + config.tts.google.apiKey.length + ')' : 'No'}`);
-          
-          const speechResult = await generateSpeechGoogle(
-            text, 
-            selectedLanguage,
-            selectedVoice
-          );
-          
-          console.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
-          
-          return {
-            audioData: speechResult.audio,
-            format: speechResult.format,
-            duration: speechResult.duration,
-            provider: speechResult.provider,
-            voice: speechResult.voice,
-            text: text
-          };
-        } catch (googleError) {
-          console.error(`❌ Google TTS failed with error:`, googleError);
-          console.error(`   Error message: ${googleError.message}`);
-          console.error(`   Error stack:`, googleError.stack);
-          console.log(`🔄 Falling back to Piper TTS...`);
-          // Continue to fallback below
-        }
-      } else {
-        console.log(`ℹ️  Google API key not configured, using Piper...`);
-        console.log(`   API Key: ${config.tts.google.apiKey || 'undefined'}`);
-      }
-    }
+  // Only use Google TTS - no fallback
+  if (config.tts.provider !== 'google') {
+    throw new Error(`TTS provider '${config.tts.provider}' is not supported. Only 'google' is supported.`);
+  }
 
-    // Strategy 2: Use Piper TTS (offline, fast, reliable)
-    // Note: Piper only supports English - non-English will be spoken with English voice
-    if (languageCode && !languageCode.startsWith('en')) {
-      console.log(`⚠️  Piper TTS only supports English. Non-English text (${languageCode}) will use English voice.`);
-      console.log(`💡 Tip: Enable Google TTS for multi-language support.`);
+  // Validate Google API key
+  const hasValidGoogleKey = config.tts.google.apiKey && 
+                             config.tts.google.apiKey.trim() !== '' &&
+                             config.tts.google.apiKey !== 'your_google_tts_api_key_here';
+  
+  if (!hasValidGoogleKey) {
+    console.warn('⚠️ Google TTS API key is not configured. Attempting Sarvam AI fallback...');
+  }
+
+  // Selected language for TTS
+  const selectedLanguage = languageCode || config.tts.google.languageCode || 'en-US';
+  
+  // Try Google TTS first (if API key is valid)
+  if (hasValidGoogleKey) {
+    try {
+      console.log(`🌐 Using Google TTS with multilingual support...`);
+      const selectedVoice = voice || null; // Let auto-selection pick best voice
+      console.log(`   Language: ${selectedLanguage}`);
+      console.log(`   API Key: ${config.tts.google.apiKey.substring(0, 10)}...${config.tts.google.apiKey.slice(-4)}`);
+      
+      const speechResult = await generateSpeechGoogle(
+        text, 
+        selectedLanguage,
+        selectedVoice
+      );
+      
+      console.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
+      
+      return {
+        audioData: speechResult.audio,
+        format: speechResult.format,
+        duration: speechResult.duration,
+        provider: speechResult.provider,
+        voice: speechResult.voice,
+        text: text
+      };
+    } catch (googleError) {
+      console.error(`❌ Google TTS failed:`, {
+        message: googleError.message,
+        status: googleError.response?.status,
+        statusText: googleError.response?.statusText,
+        error: googleError.response?.data?.error
+      });
+      
+      console.warn('⚠️ Google TTS failed, switching to Sarvam AI fallback...');
     }
-    console.log(`🔊 Generating speech using Piper TTS (offline)...`);
-    const speechResult = await generateSpeechPiper(text);
+  }
+
+  // Fallback to Sarvam AI TTS
+  try {
+    console.log(`🌐 Using Sarvam AI TTS (Saarika v2.5) as fallback...`);
+    console.log(`   Language: ${selectedLanguage}`);
+    
+    const speechResult = await generateSpeechSarvam(text, selectedLanguage);
     
     console.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
-
+    
     return {
       audioData: speechResult.audio,
       format: speechResult.format,
       duration: speechResult.duration,
       provider: speechResult.provider,
-      language: languageCode || 'en-US',
+      voice: 'sarvam-meera',
       text: text
     };
-  } catch (error) {
-    console.error('❌ All TTS methods failed:', error.message);
-    // Return null instead of throwing - TTS is optional
-    return null;
+  } catch (sarvamError) {
+    console.error(`❌ Sarvam AI TTS failed:`, {
+      message: sarvamError.message,
+      status: sarvamError.response?.status,
+      statusText: sarvamError.response?.statusText,
+      error: sarvamError.response?.data?.error
+    });
+    
+    // Both TTS systems failed
+    throw new Error(`All TTS systems failed. Google: ${hasValidGoogleKey ? 'failed' : 'not configured'}. Sarvam AI: ${sarvamError.message}`);
   }
 };
 

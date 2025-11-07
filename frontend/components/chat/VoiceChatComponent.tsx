@@ -307,12 +307,11 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
 
       // Add language detection parameters
       if (detectedLanguage) {
-        formData.append('language', detectedLanguage);
       }
 
-      // Send to voice analysis endpoint
+      // Send to voice CHAT endpoint (not just analysis)
       const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/analyze/voice`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/chat/voice`,
         formData,
         {
           headers: { 'Content-Type': 'multipart/form-data' },
@@ -323,45 +322,32 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
       if (response.data.success) {
         const data = response.data.data;
         
+        // Update transcript from response
+        if (data.userMessage?.text) {
+          setCurrentTranscript(data.userMessage.text);
+        }
+        
         // Get detected language from the response
-        const detectedLang = data.language || data.detectedLanguage;
+        const detectedLang = data.language?.detected || data.userMessage?.detectedLanguage;
         if (detectedLang) {
           setDetectedLanguage(detectedLang);
           console.log('🌍 Detected language:', detectedLang);
         }
         
         // Update translation info if available
-        if (data.translation) {
+        if (data.language) {
           setTranslationInfo({
-            inputTranslated: true,
-            outputTranslated: true,
-            languageName: data.translation.sourceLang || detectedLang || 'Unknown'
+            inputTranslated: data.language.inputTranslated || false,
+            outputTranslated: data.language.outputTranslated || false,
+            languageName: data.language.name || 'Unknown'
           });
         }
 
-        // Generate audio response
-        try {
-          const ttsResponse = await axios.post(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/tts/generate`,
-            { 
-              text: data.response || data.message || data.translation?.text,
-              language: detectedLang || 'en',
-              voice: 'neural'
-            }
-          );
-          
-          if (ttsResponse.data.success && ttsResponse.data.audioUrl) {
-            console.log(`🎵 Generated voice response in ${detectedLang || 'detected language'}`);
-            setAudioResponseUrl(ttsResponse.data.audioUrl);
-            await playAudioResponse(ttsResponse.data.audioUrl);
-          }
-        } catch (error) {
-          console.error('Failed to generate voice response:', error);
-          toast({
-            title: "Voice Generation Failed",
-            description: "Could not generate voice response. Using text only.",
-            variant: "destructive",
-          });
+        // Play audio response if available (backend already generated it!)
+        if (data.audio?.url) {
+          console.log(`🎵 Playing voice response in ${data.language?.name || 'detected language'}`);
+          setAudioResponseUrl(data.audio.url);
+          await playAudioResponse(data.audio.url);
         }
 
         // Notify parent component
@@ -514,23 +500,10 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
                 Processing...
               </>
             ) : (
-              <Button
-                onClick={submitVoiceMessage}
-                disabled={!currentTranscript.trim() || isProcessing || disabled}
-                className="flex items-center gap-2"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-5 w-5" />
-                    Send
-                  </>
-                )}
-              </Button>
+              <>
+                <Send className="h-5 w-5" />
+                Send
+              </>
             )}
           </Button>
         </div>
