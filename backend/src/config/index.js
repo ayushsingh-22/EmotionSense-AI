@@ -17,7 +17,9 @@ const config = {
 
   // Gemini API Configuration (Primary LLM)
   gemini: {
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey: process.env.GEMINI_API_KEY1 || process.env.GEMINI_API_KEY2, // Default to first key for backward compatibility
+    apiKey1: process.env.GEMINI_API_KEY1,
+    apiKey2: process.env.GEMINI_API_KEY2,
     models: [
       'gemini-2.0-flash-exp',
       'gemini-2.0-flash',
@@ -46,7 +48,7 @@ const config = {
     groq: {
       apiKey: process.env.GROQ_API_KEY,
       model: process.env.GROQ_MODEL || 'whisper-large-v3-turbo' || 'whisper-large-v3',
-      language: process.env.STT_LANGUAGE || 'en', // Supports 'en', 'hi', etc.
+      language: process.env.STT_LANGUAGE || undefined, // Set to undefined for auto-detect, or specify 'en', 'hi', etc.
       temperature: parseFloat(process.env.GROQ_TEMPERATURE) || 0.0,
       responseFormat: process.env.GROQ_RESPONSE_FORMAT || 'verbose_json'
     }
@@ -55,7 +57,7 @@ const config = {
   // Text-to-Speech Configuration
   tts: {
     enabled: process.env.TTS_ENABLED !== 'false', // Enabled by default
-    provider: process.env.TTS_PROVIDER || 'piper', // Primary: Piper (offline), Fallback: Google
+    provider: process.env.TTS_PROVIDER || 'google', // Primary: Google (multilingual), Fallback: Piper
     google: {
       apiKey: process.env.GOOGLE_TTS_API_KEY || process.env.GEMINI_API_KEY, // Google TTS API key
       voice: process.env.GOOGLE_TTS_VOICE || 'en-US-Neural2-C', // Neural2 voices for better quality
@@ -85,9 +87,9 @@ const config = {
   // HuggingFace API Configuration
   huggingface: {
     apiKey: process.env.HUGGINGFACE_API_KEY,
-    textEmotionModel: process.env.TEXT_EMOTION_MODEL || 'j-hartmann/emotion-english-distilroberta-base',
+    textEmotionModel: process.env.TEXT_EMOTION_MODEL || 'michellejieli/emotion_text_classifier',
     voiceEmotionModel: process.env.VOICE_EMOTION_MODEL || 'superb/wav2vec2-base-superb-er',
-    apiUrl: 'https://api-inference.huggingface.co/models'
+    apiUrl: 'https://router.huggingface.co/hf-inference/models' // Updated to new endpoint
   },
 
   // BiLSTM ONNX Text Emotion Model Configuration

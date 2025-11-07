@@ -30,6 +30,12 @@ import {
 } from '../utils/translationHelper.js';
 import { textToSpeech } from '../utils/voiceHelper.js';
 import config from '../config/index.js';
+import { 
+  isIndianLanguageSupported, 
+  getIndianLanguageName,
+  normalizeIndianLanguageCode,
+  getIndianLanguageTTSCode
+} from '../config/indianLanguages.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,13 +105,18 @@ router.post('/message', asyncHandler(async (req, res) => {
     
     const {
       translatedText: englishText,
-      sourceLang: detectedLanguage,
+      sourceLang: detectedLanguageRaw,
       needsTranslation,
       usedFallback: usedTranslationFallback,
       translationFailed
     } = translationResult;
+    
+    // Normalize to Indian language
+    const detectedLanguage = normalizeIndianLanguageCode(detectedLanguageRaw);
+    const isIndianLang = isIndianLanguageSupported(detectedLanguage);
 
-    console.log(`✅ Language detection: ${detectedLanguage} (${getLanguageName(detectedLanguage)})`);
+    console.log(`✅ Language detection: ${detectedLanguageRaw} → ${detectedLanguage}`);
+    console.log(`🇮🇳 Indian Language: ${getIndianLanguageName(detectedLanguage)} ${isIndianLang ? '✓' : '(defaulted to English)'}`);
     
     if (needsTranslation) {
       console.log(`🔄 Text translated for processing: "${englishText}"`);
@@ -183,6 +194,11 @@ router.post('/message', asyncHandler(async (req, res) => {
     });
 
     console.log(`✅ AI response generated: "${llmResponse.text ? llmResponse.text.substring(0, 100) : 'No response'}..."`);
+
+    // Validate that we have a response
+    if (!llmResponse.text || llmResponse.text.trim().length === 0) {
+      throw new Error('AI response is empty. This may be due to safety filters or API issues.');
+    }
 
     // Step 7: Translate AI response back to user's language
     let finalResponse = llmResponse.text;
@@ -508,7 +524,7 @@ router.delete('/sessions/:sessionId', asyncHandler(async (req, res) => {
  * - language: User language code (optional, default: en-US)
  */
 router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
-  const { userId, sessionId, language = 'en-US' } = req.body;
+  const { userId, sessionId } = req.body;
 
   // Validate input
   if (!userId) {
@@ -525,39 +541,83 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
     });
   }
 
-  console.log(`🎙️ Processing voice message for user: ${userId}`);
+  console.log(`🎙️ Processing multilingual voice message for user: ${userId}`);
   console.log(`📁 Audio file: ${req.file.originalname} (${req.file.mimetype}, ${req.file.size} bytes)`);
-  console.log(`🌐 Language: ${language}`);
 
   try {
-    // Step 1: Convert speech to text (will be done in frontend primarily)
-    // Backend receives transcript from frontend or provides fallback
-    // For now, we'll use the transcript from frontend in the message body
-    // or implement backend STT as fallback
+    // Step 1: Transcribe audio using Groq Whisper with automatic language detection
+    console.log(`� Transcribing audio with Groq Whisper (auto-detect language)...`);
     
-    const transcript = req.body.transcript;
+    // Import voice service for transcription
+    const { speechToTextGroq } = await import('../voice-service/index.js');
+    
+    // Save audio buffer to temporary file for transcription
+    const fs = await import('fs');
+    const tempDir = path.join(__dirname, '../../temp/audio');
+    
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    const fileExt = path.extname(req.file.originalname) || '.webm';
+    const tempFilePath = path.join(tempDir, `voice-${Date.now()}${fileExt}`);
+    
+    // Write buffer to file for Groq Whisper
+    fs.writeFileSync(tempFilePath, req.file.buffer);
+    
+    // Transcribe with Groq Whisper (detects language automatically)
+    const transcriptionResult = await speechToTextGroq(tempFilePath);
+    
+    // Clean up temp file
+    try {
+      fs.unlinkSync(tempFilePath);
+    } catch (cleanupError) {
+      console.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
+    }
+    
+    const transcript = transcriptionResult.transcript;
+    const whisperLanguage = transcriptionResult.language || 'en'; // Whisper returns language code
+    
     if (!transcript || transcript.trim().length === 0) {
       return res.status(400).json({
         success: false,
-        error: 'Transcript is required. Frontend must provide STT result.'
+        error: 'Speech transcription failed or no speech detected'
       });
     }
 
-    console.log(`📝 Transcript: "${transcript}"`);
+    console.log(`✅ Whisper transcription: "${transcript}"`);
+    console.log(`🌐 Detected language from Whisper: ${whisperLanguage}`);
+    
+    // Step 1.5: Validate if detected language is an Indian language
+    const normalizedLanguage = normalizeIndianLanguageCode(whisperLanguage);
+    const isIndianLang = isIndianLanguageSupported(normalizedLanguage);
+    
+    if (!isIndianLang) {
+      console.warn(`⚠️  Non-Indian language detected: ${whisperLanguage}. Defaulting to Indian English.`);
+    }
+    
+    console.log(`🇮🇳 Indian Language: ${getIndianLanguageName(normalizedLanguage)}`);
 
-    // Step 2: Language Detection & Translation to English
-    console.log(`🌐 Detecting language and translating if needed...`);
+    // Step 2: Translate to English if needed (for internal chat reasoning)
+    console.log(`🔄 Translating to English if needed...`);
     const translationResult = await translateToEnglishIfNeeded(transcript);
     
     const {
       translatedText: englishText,
-      sourceLang: detectedLanguage,
+      sourceLang: translationLanguage,
       needsTranslation,
       usedFallback: usedTranslationFallback,
       translationFailed
     } = translationResult;
+    
+    // Use normalized Indian language code
+    const detectedLanguage = normalizedLanguage;
 
-    console.log(`✅ Language detection: ${detectedLanguage} (${getLanguageName(detectedLanguage)})`);
+    console.log(`✅ Final Indian language: ${detectedLanguage} (${getIndianLanguageName(detectedLanguage)})`);
+    
+    if (needsTranslation) {
+      console.log(`📝 English translation for processing: "${englishText}"`);
+    }
 
     // Step 3: Get or create session
     let currentSessionId = sessionId;
@@ -686,25 +746,32 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
       }
     }
 
-    // Step 11: Generate audio response using TTS
+    // Step 11: Generate audio response using TTS (Indian language voices)
     let audioResponse = null;
     if (finalResponse) {
-      console.log(`🔊 Generating audio response with TTS...`);
+      console.log(`🔊 Generating audio response with Indian TTS...`);
       try {
-        // Use the detected/translated language for TTS
-        const ttsLanguage = getLanguageCodeForTTS(detectedLanguage);
+        // Use the Indian language TTS code
+        const ttsLanguage = getIndianLanguageTTSCode(detectedLanguage);
+        console.log(`🇮🇳 Using Indian TTS voice: ${ttsLanguage} for ${getIndianLanguageName(detectedLanguage)}`);
         audioResponse = await textToSpeech(finalResponse, ttsLanguage);
-        console.log(`✅ Audio response generated`);
+        console.log(`✅ Audio response generated in ${getIndianLanguageName(detectedLanguage)}`);
       } catch (audioError) {
         console.warn(`⚠️ Audio generation failed:`, audioError.message);
         // Continue without audio - don't fail the entire request
       }
     }
 
-    // Step 12: Return comprehensive response
-    console.log(`📤 Preparing response to frontend:`);
+    // Step 12: Return comprehensive multilingual response
+    console.log(`📤 Preparing multilingual response to frontend:`);
     console.log(`   📝 User Transcript (${detectedLanguage}): "${transcript.substring(0, 80)}"`);
-    console.log(`   🤖 AI Message (${detectedLanguage}): "${finalResponse.substring(0, 80)}"`);
+    if (needsTranslation) {
+      console.log(`   📝 English Translation: "${englishText.substring(0, 80)}"`);
+    }
+    console.log(`   🤖 AI Response English: "${llmResponse.text.substring(0, 80)}"`);
+    if (responseTranslated) {
+      console.log(`   🤖 AI Response (${detectedLanguage}): "${finalResponse.substring(0, 80)}"`);
+    }
     
     const response = {
       success: true,
@@ -712,21 +779,37 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
         sessionId: currentSessionId,
         userMessage: {
           id: userMessage.id,
-          transcript: transcript,
+          // Original user text in their language
+          text: transcript,
+          // English translation for internal processing
+          englishText: needsTranslation ? englishText : null,
+          transcript: transcript, // Keep for backward compatibility
           emotion: emotionResult.emotion,
           confidence: emotionResult.confidence,
           timestamp: userMessage.created_at,
+          // Indian Language information
           detectedLanguage: detectedLanguage,
-          languageName: getLanguageName(detectedLanguage),
-          wasTranslated: needsTranslation
+          languageName: getIndianLanguageName(detectedLanguage),
+          isIndianLanguage: isIndianLanguageSupported(detectedLanguage),
+          whisperLanguage: whisperLanguage,
+          translationLanguage: translationLanguage,
+          wasTranslated: needsTranslation,
+          translationMethod: usedTranslationFallback ? 'gemini_fallback' : 'google_translate',
+          translationFailed: translationFailed
         },
         aiResponse: {
           id: assistantMessage.id,
+          // Response in user's language
           message: finalResponse,
+          text: finalResponse, // Add for consistency
+          // Original English response
+          englishText: llmResponse.text,
+          originalEnglishText: llmResponse.text, // Keep for backward compatibility
           model: llmResponse.model,
           timestamp: assistantMessage.created_at,
-          originalEnglishText: responseTranslated ? llmResponse.text : null,
+          // Translation info
           wasTranslated: responseTranslated,
+          translationFailed: responseTranslationFailed,
           targetLanguage: detectedLanguage
         },
         emotion: {
@@ -736,15 +819,29 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
         },
         language: {
           detected: detectedLanguage,
-          name: getLanguageName(detectedLanguage),
-          supported: isLanguageSupported(detectedLanguage)
+          name: getIndianLanguageName(detectedLanguage),
+          isIndianLanguage: isIndianLanguageSupported(detectedLanguage),
+          whisperDetected: whisperLanguage,
+          translationDetected: translationLanguage,
+          supported: isIndianLanguageSupported(detectedLanguage),
+          inputTranslated: needsTranslation,
+          outputTranslated: responseTranslated,
+          ttsCode: getIndianLanguageTTSCode(detectedLanguage)
         },
         audio: audioResponse ? {
           url: audioResponse.audioUrl,
           duration: audioResponse.duration,
-          provider: audioResponse.provider
+          provider: audioResponse.provider,
+          language: detectedLanguage
         } : null,
-        contextLength: conversationHistory.length
+        contextLength: conversationHistory.length,
+        // Add transcript info for debugging
+        transcription: {
+          provider: 'groq_whisper',
+          confidence: transcriptionResult.confidence,
+          duration: transcriptionResult.duration,
+          whisperLanguage: whisperLanguage
+        }
       }
     };
 

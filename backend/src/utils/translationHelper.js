@@ -14,8 +14,15 @@ import { translate } from '@vitalets/google-translate-api';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import config from '../config/index.js';
 
-// Initialize Gemini AI for fallback translation
-const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
+// Helper function to get Gemini model with API key fallback
+const getGeminiModel = (modelName = 'gemini-2.0-flash-exp') => {
+  const apiKey = config.gemini.apiKey1 || config.gemini.apiKey2 || config.gemini.apiKey;
+  if (!apiKey) {
+    throw new Error('No Gemini API key available');
+  }
+  const genAI = new GoogleGenerativeAI(apiKey);
+  return genAI.getGenerativeModel({ model: modelName });
+};
 
 /**
  * Translate text to English if needed using Google Translate API
@@ -127,9 +134,7 @@ export async function translateBackToUserLanguage(text, targetLang) {
  */
 async function geminiTranslateFallback(text) {
   try {
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp' 
-    });
+    const model = getGeminiModel('gemini-2.0-flash-exp');
     
     const prompt = `You are a language detection and translation expert. 
 
@@ -195,9 +200,7 @@ Text to analyze: "${text}"`;
  */
 async function geminiTranslateBack(text, targetLang) {
   try {
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp' 
-    });
+    const model = getGeminiModel('gemini-2.0-flash-exp');
     
     const prompt = `Translate the following English text to ${targetLang}. Maintain the tone, emotion, and meaning as accurately as possible:
 

@@ -20,26 +20,74 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Get best Google TTS voice for a language
+ * Convert language code to Google TTS format (Indian languages focus)
+ */
+const convertToGoogleTTSLanguageCode = (languageCode) => {
+  // If already in full format (en-IN), return as-is
+  if (languageCode && languageCode.includes('-')) {
+    return languageCode;
+  }
+  
+  // Map short codes to Indian locale codes (prioritize Indian English)
+  const indianLanguageMap = {
+    'en': 'en-IN',      // Indian English
+    'hi': 'hi-IN',      // Hindi
+    'bn': 'bn-IN',      // Bengali
+    'ta': 'ta-IN',      // Tamil
+    'te': 'te-IN',      // Telugu
+    'mr': 'mr-IN',      // Marathi
+    'gu': 'gu-IN',      // Gujarati
+    'kn': 'kn-IN',      // Kannada
+    'ml': 'ml-IN',      // Malayalam
+    'or': 'or-IN',      // Odia
+    'pa': 'pa-IN',      // Punjabi
+    'mai': 'hi-IN'      // Maithili (use Hindi voice)
+  };
+  
+  return indianLanguageMap[languageCode] || 'en-IN';
+};
+
+/**
+ * Get best Google TTS voice for Indian languages
  */
 const getGoogleVoiceForLanguage = (languageCode) => {
-  const voiceMap = {
-    'en-US': 'en-US-Neural2-C',
-    'en-GB': 'en-GB-Neural2-C',
-    'es-ES': 'es-ES-Neural2-B',
-    'es-US': 'es-US-Neural2-A',
-    'fr-FR': 'fr-FR-Neural2-C',
-    'de-DE': 'de-DE-Neural2-B',
-    'it-IT': 'it-IT-Neural2-A',
-    'pt-BR': 'pt-BR-Neural2-A',
-    'ja-JP': 'ja-JP-Neural2-C',
-    'ko-KR': 'ko-KR-Neural2-A',
-    'zh-CN': 'cmn-CN-Wavenet-C',
-    'ar-SA': 'ar-XA-Wavenet-C',
-    'hi-IN': 'hi-IN-Neural2-C',
-    'ru-RU': 'ru-RU-Wavenet-C'
+  const indianVoiceMap = {
+    // Indian English - Neural voice
+    'en-IN': 'en-IN-Neural2-C',
+    'en-US': 'en-IN-Neural2-C',  // Redirect to Indian English
+    
+    // Hindi - Neural voice (best quality)
+    'hi-IN': 'hi-IN-Neural2-D',
+    
+    // Bengali - Wavenet voice
+    'bn-IN': 'bn-IN-Wavenet-A',
+    
+    // Tamil - Wavenet voice
+    'ta-IN': 'ta-IN-Wavenet-A',
+    
+    // Telugu - Standard voice
+    'te-IN': 'te-IN-Standard-A',
+    
+    // Marathi - Wavenet voice
+    'mr-IN': 'mr-IN-Wavenet-A',
+    
+    // Gujarati - Wavenet voice
+    'gu-IN': 'gu-IN-Wavenet-A',
+    
+    // Kannada - Wavenet voice
+    'kn-IN': 'kn-IN-Wavenet-A',
+    
+    // Malayalam - Wavenet voice
+    'ml-IN': 'ml-IN-Wavenet-A',
+    
+    // Odia - Wavenet voice (if available, else fallback)
+    'or-IN': 'en-IN-Neural2-C',  // Fallback to Indian English
+    
+    // Punjabi - Wavenet voice
+    'pa-IN': 'pa-IN-Wavenet-A'
   };
-  return voiceMap[languageCode] || 'en-US-Neural2-C';
+  
+  return indianVoiceMap[languageCode] || 'en-IN-Neural2-C';
 };
 
 /**
@@ -48,8 +96,10 @@ const getGoogleVoiceForLanguage = (languageCode) => {
  * Docs: https://cloud.google.com/text-to-speech/docs/reference/rest
  */
 export const generateSpeechGoogle = async (text, languageCode = 'en-US', voice = null) => {
-  const selectedVoice = voice || getGoogleVoiceForLanguage(languageCode);
-  console.log(`🔊 Generating speech using Google TTS (language: ${languageCode}, voice: ${selectedVoice})...`);
+  // Convert short language codes to full locale codes for Google TTS
+  const fullLanguageCode = convertToGoogleTTSLanguageCode(languageCode);
+  const selectedVoice = voice || getGoogleVoiceForLanguage(fullLanguageCode);
+  console.log(`🔊 Generating speech using Google TTS (language: ${fullLanguageCode}, voice: ${selectedVoice})...`);
 
   if (!config.tts.google.apiKey) {
     throw new Error('Google TTS API key not configured');
@@ -61,7 +111,7 @@ export const generateSpeechGoogle = async (text, languageCode = 'en-US', voice =
       {
         input: { text: text },
         voice: {
-          languageCode: languageCode,
+          languageCode: fullLanguageCode,
           name: selectedVoice,
           ssmlGender: 'NEUTRAL'
         },
@@ -91,7 +141,7 @@ export const generateSpeechGoogle = async (text, languageCode = 'en-US', voice =
       duration: estimateDuration(text),
       provider: 'google',
       voice: selectedVoice,
-      language: languageCode,
+      language: fullLanguageCode,
       sampleRate: 24000 // Google TTS typically uses 24kHz
     };
   } catch (error) {
@@ -260,9 +310,12 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
       
       if (hasValidGoogleKey) {
         try {
-          console.log(`🌐 Attempting Google TTS...`);
-          const selectedVoice = voice || config.tts.google.voice;
-          const selectedLanguage = languageCode || config.tts.google.languageCode;
+          console.log(`🌐 Attempting Google TTS with multilingual support...`);
+          const selectedVoice = voice || null; // Let auto-selection pick best voice
+          const selectedLanguage = languageCode || config.tts.google.languageCode || 'en-US';
+          console.log(`   Language: ${selectedLanguage}`);
+          console.log(`   API Key present: ${config.tts.google.apiKey ? 'Yes (length: ' + config.tts.google.apiKey.length + ')' : 'No'}`);
+          
           const speechResult = await generateSpeechGoogle(
             text, 
             selectedLanguage,
@@ -280,12 +333,15 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
             text: text
           };
         } catch (googleError) {
-          console.warn(`⚠️  Google TTS failed: ${googleError.message}`);
+          console.error(`❌ Google TTS failed with error:`, googleError);
+          console.error(`   Error message: ${googleError.message}`);
+          console.error(`   Error stack:`, googleError.stack);
           console.log(`🔄 Falling back to Piper TTS...`);
           // Continue to fallback below
         }
       } else {
         console.log(`ℹ️  Google API key not configured, using Piper...`);
+        console.log(`   API Key: ${config.tts.google.apiKey || 'undefined'}`);
       }
     }
 

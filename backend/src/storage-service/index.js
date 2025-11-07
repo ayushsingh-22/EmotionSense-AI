@@ -128,10 +128,14 @@ export const saveToSupabase = async (data) => {
       emotion: data.emotion,
       confidence: data.confidence,
       scores: data.scores || null,  // FIXED: Keep as object for JSONB
-      audio_features: data.audioFeatures || null,  // FIXED: Keep as object for JSONB
       timestamp: data.timestamp || new Date().toISOString(),
       created_at: new Date().toISOString()
     };
+
+    // Only add audio_features if the column exists and data is provided
+    if (data.audioFeatures) {
+      record.audio_features = data.audioFeatures;
+    }
 
     const { error } = await supabaseClient
       .from('emotion_analysis')

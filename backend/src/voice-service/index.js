@@ -38,16 +38,25 @@ export const speechToTextGroq = async (audioPath) => {
       throw new Error('Groq API key not configured. Please set GROQ_API_KEY in .env file');
     }
 
-    // Create transcription
+    // Create transcription with auto language detection
     console.log(`🌐 Calling Groq API with model: ${config.stt.groq.model}`);
-    const transcription = await groq.audio.transcriptions.create({
+    console.log(`🌐 Language detection: ${config.stt.groq.language ? config.stt.groq.language : 'AUTO-DETECT (All languages)'}`);
+    
+    // Build transcription options - only include language if explicitly set
+    const transcriptionOptions = {
       file: fs.createReadStream(audioPath),
       model: config.stt.groq.model,
-      language: config.stt.groq.language, // 'en' for English, 'hi' for Hindi, or leave undefined for auto-detect
       temperature: config.stt.groq.temperature,
       response_format: config.stt.groq.responseFormat,
       timestamp_granularities: ["word", "segment"]
-    });
+    };
+    
+    // Only add language parameter if explicitly configured (otherwise Whisper auto-detects)
+    if (config.stt.groq.language) {
+      transcriptionOptions.language = config.stt.groq.language;
+    }
+    
+    const transcription = await groq.audio.transcriptions.create(transcriptionOptions);
 
     // Extract transcript text
     const transcript = transcription.text || '';
@@ -62,15 +71,19 @@ export const speechToTextGroq = async (audioPath) => {
       confidence = avgConfidence;
     }
 
+    // Get detected language from Whisper response
+    const detectedLanguage = transcription.language || config.stt.groq.language || 'en';
+    
     console.log(`✅ Groq transcription: "${transcript}"`);
-    console.log(`   Confidence: ${(confidence * 100).toFixed(1)}% | Language: ${transcription.language || config.stt.groq.language}`);
+    console.log(`   Confidence: ${(confidence * 100).toFixed(1)}%`);
+    console.log(`   Detected Language: ${detectedLanguage} (auto-detected by Whisper)`);
 
     return {
       transcript: transcript.trim(),
       confidence: confidence,
       provider: 'groq',
       model: config.stt.groq.model,
-      language: transcription.language || config.stt.groq.language,
+      language: detectedLanguage, // Language auto-detected by Whisper
       duration: transcription.duration,
       segments: transcription.segments || [],
       words: transcription.words || []
