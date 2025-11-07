@@ -83,6 +83,80 @@ router.post('/', async (req, res) => {
 });
 
 /**
+ * POST /api/tts/generate
+ * Generate speech from text (alternative endpoint)
+ */
+router.post('/generate', async (req, res) => {
+  try {
+    const { text, language, voice } = req.body;
+
+    // Validate request
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Text parameter is required and must be a string'
+      });
+    }
+
+    // Check if TTS is enabled
+    if (!config.tts.enabled) {
+      return res.status(503).json({
+        success: false,
+        error: 'TTS service is disabled'
+      });
+    }
+
+    console.log(`🔊 TTS generate request: language=${language || 'default'}, voice=${voice || 'default'}`);
+    console.log(`   Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+
+    try {
+      // Generate speech
+      const speechResult = await generateSpeech(text, language);
+
+      if (!speechResult || !speechResult.audioData) {
+        throw new Error('TTS service returned no audio data');
+      }
+
+      // Convert base64 to buffer
+      const audioBuffer = Buffer.from(speechResult.audioData, 'base64');
+
+      // Return as base64 data URL for web playback
+      const audioUrl = `data:audio/wav;base64,${speechResult.audioData}`;
+
+      res.json({
+        success: true,
+        audioUrl: audioUrl,
+        audioData: speechResult.audioData,
+        format: 'wav',
+        size: audioBuffer.length
+      });
+
+      console.log(`✅ TTS audio generated successfully (${audioBuffer.length} bytes)`);
+
+    } catch (ttsError) {
+      console.warn(`⚠️ TTS generation failed: ${ttsError.message}`);
+      
+      // Return a helpful error response
+      return res.status(503).json({
+        success: false,
+        error: 'TTS service temporarily unavailable',
+        details: 'Piper TTS engine not installed or configured. Audio generation is currently disabled.',
+        suggestion: 'Download Piper from https://github.com/rhasspy/piper/releases'
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ TTS Generate Route Error:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      error: 'TTS generation failed',
+      details: config.development ? error.message : 'Internal server error'
+    });
+  }
+});
+
+/**
  * GET /api/tts/health
  * Check TTS service health
  */

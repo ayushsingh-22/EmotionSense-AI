@@ -11,7 +11,7 @@
  */
 
 import axios from 'axios';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import config from '../config/index.js';
 
 /**
@@ -131,15 +131,14 @@ RESPOND NATURALLY AND CONTEXTUALLY:`;
  * Primary LLM service with model fallback
  */
 export const generateWithGemini = async (prompt) => {
-  const apiKey = config.gemini.apiKey;
+  // Try API keys in sequence with fallback
+  const apiKey1 = config.gemini.apiKey1;
+  const apiKey2 = config.gemini.apiKey2;
   
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY not configured');
+  if (!apiKey1 && !apiKey2) {
+    throw new Error('No Gemini API keys configured');
   }
 
-  // Initialize Gemini AI
-  const genAI = new GoogleGenerativeAI(apiKey);
-  
   // Generation config
   const generationConfig = {
     temperature: config.gemini.temperature,
@@ -148,8 +147,122 @@ export const generateWithGemini = async (prompt) => {
     maxOutputTokens: config.gemini.maxTokens
   };
 
+  // Safety settings - Allow emotional content but block harmful content
+  const safetySettings = [
+    {
+      category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+      threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    },
+    {
+      category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+      threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    },
+    {
+      category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+      threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    },
+    {
+      category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+      threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    },
+  ];
+
+  let error;
+
+  // Get models from config with fallback order
+  const models = config.gemini.models || ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-tts', 'gemini-2.5-flash-tts', 'gemini-2.5-pro	'];
+  
+  // Try first API key with all models
+  if (apiKey1) {
+    for (const modelName of models) {
+      try {
+        console.log(`🤖 Attempting Gemini API Key 1 with model: ${modelName}`);
+        const genAI = new GoogleGenerativeAI(apiKey1);
+        const model = genAI.getGenerativeModel({ 
+          model: modelName,
+          generationConfig,
+          safetySettings
+        });
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        
+        // Check if response was blocked by safety filters
+        if (response.promptFeedback?.blockReason) {
+          console.warn(`⚠️ Response blocked by safety filter: ${response.promptFeedback.blockReason}`);
+          throw new Error(`Response blocked: ${response.promptFeedback.blockReason}`);
+        }
+        
+        const text = response.text()?.trim();
+        
+        // Validate that we got actual content
+        if (!text || text.length === 0) {
+          console.warn(`⚠️ Empty response received from Gemini model: ${modelName}`);
+          console.warn(`Response object:`, JSON.stringify(response, null, 2));
+          throw new Error('Empty response received from Gemini');
+        }
+        
+        console.log(`✅ Gemini response generated with ${modelName} (API Key 1)`);
+        console.log(`📝 Response preview: "${text.substring(0, 100)}..."`);
+        return {
+          text,
+          model: `gemini-${modelName}`,
+          success: true
+        };
+      } catch (err) {
+        console.warn(`API Key 1 with ${modelName} failed:`, err.message);
+        error = err;
+      }
+    }
+  }
+
+  // Try second API key with all models if first one failed
+  if (apiKey2) {
+    for (const modelName of models) {
+      try {
+        console.log(`🤖 Attempting Gemini API Key 2 with model: ${modelName}`);
+        const genAI = new GoogleGenerativeAI(apiKey2);
+        const model = genAI.getGenerativeModel({ 
+          model: modelName,
+          generationConfig,
+          safetySettings
+        });
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        
+        // Check if response was blocked by safety filters
+        if (response.promptFeedback?.blockReason) {
+          console.warn(`⚠️ Response blocked by safety filter: ${response.promptFeedback.blockReason}`);
+          throw new Error(`Response blocked: ${response.promptFeedback.blockReason}`);
+        }
+        
+        const text = response.text()?.trim();
+        
+        // Validate that we got actual content
+        if (!text || text.length === 0) {
+          console.warn(`⚠️ Empty response received from Gemini model: ${modelName}`);
+          console.warn(`Response object:`, JSON.stringify(response, null, 2));
+          throw new Error('Empty response received from Gemini');
+        }
+        
+        console.log(`✅ Gemini response generated with ${modelName} (API Key 2)`);
+        console.log(`📝 Response preview: "${text.substring(0, 100)}..."`);
+        return {
+          text,
+          model: `gemini-${modelName}`,
+          success: true
+        };
+      } catch (err) {
+        console.warn(`API Key 2 with ${modelName} failed:`, err.message);
+        error = err;
+      }
+    }
+  }
+
+  // If both keys failed with all models, throw the last error
+  throw new Error(`All Gemini API keys failed. Last error: ${error?.message || 'Unknown error'}`);
+
+  // Legacy code below (will not be reached)
   // Try each model in the fallback array
-  const models = config.gemini.models;
   let lastError = null;
 
   for (const [index, modelName] of models.entries()) {

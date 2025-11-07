@@ -2,11 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
+    --primary: 220.9 39.3% 11%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220.9 39.3% 11%;
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 220.9 39.3% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 224 71.4% 4.1%;
+  }
+
+  .dark {
+    --background: 224 71.4% 4.1%;
+    --foreground: 210 20% 98%;
+    --card: 224 71.4% 4.1%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 210 20% 98%;
+    --primary-foreground: 220.9 39.3% 11%;
+    --secondary: 215 27.9% 16.9%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 27.9% 16.9%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    --accent: 215 27.9% 16.9%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 216 12.2% 83.9%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
   
+  .text-pretty {
+    text-wrap: pretty;
+    hyphens: auto;
+  }
+  
+  /* Theme transition styles */
+  .theme-transition {
+    @apply transition-all duration-300;
+  }
+  
+  /* Mobile styles */
+  @screen sm {
+    .mobile-padding {
+      @apply p-4;
+    }
+    .mobile-text {
+      @apply text-sm;
+    }
+  }
+  
+  /* Tablet styles */
+  @screen md {
+    .tablet-padding {
+      @apply p-6;
+    }
+  }
+  
+  /* Desktop styles */
+  @screen lg {
+    .desktop-padding {
+      @apply p-8;
+    }
+  }
+
   /* Performance optimizations */
   .gpu-accelerated {
     transform: translateZ(0);
@@ -20,6 +105,88 @@
   .optimize-rendering {
     contain: layout style paint;
   }
+  
+  /* Responsive utilities */
+  .responsive-container {
+    @apply px-4 sm:px-6 lg:px-8 mx-auto max-w-7xl;
+  }
+  
+  .responsive-text {
+    @apply text-sm sm:text-base lg:text-lg;
+  }
+  
+  .responsive-padding {
+    @apply p-2 sm:p-4 md:p-6 lg:p-8;
+  }
+  
+  /* Dark mode specific utilities */
+  .dark-mode-transition {
+    @apply transition-colors duration-200;
+  }
+  
+  /* Enhanced accessibility */
+  .focus-visible-ring {
+    @apply focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary;
+  }
+  
+  /* Mobile-first layout utilities */
+  .mobile-nav {
+    @apply fixed bottom-0 left-0 right-0 bg-background border-t dark:border-gray-800 
+           md:relative md:border-t-0;
+  }
+  
+  .mobile-menu {
+    @apply fixed inset-0 bg-background/95 backdrop-blur-sm z-50
+           md:relative md:bg-transparent md:backdrop-blur-none;
+  }
+  
+  /* Card and container styles */
+  .card {
+    @apply bg-card text-card-foreground rounded-lg border shadow-sm
+           dark:border-gray-800 dark:shadow-none;
+  }
+  
+  .glass-effect {
+    @apply bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm;
+  }
+  
+  /* Typography utilities */
+  .heading-1 {
+    @apply text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl;
+  }
+  
+  .heading-2 {
+    @apply text-2xl font-semibold tracking-tight sm:text-3xl;
+  }
+  
+  .body-text {
+    @apply text-base leading-7 text-muted-foreground;
+  }
+}
+
+/* Custom scrollbar for better dark/light mode compatibility */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-700 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400 dark:bg-gray-600;
+}
+
+/* Improved form element dark mode support */
+input,
+textarea,
+select {
+  @apply bg-background border-input;
 }
 
 @layer base {

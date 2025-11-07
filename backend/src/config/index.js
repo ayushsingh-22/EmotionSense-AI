@@ -17,7 +17,9 @@ const config = {
 
   // Gemini API Configuration (Primary LLM)
   gemini: {
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey: process.env.GEMINI_API_KEY1 || process.env.GEMINI_API_KEY2, // Default to first key for backward compatibility
+    apiKey1: process.env.GEMINI_API_KEY1,
+    apiKey2: process.env.GEMINI_API_KEY2,
     models: [
       'gemini-2.0-flash-exp',
       'gemini-2.0-flash',
@@ -46,43 +48,52 @@ const config = {
     groq: {
       apiKey: process.env.GROQ_API_KEY,
       model: process.env.GROQ_MODEL || 'whisper-large-v3-turbo' || 'whisper-large-v3',
-      language: process.env.STT_LANGUAGE || 'en', // Supports 'en', 'hi', etc.
+      language: process.env.STT_LANGUAGE || undefined, // Set to undefined for auto-detect, or specify 'en', 'hi', etc.
       temperature: parseFloat(process.env.GROQ_TEMPERATURE) || 0.0,
       responseFormat: process.env.GROQ_RESPONSE_FORMAT || 'verbose_json'
     }
   },
 
-  // Text-to-Speech Configuration (Piper - Offline)
+  // Text-to-Speech Configuration
   tts: {
-    enabled: process.env.TTS_ENABLED === 'true',
-    provider: process.env.TTS_PROVIDER || 'piper',
-    piperModelPath: process.env.PIPER_MODEL_PATH || './models/piper/en_US-lessac-medium.onnx',
-    piperConfigPath: process.env.PIPER_CONFIG_PATH || './models/piper/en_US-lessac-medium.onnx.json',
-    piperSpeakerId: parseInt(process.env.PIPER_SPEAKER_ID) || 0
+    enabled: process.env.TTS_ENABLED !== 'false', // Enabled by default
+    provider: process.env.TTS_PROVIDER || 'google', // Primary: Google (multilingual), Fallback: Piper
+    google: {
+      apiKey: process.env.GOOGLE_TTS_API_KEY || process.env.GEMINI_API_KEY, // Google TTS API key
+      voice: process.env.GOOGLE_TTS_VOICE || 'en-US-Neural2-C', // Neural2 voices for better quality
+      languageCode: process.env.GOOGLE_TTS_LANGUAGE || 'en-US',
+      audioEncoding: process.env.GOOGLE_TTS_AUDIO_ENCODING || 'MP3', // MP3, LINEAR16, OGG_OPUS
+      speakingRate: parseFloat(process.env.GOOGLE_TTS_SPEED) || 1.0, // 0.25 to 4.0
+      pitch: parseFloat(process.env.GOOGLE_TTS_PITCH) || 0.0 // -20.0 to 20.0
+    },
+    openai: {
+      apiKey: process.env.OPENAI_API_KEY, // OpenAI API key (if needed as fallback)
+      model: process.env.TTS_MODEL || 'tts-1', // tts-1 (faster) or tts-1-hd (higher quality)
+      voice: process.env.TTS_VOICE || 'alloy', // alloy, echo, fable, onyx, nova, shimmer
+      speed: parseFloat(process.env.TTS_SPEED) || 1.0 // 0.25 to 4.0
+    },
+    piper: {
+      modelPath: process.env.PIPER_MODEL_PATH || './models/piper/en_US-lessac-medium.onnx',
+      configPath: process.env.PIPER_CONFIG_PATH || './models/piper/en_US-lessac-medium.onnx.json',
+      speakerId: (() => {
+        const envValue = process.env.PIPER_SPEAKER_ID;
+        const parsed = parseInt(envValue || '0') || 0;
+        console.log('🔍 CONFIG DEBUG - PIPER_SPEAKER_ID env:', envValue, '-> parsed:', parsed);
+        return parsed;
+      })()
+    }
   },
 
   // HuggingFace API Configuration
   huggingface: {
     apiKey: process.env.HUGGINGFACE_API_KEY,
-    textEmotionModel: process.env.TEXT_EMOTION_MODEL || 'j-hartmann/emotion-english-distilroberta-base',
+    textEmotionModel: process.env.TEXT_EMOTION_MODEL || 'michellejieli/emotion_text_classifier',
     voiceEmotionModel: process.env.VOICE_EMOTION_MODEL || 'superb/wav2vec2-base-superb-er',
-    apiUrl: 'https://api-inference.huggingface.co/models'
-  },
-
-  // Custom Voice Emotion Model Configuration
-  // ⚠️ WARNING: The BiLSTM model (emotion_bilstm_final.h5) is a TEXT model, not an audio model
-  // It uses an Embedding layer for tokenized text input, NOT audio features
-  // See CUSTOM_MODEL_ISSUE.md for details
-  customVoiceModel: {
-    enabled: process.env.CUSTOM_MODEL_ENABLED === 'true', // Disabled by default (model is for text, not audio)
-    modelPath: process.env.CUSTOM_MODEL_PATH || './src/models/emotion_bilstm_final.h5',
-    scriptPath: './src/voice-service/emotion_inference.py',
-    emotionLabels: (process.env.CUSTOM_MODEL_LABELS || 'angry,disgust,fear,happy,neutral,sad,surprise').split(','),
-    confidenceThreshold: parseFloat(process.env.CUSTOM_MODEL_THRESHOLD) || 0.5
+    apiUrl: 'https://router.huggingface.co/hf-inference/models' // Updated to new endpoint
   },
 
   // BiLSTM ONNX Text Emotion Model Configuration
-  // This is the CORRECT usage: BiLSTM model for TEXT emotion detection
+  // This is the PRIMARY emotion detection model using ONNX format for better performance
   bilstmTextModel: {
     enabled: process.env.BILSTM_TEXT_ENABLED !== 'false', // Enabled by default
     modelPath: process.env.BILSTM_MODEL_PATH || './src/models/emotion_bilstm_final.onnx',

@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:translation": "node test-translation.js",
+    "test:live": "node test-live-api.js",
+    "test:basic": "node test-basic.js"
   },
   "keywords": [
     "emotion-detection",
@@ -22,6 +25,7 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.75.0",
+    "@vitalets/google-translate-api": "^9.2.1",
     "axios": "^1.6.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
