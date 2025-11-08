@@ -1,6 +1,6 @@
 /**
- * Test Sarvam AI TTS Integration
- * This script tests the Sarvam AI fallback in the TTS service
+ * Test Sarvam AI and Indic Parler TTS Integration
+ * This script tests the TTS fallback chain: Google → Sarvam → Indic Parler
  */
 
 import { generateSpeech } from './src/tts-service/index.js';
@@ -31,7 +31,7 @@ const testCases = [
 ];
 
 async function testSarvamTTS() {
-  console.log('🧪 Testing Sarvam AI TTS Integration\n');
+  console.log('🧪 Testing Multi-Layer TTS Integration (Google → Sarvam → Indic Parler)\n');
   console.log('=' .repeat(60));
 
   for (const testCase of testCases) {

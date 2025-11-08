@@ -66,6 +66,15 @@ const config = {
       speakingRate: parseFloat(process.env.GOOGLE_TTS_SPEED) || 1.0, // 0.25 to 4.0
       pitch: parseFloat(process.env.GOOGLE_TTS_PITCH) || 0.0 // -20.0 to 20.0
     },
+    sarvam: {
+      apiKey: process.env.SARVAM_API_KEY
+    },
+    murf: {
+      apiKey: process.env.MURF_API_KEY,
+      voiceId: process.env.MURF_VOICE_ID || 'Matthew',
+      model: process.env.MURF_MODEL || 'FALCON',
+      locale: process.env.MURF_LOCALE || 'en-US'
+    },
     openai: {
       apiKey: process.env.OPENAI_API_KEY, // OpenAI API key (if needed as fallback)
       model: process.env.TTS_MODEL || 'tts-1', // tts-1 (faster) or tts-1-hd (higher quality)
