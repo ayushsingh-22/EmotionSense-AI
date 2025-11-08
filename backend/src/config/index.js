@@ -80,16 +80,6 @@ const config = {
       model: process.env.TTS_MODEL || 'tts-1', // tts-1 (faster) or tts-1-hd (higher quality)
       voice: process.env.TTS_VOICE || 'alloy', // alloy, echo, fable, onyx, nova, shimmer
       speed: parseFloat(process.env.TTS_SPEED) || 1.0 // 0.25 to 4.0
-    },
-    piper: {
-      modelPath: process.env.PIPER_MODEL_PATH || './models/piper/en_US-lessac-medium.onnx',
-      configPath: process.env.PIPER_CONFIG_PATH || './models/piper/en_US-lessac-medium.onnx.json',
-      speakerId: (() => {
-        const envValue = process.env.PIPER_SPEAKER_ID;
-        const parsed = parseInt(envValue || '0') || 0;
-        console.log('🔍 CONFIG DEBUG - PIPER_SPEAKER_ID env:', envValue, '-> parsed:', parsed);
-        return parsed;
-      })()
     }
   },
 

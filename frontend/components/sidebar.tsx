@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { memo } from 'react';
 import {
   Home,
   History,
@@ -32,7 +33,47 @@ const unauthenticatedLinks = [
   { name: 'Sign In', href: '/auth/login', icon: LogIn },
 ];
 
-export function Sidebar() {
+// Memoized sidebar link to prevent rerenders
+const SidebarLink = memo(function SidebarLink({
+  href,
+  name,
+  icon: Icon,
+  isActive,
+  isCollapsed,
+}: {
+  href: string;
+  name: string;
+  icon: typeof Home;
+  isActive: boolean;
+  isCollapsed: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      prefetch={true}
+      className={cn(
+        'flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-300 group hover:scale-105',
+        isActive
+          ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+          : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground dark:hover:bg-gray-800',
+        isCollapsed && 'justify-center px-2'
+      )}
+      title={isCollapsed ? name : undefined}
+    >
+      <Icon className={cn(
+        "h-5 w-5 transition-transform duration-300",
+        !isCollapsed && "mr-3",
+        isActive && "scale-110"
+      )} />
+      {!isCollapsed && (
+        <span className="transition-all duration-300">{name}</span>
+      )}
+    </Link>
+  );
+});
+
+// Memoized Sidebar to prevent rerenders on navigation
+export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
   const { user, loading } = useAuth();
   const { isCollapsed, toggleSidebar } = useSidebar();
@@ -57,7 +98,8 @@ export function Sidebar() {
           variant="ghost"
           size="sm"
           onClick={toggleSidebar}
-          className="h-8 w-8 p-0 hover:bg-accent/50 transition-all duration-300 hover:scale-110"
+          className="h-8 w-8 p-0 hover:bg-accent/50 dark:hover:bg-gray-800 transition-all duration-300 hover:scale-110"
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {isCollapsed ? (
             <ChevronRight className="h-4 w-4" />
@@ -73,44 +115,18 @@ export function Sidebar() {
             const isActive = pathname === link.href;
             const Icon = link.icon;
             return (
-              <Link
+              <SidebarLink
                 key={link.href}
                 href={link.href}
-                className={cn(
-                  'flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-300 group hover:scale-105',
-                  isActive
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
-                    : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
-                  isCollapsed && 'justify-center px-2'
-                )}
-                title={isCollapsed ? link.name : undefined}
-              >
-                <Icon className={cn(
-                  "h-5 w-5 transition-transform duration-300", 
-                  !isCollapsed && "mr-3",
-                  isActive && "scale-110"
-                )} />
-                {!isCollapsed && (
-                  <span className="transition-all duration-300">{link.name}</span>
-                )}
-              </Link>
+                name={link.name}
+                icon={Icon}
+                isActive={isActive}
+                isCollapsed={isCollapsed}
+              />
             );
           })}
         </nav>
-
-        {/* Status Card - Hide when collapsed */}
-        {!isCollapsed && (
-          <div className="mt-8 p-4 rounded-xl border border-gray-200/50 dark:border-gray-700/50 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 shadow-sm">
-            <div className="flex items-center space-x-3 mb-3">
-              <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse shadow-lg"></div>
-              <span className="text-sm font-semibold text-green-700 dark:text-green-300">System Status</span>
-            </div>
-            <p className="text-xs text-green-600/80 dark:text-green-400/80 leading-relaxed">
-              All services operational and ready
-            </p>
-          </div>
-        )}
       </div>
     </aside>
   );
-}
+});

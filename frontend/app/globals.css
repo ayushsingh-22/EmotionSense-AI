@@ -5,6 +5,11 @@
 /* Import our optimized chat styles */
 @import '../styles/chat-optimized.css';
 
+/* Global theme transition support for smooth dark/light mode switches */
+* {
+  @apply transition-colors duration-300 ease-in-out;
+}
+
 @layer base {
   :root {
     --radius: 0.5rem;
@@ -27,6 +32,9 @@
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     --ring: 224 71.4% 4.1%;
+    
+    /* Performance: disable transitions during animations */
+    --disable-transitions: 0;
   }
 
   .dark {
@@ -49,6 +57,13 @@
     --border: 215 27.9% 16.9%;
     --input: 215 27.9% 16.9%;
     --ring: 216 12.2% 83.9%;
+  }
+
+  html, body {
+    @apply bg-background text-foreground antialiased scroll-smooth;
+    transition-property: background-color, color, border-color;
+    transition-duration: 300ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   body {
