@@ -1,24 +1,18 @@
 /**
  * Text-to-Speech (TTS) Service Module
- * Converts text responses to audio using OpenAI TTS (primary) or Piper (fallback)
+ * Converts text responses to audio using Google TTS (primary), Sarvam AI (fallback), or Murf AI (third fallback)
  * 
  * This module:
  * 1. Receives text response from LLM
- * 2. Tries OpenAI TTS API first (cloud, high-quality, neural)
- * 3. Falls back to Piper TTS if OpenAI fails (offline, fast, neural)
- * 4. Returns audio data (base64 or Buffer)
+ * 2. Tries Google TTS API first (cloud, high-quality, neural)
+ * 3. Falls back to Sarvam AI TTS if Google fails
+ * 4. Falls back to Murf AI TTS if both Google and Sarvam fail
+ * 5. Returns audio data (base64 or Buffer)
  */
 
-import { spawn } from 'child_process';
-import fs from 'fs';
-import path from 'path';
 import axios from 'axios';
-import { fileURLToPath } from 'url';
 import config from '../config/index.js';
 import { SarvamAIClient } from 'sarvamai';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 /**
  * Convert language code to Google TTS format (Indian languages focus)
@@ -258,111 +252,134 @@ export const generateSpeechSarvam = async (text, languageCode = 'en-IN') => {
 };
 
 /**
- * Check if Piper model and executable exists
+ * Convert language code to Murf AI format
+ * Murf AI supports multiple languages with locale codes
  */
-const checkPiperModel = () => {
-  const modelPath = config.tts.piper.modelPath;
-  const configPath = config.tts.piper.configPath;
-  
-  if (!fs.existsSync(modelPath)) {
-    console.warn(`⚠️  Piper model not found at: ${modelPath}`);
-    console.warn(`   Download models from: https://github.com/rhasspy/piper/releases`);
+const convertToMurfLanguageCode = (languageCode) => {
+  // If already in full format (en-US), return as-is
+  if (languageCode && languageCode.includes('-')) {
+    return languageCode;
   }
   
-  if (!fs.existsSync(configPath)) {
-    console.warn(`⚠️  Piper config not found at: ${configPath}`);
-  }
+  // Map short codes to Murf AI locale codes
+  const murfLanguageMap = {
+    'en': 'en-US',      // English (US)
+    'hi': 'hi-IN',      // Hindi
+    'bn': 'bn-IN',      // Bengali
+    'ta': 'ta-IN',      // Tamil
+    'te': 'te-IN',      // Telugu
+    'mr': 'mr-IN',      // Marathi
+    'gu': 'gu-IN',      // Gujarati
+    'kn': 'kn-IN',      // Kannada
+    'ml': 'ml-IN',      // Malayalam
+    'pa': 'pa-IN',      // Punjabi
+    'es': 'es-ES',      // Spanish
+    'fr': 'fr-FR',      // French
+    'de': 'de-DE',      // German
+    'pt': 'pt-BR',      // Portuguese
+    'ja': 'ja-JP',      // Japanese
+    'ko': 'ko-KR',      // Korean
+    'zh': 'zh-CN'       // Chinese
+  };
+  
+  return murfLanguageMap[languageCode] || 'en-US';
 };
 
 /**
- * Generate speech using Piper CLI
- * This uses the Piper command-line executable directly
- * Download from: https://github.com/rhasspy/piper/releases
+ * Get appropriate Murf AI voice and locale combination
+ * Note: Voice availability varies by Murf AI plan and region
+ * Each voice only supports specific locales
  */
-export const generateSpeechPiper = async (text) => {
-  return new Promise((resolve, reject) => {
-    console.log(`🔊 Generating speech using Piper TTS (offline)...`);
+const getMurfVoiceAndLocale = (requestedLocale) => {
+  const configuredVoice = config.tts.murf.voiceId;
+  
+  // Matthew voice only supports en-US
+  // For non-English languages, fallback to en-US locale with Matthew
+  // This allows Murf AI to still generate speech, even if in English accent
+  
+  if (requestedLocale.startsWith('en-')) {
+    return {
+      voiceId: configuredVoice || 'Matthew',
+      locale: 'en-US'
+    };
+  }
+  
+  // For non-English languages, use en-US locale with Matthew voice
+  // This is a fallback - ideally you would have language-specific voices
+  console.log(`⚠️  No native voice for ${requestedLocale}, using Matthew (en-US) voice`);
+  return {
+    voiceId: configuredVoice || 'Matthew',
+    locale: 'en-US'  // Fallback to supported locale
+  };
+};
 
-    // Check if model exists
-    checkPiperModel();
+/**
+ * Generate speech using Murf AI TTS (Stream Speech API)
+ * High-quality AI voice synthesis with FALCON model
+ * Docs: https://global.api.murf.ai/docs
+ */
+export const generateSpeechMurf = async (text, languageCode = 'en-US') => {
+  const requestedLocale = convertToMurfLanguageCode(languageCode);
+  const { voiceId, locale } = getMurfVoiceAndLocale(requestedLocale);
+  console.log(`🔊 Generating speech using Murf AI TTS (requested: ${requestedLocale}, using locale: ${locale}, voice: ${voiceId})...`);
 
-    // Create temporary output file
-    const outputPath = path.join(__dirname, '../../temp/audio', `tts-${Date.now()}.wav`);
-    
-    // Ensure temp directory exists
-    const tempDir = path.dirname(outputPath);
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
+  const apiKey = config.tts.murf.apiKey;
+  
+  if (!apiKey || apiKey === 'your_murf_api_key_here') {
+    throw new Error('Murf AI API key not configured. Set MURF_API_KEY in .env file.');
+  }
 
-    // Try to find piper executable
-    // Look in: PATH, ./piper/, ./piper.exe (Windows)
-    let piperCmd = 'piper';
-    const localPiperWindows = path.join(process.cwd(), 'piper.exe');
-    const localPiperUnix = path.join(process.cwd(), 'piper', 'piper');
-    
-    if (fs.existsSync(localPiperWindows)) {
-      piperCmd = localPiperWindows;
-    } else if (fs.existsSync(localPiperUnix)) {
-      piperCmd = localPiperUnix;
-    }
-
-    // Spawn Piper process
-    const speakerId = config.tts.piper.speakerId || 0;
-    console.log('🔍 DEBUG - config.tts.piper:', JSON.stringify(config.tts.piper, null, 2));
-    console.log('🔍 DEBUG - speakerId value:', speakerId, 'type:', typeof speakerId);
-    const piper = spawn(piperCmd, [
-      '--model', config.tts.piper.modelPath,
-      '--config', config.tts.piper.configPath,
-      '--output_file', outputPath,
-      '--speaker', String(speakerId)
-    ]);
-
-    // Send text to stdin
-    piper.stdin.write(text);
-    piper.stdin.end();
-
-    let stderr = '';
-
-    piper.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    piper.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`Piper CLI exited with code ${code}: ${stderr}\n\nMake sure Piper is installed. Download from: https://github.com/rhasspy/piper/releases`));
-        return;
+  try {
+    // Call Murf AI Stream Speech API
+    const response = await axios.post(
+      'https://global.api.murf.ai/v1/speech/stream',
+      {
+        text: text,
+        voiceId: voiceId,
+        model: config.tts.murf.model || 'FALCON',
+        multiNativeLocale: locale  // Use the validated locale
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': apiKey  // Murf AI uses 'api-key' header, not Authorization
+        },
+        responseType: 'arraybuffer', // Get binary audio data
+        timeout: 30000 // 30 seconds timeout
       }
+    );
 
-      try {
-        // Read generated audio file
-        const audioBuffer = fs.readFileSync(outputPath);
-        
-        // Clean up temp file
-        try {
-          fs.unlinkSync(outputPath);
-        } catch (e) {
-          // Ignore cleanup errors
-        }
+    // Murf AI returns audio in binary format
+    const audioBuffer = Buffer.from(response.data);
+    const audioBase64 = audioBuffer.toString('base64');
+    
+    console.log(`✅ Murf AI TTS synthesis complete (${audioBuffer.length} bytes)`);
 
-        console.log(`✅ Piper TTS synthesis complete (${audioBuffer.length} bytes)`);
-
-        resolve({
-          audio: audioBuffer.toString('base64'),
-          format: 'wav',
-          duration: estimateDuration(text),
-          provider: 'piper',
-          sampleRate: 22050
-        });
-      } catch (err) {
-        reject(err);
-      }
+    return {
+      audio: audioBase64, // Base64 encoded audio
+      format: 'mp3',      // Murf AI typically returns MP3
+      duration: estimateDuration(text),
+      provider: 'murf',
+      voice: voiceId,
+      language: locale,  // Return the actual locale used
+      sampleRate: 44100   // Murf AI high-quality sample rate
+    };
+  } catch (error) {
+    console.error('❌ Murf AI TTS Error Details:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data ? error.response.data.toString() : null
     });
-
-    piper.on('error', (err) => {
-      reject(new Error(`Failed to spawn Piper: ${err.message}\n\nMake sure Piper is installed. Download from: https://github.com/rhasspy/piper/releases\nOr place piper.exe in the project root directory.`));
-    });
-  });
+    
+    if (error.response) {
+      throw new Error(`Murf AI TTS API error: ${error.response.status} - ${error.response.statusText}`);
+    } else if (error.request) {
+      throw new Error('Murf AI TTS API request failed - no response received');
+    } else {
+      throw new Error(`Murf AI TTS error: ${error.message}`);
+    }
+  }
 };
 
 /**
@@ -380,7 +397,7 @@ const estimateDuration = (text) => {
 /**
  * Main function: Generate speech from text
  * This is the primary export used by routes
- * Strategy: Use Google TTS with Sarvam AI fallback
+ * Strategy: Use Google TTS -> Sarvam AI -> Murf AI fallback chain
  */
 export const generateSpeech = async (text, voice = null, languageCode = null) => {
   console.log(`🎙️ Converting text to speech...`);
@@ -395,7 +412,7 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
     return null;
   }
 
-  // Only use Google TTS - no fallback
+  // Only use Google TTS, Sarvam AI, and Murf AI
   if (config.tts.provider !== 'google') {
     throw new Error(`TTS provider '${config.tts.provider}' is not supported. Only 'google' is supported.`);
   }
@@ -406,7 +423,7 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
                              config.tts.google.apiKey !== 'your_google_tts_api_key_here';
   
   if (!hasValidGoogleKey) {
-    console.warn('⚠️ Google TTS API key is not configured. Attempting Sarvam AI fallback...');
+    console.warn('⚠️ Google TTS API key is not configured. Will attempt Sarvam AI fallback...');
   }
 
   // Selected language for TTS
@@ -450,7 +467,7 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
 
   // Fallback to Sarvam AI TTS
   try {
-    console.log(`🌐 Using Sarvam AI TTS (Saarika v2.5) as fallback...`);
+    console.log(`🌐 Using Sarvam AI TTS as fallback...`);
     console.log(`   Language: ${selectedLanguage}`);
     
     const speechResult = await generateSpeechSarvam(text, selectedLanguage);
@@ -473,8 +490,36 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
       error: sarvamError.response?.data?.error
     });
     
-    // Both TTS systems failed
-    throw new Error(`All TTS systems failed. Google: ${hasValidGoogleKey ? 'failed' : 'not configured'}. Sarvam AI: ${sarvamError.message}`);
+    console.warn('⚠️ Sarvam AI TTS failed, switching to Murf AI fallback...');
+  }
+
+  // Third fallback to Murf AI TTS
+  try {
+    console.log(`🌐 Using Murf AI TTS as third fallback...`);
+    console.log(`   Language: ${selectedLanguage}`);
+    
+    const speechResult = await generateSpeechMurf(text, selectedLanguage);
+    
+    console.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
+    
+    return {
+      audioData: speechResult.audio,
+      format: speechResult.format,
+      duration: speechResult.duration,
+      provider: speechResult.provider,
+      voice: speechResult.voice,
+      text: text
+    };
+  } catch (murfError) {
+    console.error(`❌ Murf AI TTS failed:`, {
+      message: murfError.message,
+      status: murfError.response?.status,
+      statusText: murfError.response?.statusText,
+      error: murfError.response?.data?.error
+    });
+    
+    // All TTS systems failed
+    throw new Error(`All TTS systems failed. Google: ${hasValidGoogleKey ? 'failed' : 'not configured'}. Sarvam AI: failed. Murf AI: ${murfError.message}`);
   }
 };
 

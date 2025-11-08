@@ -165,7 +165,15 @@ export const detectEmotionFromVoice = async (audioPath) => {
       console.log(`🧠 Running HuggingFace local model inference...`);
       console.log(`   Model: ${model}`);
 
-      const python = spawn('python', [scriptPath, model, audioPath]);
+      // Use full Python path to ensure correct environment
+      const pythonPath = process.platform === 'win32' 
+        ? 'C:\\Users\\ayush\\AppData\\Local\\Programs\\Python\\Python313\\python.exe'
+        : 'python3';
+      
+      const python = spawn(pythonPath, [scriptPath, model, audioPath], {
+        cwd: path.resolve('./'),
+        env: { ...process.env }
+      });
       
       let output = '';
       let errorOutput = '';
@@ -258,7 +266,15 @@ export const detectEmotionCustomModel = async (audioPath) => {
 
       console.log(`🤖 Running custom BiLSTM model inference...`);
 
-      const python = spawn('python', [scriptPath, modelPath, audioPath, emotionLabels]);
+      // Use full Python path to ensure correct environment
+      const pythonPath = process.platform === 'win32' 
+        ? 'C:\\Users\\ayush\\AppData\\Local\\Programs\\Python\\Python313\\python.exe'
+        : 'python3';
+      
+      const python = spawn(pythonPath, [scriptPath, modelPath, audioPath, emotionLabels], {
+        cwd: path.resolve('./'),
+        env: { ...process.env }
+      });
       
       let output = '';
       let errorOutput = '';

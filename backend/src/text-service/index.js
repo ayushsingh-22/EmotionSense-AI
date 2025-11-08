@@ -160,7 +160,15 @@ export const detectEmotionBiLSTM = async (text) => {
       const emotionLabels = 'angry,disgust,fear,happy,neutral,sad';
       console.log(`🧠 Running BiLSTM ONNX model for text emotion...`);
 
-      const python = spawn('python', [scriptPath, modelPath, text, emotionLabels]);
+      // Use full Python path to ensure correct environment
+      const pythonPath = process.platform === 'win32' 
+        ? 'C:\\Users\\ayush\\AppData\\Local\\Programs\\Python\\Python313\\python.exe'
+        : 'python3';
+      
+      const python = spawn(pythonPath, [scriptPath, modelPath, text, emotionLabels], {
+        cwd: path.resolve('./'),
+        env: { ...process.env }
+      });
       let output = '';
       let errorOutput = '';
 
