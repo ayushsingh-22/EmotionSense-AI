@@ -2,7 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback, memo, Suspense, lazy } from 'react';
 import { 
-  MessageCircle
+  MessageCircle,
+  MessageSquare,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -13,27 +16,19 @@ import { ChatMessage as ChatMessageType } from '@/lib/supabase';
 import { debounce, PerformanceMonitor } from '@/lib/performance';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { cn } from '@/lib/utils';
-import { NewUnifiedChatInput, VoiceState } from '@/components/chat/NewUnifiedChatInput';
-import axios from 'axios';
 
 // Lazy loaded components for better performance
 const ChatLayout = lazy(() => import('@/components/chat/ChatLayout').then(m => ({ default: m.ChatLayout })));
 const ChatSidebar = lazy(() => import('@/components/chat/ChatSidebar').then(m => ({ default: m.ChatSidebar })));
 const ChatMessage = lazy(() => import('@/components/chat/ChatMessage').then(m => ({ default: m.ChatMessage })));
+const ChatInput = lazy(() => import('@/components/chat/ChatInput').then(m => ({ default: m.ChatInput })));
 const TypingIndicator = lazy(() => import('@/components/chat/TypingIndicator').then(m => ({ default: m.TypingIndicator })));
+const VoiceChatComponent = lazy(() => import('@/components/chat/VoiceChatComponent').then(m => ({ default: m.VoiceChatComponent })));
 
 interface ExtendedChatMessage extends ChatMessageType {
   isLoading?: boolean;
   hasContext?: boolean;
   contextLength?: number;
-  transcript?: string; // Voice message transcript
-  voiceMetadata?: {
-    transcript: string;
-    confidence: number;
-    language: string;
-    languageName: string;
-    provider?: string;
-  };
 }
 
 // Loading skeleton components
@@ -66,15 +61,17 @@ const SidebarSkeleton = memo(function SidebarSkeleton() {
 });
 
 export default function ChatPage() {
+  const [inputMessage, setInputMessage] = useState('');
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
+  const [chatMode, setChatMode] = useState<'text' | 'voice'>('text');
   const [isTyping, setIsTyping] = useState(false);
-  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Performance tracking
   useEffect(() => {
@@ -97,11 +94,18 @@ export default function ChatPage() {
     debouncedScrollToBottom();
   }, [messages, debouncedScrollToBottom]);
 
-  // Handler for new unified input component
-  const handleSendMessage = useCallback(async (messageText: string) => {
-    if (!messageText.trim() || isLoading || !user?.id) return;
+  // Focus input on mount and mode changes
+  useEffect(() => {
+    if (chatMode === 'text') {
+      inputRef.current?.focus();
+    }
+  }, [chatMode]);
 
-    const message = messageText.trim();
+  const handleSubmit = useCallback(async () => {
+    if (!inputMessage.trim() || isLoading || !user?.id) return;
+
+    const message = inputMessage.trim();
+    setInputMessage('');
     
     try {
       PerformanceMonitor.mark('message-send-start');
@@ -218,7 +222,7 @@ export default function ChatPage() {
       setIsLoading(false);
       setIsTyping(false);
     }
-  }, [isLoading, user?.id, currentSessionId, toast]);
+  }, [inputMessage, isLoading, user?.id, currentSessionId]);
 
   const handleSessionSelect = useCallback(async (sessionId: string) => {
     if (!user?.id) return;
@@ -242,254 +246,91 @@ export default function ChatPage() {
   const handleNewSession = useCallback(() => {
     setMessages([]);
     setCurrentSessionId(null);
+    if (chatMode === 'text') {
+      inputRef.current?.focus();
+    }
+  }, [chatMode]);
+
+  const handleSpeechTranscript = useCallback((transcript: string) => {
+    setInputMessage(transcript);
   }, []);
 
-  // Enhanced voice message handler with state management
-  const handleVoiceMessage = useCallback(async (audioBlob: Blob) => {
-    if (!user?.id || isLoading) return;
+  const handleSpeechError = useCallback((error: string) => {
+    toast({
+      title: "Speech Recognition Error",
+      description: error,
+      variant: "destructive"
+    });
+  }, []);
 
-    console.log(`🎙️ Voice message received: ${audioBlob.size} bytes, type: ${audioBlob.type}`)
+  const handleVoiceMessageReceived = useCallback((response: Record<string, unknown>) => {
+    const userMessage = response.userMessage as {
+      id?: string; message?: string; transcript?: string;
+      emotion?: string; confidence?: number; timestamp?: string;
+    } | undefined;
+    
+    const aiResponse = response.aiResponse as {
+      id?: string; message: string; timestamp?: string;
+    } | undefined;
+    
+    const sessionId = response.sessionId as string;
 
-    setVoiceState('processing');
-    setIsLoading(true);
-
-    try {
-      PerformanceMonitor.start('process-voice-message');
+    if (userMessage) {
+      const messageText = userMessage.transcript || userMessage.message || '';
       
-      // Create FormData for audio upload
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'voice-message.webm');
-      formData.append('userId', user.id);
-      if (currentSessionId) {
-        formData.append('sessionId', currentSessionId);
-      }
-
-      console.log(`📤 Sending audio to backend: ${audioBlob.size} bytes`)
-
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/chat/voice`;
-      const response = await axios.post(apiUrl, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      PerformanceMonitor.end('process-voice-message');
-
-      if (response.data.success) {
-        setVoiceState('responding');
-        
-        const { userMessage, aiResponse, sessionId: newSessionId } = response.data.data;
-
-        // Update session ID if new
-        if (newSessionId && newSessionId !== currentSessionId) {
-          setCurrentSessionId(newSessionId);
-          setSidebarRefreshTrigger(prev => prev + 1);
-        }
-
-        // Add both user and AI messages
-        const newMessages: ExtendedChatMessage[] = [];
-
-        if (userMessage) {
-          newMessages.push({
-            id: userMessage.id || `voice-user-${Date.now()}`,
-            message: userMessage.text || userMessage.message,
-            transcript: userMessage.transcript, // Store transcript for voice
-            voiceMetadata: userMessage.transcript ? {
-              transcript: userMessage.transcript,
-              confidence: userMessage.confidence || 0,
-              language: userMessage.detectedLanguage || 'en',
-              languageName: userMessage.languageName || 'English',
-              provider: 'groq_whisper'
-            } : undefined,
-            role: 'user',
-            user_id: user.id,
-            session_id: newSessionId || currentSessionId || '',
-            created_at: new Date().toISOString()
-          });
-        }
-
-        if (aiResponse) {
-          newMessages.push({
-            id: aiResponse.id || `voice-ai-${Date.now()}`,
-            message: aiResponse.message || aiResponse.text,
-            role: 'assistant',
-            user_id: user.id,
-            session_id: newSessionId || currentSessionId || '',
-            created_at: new Date().toISOString()
-          });
-        }
-
-        setMessages(prev => [...prev, ...newMessages]);
-
-        // Handle audio response if available
-        const audioUrl = response.data.data.audio?.url || response.data.data.audioUrl;
-        if (audioUrl) {
-          try {
-            console.log(`🔊 Playing audio response from: ${audioUrl}`);
-            const audio = new Audio(audioUrl);
-            audio.onplay = () => {
-              console.log(`▶️ Audio playback started`);
-            };
-            audio.onended = () => {
-              console.log(`⏹️ Audio playback finished`);
-              setVoiceState('idle');
-            };
-            audio.onerror = (e) => {
-              console.error(`❌ Audio playback error:`, e);
-              setVoiceState('idle');
-            };
-            await audio.play();
-          } catch (audioError) {
-            console.warn('⚠️ Audio playback failed:', audioError);
-            setVoiceState('idle');
-          }
-        } else {
-          console.warn('⚠️ No audio URL available in response');
-          // Reset if no audio
-          setTimeout(() => setVoiceState('idle'), 2000);
-        }
-      } else {
-        throw new Error(response.data.error || 'Voice processing failed');
-      }
-    } catch (error) {
-      console.error('Voice message error:', error);
-      
-      // Enhanced error logging for debugging
-      if (axios.isAxiosError(error)) {
-        console.error('Axios Error Details:', {
-          message: error.message,
-          code: error.code,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          url: error.config?.url,
-          method: error.config?.method,
-          responseData: error.response?.data,
-        });
-        
-        let errorDescription = 'Failed to process voice message. Please try again.';
-        
-        if (error.code === 'ERR_BAD_REQUEST' && error.response?.status === 404) {
-          errorDescription = 'Backend voice endpoint not found. Make sure backend is running on ' + (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080');
-        } else if (!error.response) {
-          errorDescription = 'Cannot connect to backend. Make sure the backend server is running.';
-        } else if (error.response?.status === 400) {
-          errorDescription = error.response?.data?.error || 'Invalid audio file or format.';
-        } else if (error.response?.status === 500) {
-          errorDescription = 'Backend error processing voice. Please check backend logs.';
-        }
-        
-        toast({
-          title: "Voice Chat Error",
-          description: errorDescription,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Voice Chat Error",
-          description: "An unexpected error occurred. Please try again.",
-          variant: "destructive",
-        });
-      }
-      
-      setVoiceState('idle');
-    } finally {
-      setIsLoading(false);
+      const userMsg: ExtendedChatMessage = {
+        id: userMessage.id || `voice-user-${Date.now()}`,
+        user_id: user?.id || '',
+        session_id: sessionId,
+        role: 'user',
+        message: messageText,
+        emotion_detected: userMessage.emotion,
+        confidence_score: userMessage.confidence,
+        created_at: userMessage.timestamp || new Date().toISOString()
+      };
+      setMessages(prev => [...prev, userMsg]);
     }
-  }, [user?.id, isLoading, currentSessionId]);
 
-  const handleMessageEdit = useCallback(async (messageId: string, newMessage: string) => {
-    if (!newMessage.trim() || !user?.id) return;
-
-    try {
-      setIsLoading(true);
-
-      // Update the edited message in UI
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId ? { ...msg, message: newMessage.trim() } : msg
-      ));
-      
-      toast({
-        title: "🔄 Regenerating response...",
-        description: "Processing your edited message",
-      });
-
-      // Find the edited message to get session context
-      const editedMessageIndex = messages.findIndex(m => m.id === messageId);
-      if (editedMessageIndex === -1) return;
-
-      const sessionId = messages[editedMessageIndex].session_id || currentSessionId;
-
-      // Call backend to regenerate response for edited message
-      const response = await fetch('http://localhost:8080/api/chat/message', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: newMessage.trim(),
-          sessionId: sessionId,
-          userId: user?.id,
-          editedMessageId: messageId, // Send the original message ID
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Remove the old AI response that followed this user message
-        setMessages(prev => {
-          // Find all messages after the edited message and remove consecutive AI response
-          const newMessages = [...prev];
-          const editedIndex = newMessages.findIndex(m => m.id === messageId);
-          
-          // Remove the next AI response if it exists and is an assistant message
-          if (editedIndex !== -1 && editedIndex + 1 < newMessages.length) {
-            if (newMessages[editedIndex + 1].role === 'assistant') {
-              newMessages.splice(editedIndex + 1, 1);
-            }
-          }
-          
-          // Add new AI response
-          if (data.data.aiResponse) {
-            const newAiMessage: ExtendedChatMessage = {
-              id: data.data.aiResponse.id,
-              user_id: user.id,
-              session_id: sessionId || currentSessionId || '',
-              role: 'assistant' as const,
-              message: data.data.aiResponse.message,
-              created_at: data.data.aiResponse.timestamp,
-              hasContext: data.data.hasContext,
-              contextLength: data.data.contextLength
-            };
-            newMessages.push(newAiMessage);
-          }
-          
-          return newMessages;
-        });
-
-        toast({
-          title: "✅ Response regenerated",
-          description: "AI has generated a new response for your edited message",
-          duration: 3000
-        });
-      } else {
-        toast({
-          title: "❌ Regeneration failed",
-          description: data.error || "Could not regenerate response",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error regenerating response:', error);
-      toast({
-        title: "❌ Error",
-        description: "Failed to regenerate response",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+    if (aiResponse) {
+      const aiMsg: ExtendedChatMessage = {
+        id: aiResponse.id || `voice-ai-${Date.now()}`,
+        user_id: user?.id || '',
+        session_id: sessionId,
+        role: 'assistant',
+        message: aiResponse.message,
+        created_at: aiResponse.timestamp || new Date().toISOString()
+      };
+      setMessages(prev => [...prev, aiMsg]);
     }
-  }, [user?.id, messages, currentSessionId]);
+
+    if (sessionId && !currentSessionId) {
+      setCurrentSessionId(sessionId);
+      setSidebarRefreshTrigger(prev => prev + 1);
+    }
+  }, [user?.id, currentSessionId]);
+
+  const handleVoiceError = useCallback((error: string) => {
+    toast({
+      title: "Voice Chat Error",
+      description: error,
+      variant: "destructive"
+    });
+  }, []);
+
+  const handleMessageEdit = useCallback((messageId: string, newMessage: string) => {
+    // This would trigger a new API call to edit and regenerate response
+    // For now, just update the message locally
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId ? { ...msg, message: newMessage } : msg
+    ));
+    
+    toast({
+      title: "Message edited",
+      description: "The message has been updated. Regenerating response...",
+    });
+    
+    // Here you would call the API to regenerate the response
+  }, []);
 
   // Header component
   const header = (
@@ -499,11 +340,43 @@ export default function ChatPage() {
           Chat with MantrAI
         </h1>
         <p className="text-sm text-muted-foreground hidden sm:block">
-          Your intelligent emotional companion with enhanced voice mode
+          Your intelligent emotional companion
         </p>
       </div>
       
       <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+        {/* Mode Toggle */}
+        <div className="flex items-center gap-1 bg-white/50 dark:bg-gray-800/50 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
+          <Button
+            variant={chatMode === 'text' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setChatMode('text')}
+            className={cn(
+              "gap-2",
+              chatMode === 'text' 
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white' 
+                : 'hover:bg-white/50 dark:hover:bg-gray-700/50'
+            )}
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">Text</span>
+          </Button>
+          <Button
+            variant={chatMode === 'voice' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setChatMode('voice')}
+            className={cn(
+              "gap-2",
+              chatMode === 'voice' 
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white' 
+                : 'hover:bg-white/50 dark:hover:bg-gray-700/50'
+            )}
+          >
+            {chatMode === 'voice' ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            <span className="hidden sm:inline">Voice</span>
+          </Button>
+        </div>
+        
         <Button
           onClick={handleNewSession}
           variant="outline"
@@ -544,6 +417,11 @@ export default function ChatPage() {
               <p className="text-muted-foreground text-lg leading-relaxed max-w-md mx-auto">
                 Share your thoughts and feelings. MantrAI is here to listen and provide emotional support with empathy and understanding.
               </p>
+              {chatMode === 'voice' && (
+                <p className="text-blue-600 dark:text-blue-400 text-sm mt-4 font-medium">
+                  🎙️ Voice Mode Active - Use the microphone to start speaking
+                </p>
+              )}
             </div>
           </div>
         ) : (
@@ -579,46 +457,37 @@ export default function ChatPage() {
     </ScrollArea>
   );
 
-  // Input area - Now unified for both text and voice
+  // Input area
   const inputArea = (
     <div className="p-4 lg:p-6">
-      <div className="max-w-4xl mx-auto">
+      {chatMode === 'text' ? (
         <Suspense fallback={<div className="h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />}>
-          <NewUnifiedChatInput
-            onSendMessage={handleSendMessage}
-            onVoiceMessage={handleVoiceMessage}
+          <ChatInput
+            value={inputMessage}
+            onChange={setInputMessage}
+            onSubmit={handleSubmit}
             disabled={isLoading}
-            className="w-full"
-            placeholder="Ask me anything or use voice mode..."
+            placeholder="Share your thoughts and feelings... (Shift+Enter for new line)"
+            onSpeechTranscript={handleSpeechTranscript}
+            onSpeechError={handleSpeechError}
           />
         </Suspense>
-        
-        {/* Enhanced status indicator */}
-        <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            {currentSessionId && (
-              <span>Session: {currentSessionId.slice(0, 8)}...</span>
-            )}
-            {messages.length > 0 && (
-              <span>• {messages.length} messages</span>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <span>Ctrl+M to switch input modes</span>
-            {voiceState !== 'idle' && (
-              <span className={cn(
-                "px-2 py-1 rounded-full text-xs font-medium",
-                voiceState === 'listening' && "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-                voiceState === 'processing' && "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-                voiceState === 'responding' && "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-              )}>
-                {voiceState}
-              </span>
-            )}
+      ) : (
+        <div className="max-w-4xl mx-auto">
+          <Suspense fallback={<div className="h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />}>
+            <VoiceChatComponent
+              userId={user?.id || ''}
+              sessionId={currentSessionId || undefined}
+              language="en-US"
+              onMessageReceived={handleVoiceMessageReceived}
+              onError={handleVoiceError}
+            />
+          </Suspense>
+          <div className="text-xs text-muted-foreground mt-3 text-center">
+            🎙️ Voice Mode - Real-time speech recognition with emotional intelligence
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 

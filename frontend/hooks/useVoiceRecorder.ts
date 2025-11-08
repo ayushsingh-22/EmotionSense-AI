@@ -9,7 +9,7 @@ export interface UseVoiceRecorderReturn {
   audioBlob: Blob | null;
   audioURL: string | null;
   startRecording: () => Promise<void>;
-  stopRecording: () => void;
+  stopRecording: () => Promise<void>;
   pauseRecording: () => void;
   resumeRecording: () => void;
   resetRecording: () => void;
@@ -69,17 +69,57 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     }
   }, []);
 
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setIsPaused(false);
+  const stopRecording = useCallback((): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!mediaRecorderRef.current || !isRecording) {
+          resolve();
+          return;
+        }
 
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+        // Set up the onstop handler to resolve the promise
+        const originalOnStop = mediaRecorderRef.current.onstop;
+        mediaRecorderRef.current.onstop = (event) => {
+          // Call original handler first
+          if (originalOnStop && mediaRecorderRef.current) {
+            originalOnStop.call(mediaRecorderRef.current, event);
+          }
+          
+          // Clean up state
+          setIsRecording(false);
+          setIsPaused(false);
+
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+
+          resolve();
+        };
+
+        // Set up error handler
+        mediaRecorderRef.current.onerror = (event) => {
+          console.error('MediaRecorder error during stop:', event);
+          setError('Recording stop failed');
+          setIsRecording(false);
+          setIsPaused(false);
+          reject(new Error('MediaRecorder stop failed'));
+        };
+
+        // Only stop if not already inactive
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        } else {
+          resolve();
+        }
+      } catch (error) {
+        console.error('Error in stopRecording:', error);
+        setError('Failed to stop recording');
+        setIsRecording(false);
+        setIsPaused(false);
+        reject(error);
       }
-    }
+    });
   }, [isRecording]);
 
   const pauseRecording = useCallback(() => {

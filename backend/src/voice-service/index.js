@@ -16,14 +16,48 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Groq from 'groq-sdk';
 import config from '../config/index.js';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Set ffmpeg path
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 // Initialize Groq client
 const groq = new Groq({
   apiKey: config.stt.groq.apiKey
 });
+
+/**
+ * Convert audio file to WAV format for better compatibility with Groq
+ * Converts WebM, MP3, OGG, etc. to WAV
+ */
+const convertToWav = async (inputPath) => {
+  return new Promise((resolve, reject) => {
+    const outputPath = inputPath.replace(/\.[^.]+$/, '.wav');
+    
+    console.log(`🎵 Converting audio to WAV format...`);
+    console.log(`   Input: ${inputPath}`);
+    console.log(`   Output: ${outputPath}`);
+    
+    ffmpeg(inputPath)
+      .toFormat('wav')
+      .audioCodec('pcm_s16le')
+      .audioFrequency(16000) // Standard sample rate for speech recognition
+      .audioChannels(1) // Mono
+      .on('end', () => {
+        console.log(`✅ Audio converted to WAV successfully`);
+        resolve(outputPath);
+      })
+      .on('error', (err) => {
+        console.error(`❌ FFmpeg conversion error:`, err.message);
+        reject(new Error(`Audio conversion failed: ${err.message}`));
+      })
+      .save(outputPath);
+  });
+};
 
 /**
  * Speech-to-Text using Groq Whisper API
@@ -32,10 +66,40 @@ const groq = new Groq({
 export const speechToTextGroq = async (audioPath) => {
   console.log(`🎙️ Converting speech to text using Groq Whisper...`);
   
+  let wavPath = audioPath;
+  let tempWavFile = null;
+  
   try {
     // Check if API key is configured
     if (!config.stt.groq.apiKey || config.stt.groq.apiKey === 'your_groq_api_key_here') {
       throw new Error('Groq API key not configured. Please set GROQ_API_KEY in .env file');
+    }
+
+    // Validate that audio file exists and has content
+    if (!fs.existsSync(audioPath)) {
+      throw new Error(`Audio file not found: ${audioPath}`);
+    }
+    
+    const fileStats = fs.statSync(audioPath);
+    if (fileStats.size === 0) {
+      throw new Error(`Audio file is empty (0 bytes): ${audioPath}`);
+    }
+    console.log(`📁 Audio file size: ${fileStats.size} bytes`);
+
+    // Convert WebM or other formats to WAV for better Groq compatibility
+    if (audioPath.toLowerCase().endsWith('.webm') || 
+        audioPath.toLowerCase().endsWith('.mp3') ||
+        audioPath.toLowerCase().endsWith('.ogg')) {
+      console.log(`🔄 Converting audio format to WAV for Groq compatibility...`);
+      tempWavFile = audioPath.replace(/\.[^.]+$/, '_converted.wav');
+      wavPath = await convertToWav(audioPath);
+      
+      // Verify conversion result
+      if (!fs.existsSync(wavPath)) {
+        throw new Error(`WAV conversion failed: output file not created`);
+      }
+      const wavStats = fs.statSync(wavPath);
+      console.log(`✅ WAV file created: ${wavStats.size} bytes`);
     }
 
     // Create transcription with auto language detection
@@ -44,7 +108,7 @@ export const speechToTextGroq = async (audioPath) => {
     
     // Build transcription options - only include language if explicitly set
     const transcriptionOptions = {
-      file: fs.createReadStream(audioPath),
+      file: fs.createReadStream(wavPath),
       model: config.stt.groq.model,
       temperature: config.stt.groq.temperature,
       response_format: config.stt.groq.responseFormat,
@@ -91,6 +155,7 @@ export const speechToTextGroq = async (audioPath) => {
 
   } catch (error) {
     console.error('❌ Groq STT Error:', error.message);
+    console.error('   Stack:', error.stack);
     
     // Return empty transcript on error
     return {
@@ -99,6 +164,16 @@ export const speechToTextGroq = async (audioPath) => {
       provider: 'groq',
       error: error.message
     };
+  } finally {
+    // Clean up temporary WAV file if it was created
+    if (tempWavFile && fs.existsSync(tempWavFile)) {
+      try {
+        fs.unlinkSync(tempWavFile);
+        console.log(`🧹 Cleaned up temporary WAV file`);
+      } catch (err) {
+        console.warn(`⚠️ Failed to clean up temp file: ${err.message}`);
+      }
+    }
   }
 };
 
