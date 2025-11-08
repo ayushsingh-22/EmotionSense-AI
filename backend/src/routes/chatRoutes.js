@@ -562,15 +562,21 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
     const fileExt = path.extname(req.file.originalname) || '.webm';
     const tempFilePath = path.join(tempDir, `voice-${Date.now()}${fileExt}`);
     
+    console.log(`📁 Received audio file: ${req.file.originalname} (${req.file.size} bytes)`);
+    
     // Write buffer to file for Groq Whisper
     fs.writeFileSync(tempFilePath, req.file.buffer);
+    
+    const tempFileStats = fs.statSync(tempFilePath);
+    console.log(`✅ Temp file written: ${tempFilePath} (${tempFileStats.size} bytes)`);
     
     // Transcribe with Groq Whisper (detects language automatically)
     const transcriptionResult = await speechToTextGroq(tempFilePath);
     
-    // Clean up temp file
+    // Clean up temp file and any converted WAV files
     try {
       fs.unlinkSync(tempFilePath);
+      console.log(`🧹 Cleaned up temp file: ${tempFilePath}`);
     } catch (cleanupError) {
       console.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
     }
@@ -578,10 +584,36 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
     const transcript = transcriptionResult.transcript;
     const whisperLanguage = transcriptionResult.language || 'en'; // Whisper returns language code
     
-    if (!transcript || transcript.trim().length === 0) {
+    // If transcription error occurred
+    if (transcriptionResult.error) {
+      console.error(`❌ Transcription error: ${transcriptionResult.error}`);
       return res.status(400).json({
         success: false,
-        error: 'Speech transcription failed or no speech detected'
+        error: 'Speech transcription failed',
+        details: {
+          groqError: transcriptionResult.error,
+          receivedFile: req.file.originalname,
+          fileSize: req.file.size,
+          message: 'The audio file could not be transcribed. Please try again with clearer audio.'
+        }
+      });
+    }
+    
+    if (!transcript || transcript.trim().length === 0) {
+      console.warn(`⚠️ Empty transcript received from Groq`);
+      console.warn(`   Confidence: ${transcriptionResult.confidence}`);
+      console.warn(`   File size: ${req.file.size} bytes`);
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Speech transcription failed or no speech detected',
+        details: {
+          reason: 'Empty transcript - possibly no clear speech in audio',
+          receivedFile: req.file.originalname,
+          fileSize: req.file.size,
+          confidence: transcriptionResult.confidence,
+          suggestion: 'Please speak clearly and try again'
+        }
       });
     }
 

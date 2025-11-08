@@ -30,8 +30,12 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleStop = () => {
-    stopRecording();
+  const handleStop = async () => {
+    try {
+      await stopRecording();
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+    }
   };
 
   const handleComplete = () => {

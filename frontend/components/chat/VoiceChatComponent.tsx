@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Mic, MicOff, Loader2, AlertCircle, Volume2, RotateCcw, Send } from 'lucide-react';
@@ -27,7 +27,8 @@ interface VoiceChatProps {
   disabled?: boolean;
 }
 
-const VoiceChatComponent: React.FC<VoiceChatProps> = ({
+// Memoized component for better performance
+const VoiceChatComponent = React.memo<VoiceChatProps>(({
   userId,
   sessionId,
   language = 'en-US',
@@ -62,20 +63,7 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
   const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
   const [translationInfo, setTranslationInfo] = useState<TranslationInfo | null>(null);
 
-  // Response type definitions
-  interface ChatResponse {
-    success: boolean;
-    data: {
-      detectedLanguage?: string;
-      audioUrl?: string;
-      translationInfo?: {
-        inputTranslated: boolean;
-        outputTranslated: boolean;
-        languageName: string;
-      };
-      error?: string;
-    };
-  }
+  // Response type definitions - moved inline to avoid unused interface error
 
   // Type guard for response data (removed — not used)
   
@@ -133,7 +121,7 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
     }
   };
 
-  const playAudioResponse = async (url: string) => {
+  const playAudioResponse = useCallback(async (url: string) => {
     try {
       stopAudioPlayback(); // Stop any existing playback
 
@@ -163,33 +151,45 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
       handleError(error);
       setIsPlayingAudio(false);
     }
-  };
+  }, [stopAudioPlayback, handleError]);
 
-  // Microphone access functions
-  const requestMicrophoneAccess = async () => {
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      setPermission('granted');
-      setError(null);
-      return true;
-    } catch (err: unknown) {
-      setPermission('denied');
-      const errorMessage = 'Microphone access denied. Please enable it in your browser settings.';
-      setError(errorMessage);
-      if (onError) onError('microphone_denied');
-      console.error('Microphone access error:', err);
-      return false;
-    }
-  };
+  // Memoized values for performance
+  const statusText = useMemo(() => {
+    if (isListening) return `🎙️ Recording (${listeningDuration}s)`;
+    if (isProcessing) return '⏳ Processing...';
+    return '🎤 Ready to Record';
+  }, [isListening, isProcessing, listeningDuration]);
 
-  // Recording control functions
-  const startListening = async () => {
+  const isButtonDisabled = useMemo(() => 
+    disabled || isProcessing, 
+    [disabled, isProcessing]
+  );
+
+  // Recording control functions - memoized for performance
+  const startListening = useCallback(async () => {
     if (disabled) return;
     
     // Clear previous recording data
     audioChunksRef.current = [];
     setCurrentTranscript('');
     setError(null);
+    
+    // Request microphone access if needed
+    const requestMicrophoneAccess = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        setPermission('granted');
+        setError(null);
+        return true;
+      } catch (err: unknown) {
+        setPermission('denied');
+        const errorMessage = 'Microphone access denied. Please enable it in your browser settings.';
+        setError(errorMessage);
+        if (onError) onError('microphone_denied');
+        console.error('Microphone access error:', err);
+        return false;
+      }
+    };
     
     if (permission === 'denied') {
       const hasPermission = await requestMicrophoneAccess();
@@ -242,46 +242,140 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
       setError(errorMessage);
       if (onError) onError(errorMessage);
     }
-  };
+  }, [disabled, permission, onError]);
 
-  const stopListening = () => {
+  const stopListening = async () => {
     try {
-      if (mediaRecorderRef.current?.state !== 'inactive') {
-        mediaRecorderRef.current?.stop();
-        console.log('🎙️ Recording stopped');
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+        setIsListening(false);
+        return;
       }
 
-      if (durationIntervalRef.current) {
-        clearInterval(durationIntervalRef.current);
-        durationIntervalRef.current = null;
-      }
+      // Create a promise that resolves when recording is properly stopped
+      return new Promise<void>((resolve, reject) => {
+        const mediaRecorder = mediaRecorderRef.current!;
+        
+        const cleanup = () => {
+          if (durationIntervalRef.current) {
+            clearInterval(durationIntervalRef.current);
+            durationIntervalRef.current = null;
+          }
 
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.stop());
-        mediaStreamRef.current = null;
-      }
+          if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach(track => track.stop());
+            mediaStreamRef.current = null;
+          }
+        };
 
-      // Create a temporary transcript from the audio chunks
-      setCurrentTranscript('Recording completed. Click send to process.');
-      setIsListening(false);
-      console.log('🎙️ Audio chunks collected:', audioChunksRef.current.length);
+        // Set up the stop handler
+        mediaRecorder.onstop = async () => {
+          try {
+            cleanup();
+            
+            // Create blob from audio chunks
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+            
+            if (audioChunksRef.current.length > 0) {
+              setCurrentTranscript('Processing audio...');
+              setIsListening(false);
+              setIsProcessing(true);
+              
+              // Automatically send for transcription
+              await handleAudioTranscription(audioBlob);
+            } else {
+              setCurrentTranscript('No audio recorded');
+              setIsListening(false);
+            }
+            
+            console.log('🎙️ Recording stopped and processed');
+            resolve();
+          } catch (error) {
+            console.error('Error processing stopped recording:', error);
+            setError('Failed to process recording');
+            setIsListening(false);
+            setIsProcessing(false);
+            reject(error);
+          }
+        };
+
+        mediaRecorder.onerror = (event) => {
+          console.error('MediaRecorder error during stop:', event);
+          cleanup();
+          setError('Recording error occurred');
+          setIsListening(false);
+          reject(new Error('MediaRecorder stop failed'));
+        };
+
+        // Stop the recorder
+        if (mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+        } else {
+          cleanup();
+          setIsListening(false);
+          resolve();
+        }
+      });
     } catch (error) {
       console.error('Error stopping recording:', error);
       setError('Failed to stop recording');
       setIsListening(false);
+      setIsProcessing(false);
+      throw error;
     }
   };
 
-  const clearTranscript = () => {
+  // Separate function to handle audio transcription
+  const handleAudioTranscription = async (audioBlob: Blob) => {
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+      
+      const response = await axios.post('/api/chat/transcribe', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000,
+      });
+
+      if (response.data.success) {
+        const transcript = response.data.transcript || 'No speech detected';
+        setCurrentTranscript(transcript);
+        setDetectedLanguage(response.data.detectedLanguage);
+        
+        toast({
+          title: "Transcription Complete",
+          description: `Detected: ${response.data.detectedLanguage || 'Unknown language'}`,
+        });
+      } else {
+        throw new Error(response.data.error || 'Transcription failed');
+      }
+    } catch (error) {
+      console.error('Transcription error:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Transcription failed';
+      setError(errorMsg);
+      setCurrentTranscript('Transcription failed. Please try again.');
+      
+      toast({
+        title: "Transcription Error",
+        description: errorMsg,
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const clearTranscript = useCallback(() => {
     setCurrentTranscript('');
     setError(null);
     if (isListening) {
       stopListening();
     }
-  };
+  }, [isListening, stopListening]);
 
-  // Voice message submission
-  const submitVoiceMessage = async () => {
+  // Voice message submission - memoized
+  const submitVoiceMessage = useCallback(async () => {
     if (disabled || isProcessing || audioChunksRef.current.length === 0) {
       console.log('Cannot submit: disabled:', disabled, 'processing:', isProcessing, 'chunks:', audioChunksRef.current.length);
       return;
@@ -395,7 +489,7 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [disabled, isProcessing, userId, sessionId, detectedLanguage, onMessageReceived, onError, playAudioResponse]);
 
   // Don't render anything until mounted (avoid hydration issues)
   if (!isMounted) return null;
@@ -413,7 +507,7 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
         {/* Status Display */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">
-            {isListening ? `🎙️ Recording (${listeningDuration}s)` : '🎤 Ready to Record'}
+            {statusText}
           </span>
           {error && (
             <div className="flex items-center gap-1 text-destructive">
@@ -454,7 +548,7 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
           {/* Microphone Button */}
           <Button
             onClick={isListening ? stopListening : startListening}
-            disabled={disabled || isProcessing}
+            disabled={isButtonDisabled}
             variant={isListening ? 'destructive' : 'default'}
             size="lg"
             className="flex-1 gap-2"
@@ -537,6 +631,9 @@ const VoiceChatComponent: React.FC<VoiceChatProps> = ({
       </div>
     </Card>
   );
-};
+});
+
+// Set display name for debugging
+VoiceChatComponent.displayName = 'VoiceChatComponent';
 
 export { VoiceChatComponent };

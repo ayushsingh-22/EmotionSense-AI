@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, MicOff, Volume2, VolumeX, RotateCcw } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
@@ -31,12 +31,7 @@ export default function VoicePage() {
   const { addToHistory, setIsLoading } = useStore();
   const { toast } = useToast();
 
-  // Check audio permission on mount
-  useEffect(() => {
-    checkAudioPermission();
-  }, []);
-
-  const checkAudioPermission = async () => {
+  const checkAudioPermission = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach(track => track.stop());
@@ -50,7 +45,12 @@ export default function VoicePage() {
         variant: 'destructive',
       });
     }
-  };
+  }, []);
+
+  // Check audio permission on mount
+  useEffect(() => {
+    checkAudioPermission();
+  }, [checkAudioPermission]);
 
   const startRecording = async () => {
     if (audioPermission === false) {
@@ -98,15 +98,62 @@ export default function VoicePage() {
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorder.current && isRecording) {
-      mediaRecorder.current.stop();
+  const stopRecording = async () => {
+    if (!mediaRecorder.current || !isRecording) {
+      return;
+    }
+
+    try {
+      return new Promise<void>((resolve, reject) => {
+        const recorder = mediaRecorder.current!;
+        
+        // Set up the stop handler
+        recorder.onstop = async () => {
+          try {
+            const blob = new Blob(audioChunks.current, { type: 'audio/webm;codecs=opus' });
+            setAudioBlob(blob);
+            
+            // Clean up media stream
+            if (recorder.stream) {
+              recorder.stream.getTracks().forEach(track => track.stop());
+            }
+            
+            setIsRecording(false);
+            
+            if (recordingInterval.current) {
+              clearInterval(recordingInterval.current);
+              recordingInterval.current = null;
+            }
+            
+            resolve();
+          } catch (error) {
+            console.error('Error in onstop handler:', error);
+            reject(error);
+          }
+        };
+
+        recorder.onerror = (event) => {
+          console.error('MediaRecorder error during stop:', event);
+          setIsRecording(false);
+          reject(new Error('Recording stop failed'));
+        };
+
+        // Stop the recorder if it's not already inactive
+        if (recorder.state !== 'inactive') {
+          recorder.stop();
+        } else {
+          setIsRecording(false);
+          resolve();
+        }
+      });
+    } catch (error) {
+      console.error('Error stopping recording:', error);
       setIsRecording(false);
-      
       if (recordingInterval.current) {
         clearInterval(recordingInterval.current);
         recordingInterval.current = null;
       }
+      throw error;
     }
   };
 
