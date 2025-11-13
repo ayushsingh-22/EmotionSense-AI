@@ -13,256 +13,12 @@
 import axios from 'axios';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import config from '../config/index.js';
-import { indianContextConfig } from '../config/indianContext.js';
-
-/**
- * Build Indian context guidance based on detected topic
- */
-const buildIndianContextGuidance = (topic) => {
-  const guidance = {
-    finance: `
-• Acknowledge the financial pressure - many Indian families face these challenges
-• Suggest government schemes like PM Kisan, Mudra loans, RBI savings schemes
-• Recommend community solutions: chit funds, family lending circles
-• Discuss realistic budgeting for festivals/celebrations
-• Involve family members in financial decisions
-• Explore employer benefits and health insurance options
-• Suggest free/subsidized government resources`,
-    
-    marriage: `
-• Understand family expectations and cultural norms around marriage
-• Acknowledge the importance of parental approval and family consent
-• Discuss respectful ways to involve family in decision-making
-• Be aware of dowry concerns and societal pressures
-• Respect caste, religion, and community considerations mentioned
-• Help navigate arranged vs. love marriage acceptance
-• Suggest community elders or counselors for guidance`,
-    
-    education: `
-• Acknowledge India's exam-focused education culture and high competition
-• Recognize pressure from JEE, NEET, board exams, competitive exams
-• Understand role of coaching classes and academic stress
-• Provide perspective on multiple career paths beyond "standard" routes
-• Discuss government job aspirations (IAS, IPS, SSC)
-• Help manage parental expectations about education
-• Suggest stress-management and work-life balance`,
-    
-    career: `
-• Acknowledge competitive Indian job market with quota system
-• Discuss government job aspirations realistically (IAS, IPS, SSC, PSU)
-• Understand family expectations around "secure" employment
-• Help navigate location changes and migration concerns
-• Discuss skill development and continuous learning
-• Acknowledge role of networks and connections in Indian workplace
-• Suggest government resources for job training and placement`,
-    
-    family: `
-• Respect joint family system and multi-generational living
-• Acknowledge elder care responsibilities and filial duties
-• Understand decision-making is often collective, not individual
-• Help navigate conflicts while respecting hierarchy
-• Discuss cultural values of respect, sacrifice, and duty
-• Suggest involving trusted family members in problem-solving
-• Acknowledge financial interdependence in joint families`,
-    
-    emergency: `
-• IMMEDIATELY: This is serious. Encourage reaching out to: 
-  - Family members immediately
-  - AASRA (9820466726), iCall (9152987821), Vandrevala Foundation (9999 666 555)
-  - Local hospitals or emergency services
-• Emphasize that family support and professional help are crucial
-• Religious/spiritual resources may provide comfort
-• Do NOT dismiss or minimize their feelings
-• Help them see reasons to live and connect with support systems`
-  };
-  
-  return guidance[topic] || "Consider the user's Indian context: family values, economic constraints, social norms, and cultural expectations.";
-};
-
-/**
- * Detect non-emotional intents that should bypass LLM generation
- */
-const EMOTIONAL_KEYWORDS = [
-  'feel',
-  'feeling',
-  'emotion',
-  'stress',
-  'stressed',
-  'anxious',
-  'anxiety',
-  'sad',
-  'depressed',
-  'depression',
-  'lonely',
-  'alone',
-  'angry',
-  'upset',
-  'hurt',
-  'scared',
-  'worried',
-  'guilty',
-  'overwhelmed',
-  'cope',
-  'coping',
-  'grief'
-];
-
-const NON_EMOTIONAL_PATTERNS = [
-  {
-    category: 'technical or account support',
-    keywords: [
-      'password',
-      'reset my password',
-      'forgot password',
-      'login issue',
-      'sign in problem',
-      'verification code',
-      'otp',
-      'account locked',
-      'bug report',
-      'error code',
-      'app not working',
-      'software update',
-      'install the app',
-      'device issue',
-      'internet not working'
-    ]
-  },
-  {
-    category: 'orders, billing, or subscription requests',
-    keywords: [
-      'order status',
-      'shipping',
-      'delivery',
-      'refund',
-      'return my order',
-      'exchange',
-      'cancel my order',
-      'tracking number',
-      'invoice',
-      'payment failed',
-      'subscription',
-      'billing support'
-    ]
-  },
-  {
-    category: 'general knowledge or factual questions',
-    keywords: [
-      'capital of',
-      'who is',
-      'what is',
-      'definition of',
-      'history of',
-      'recipe',
-      'weather forecast',
-      'latest news',
-      'sports score',
-      'stock price'
-    ]
-  },
-  {
-    category: 'coding or math help',
-    keywords: [
-      'write code',
-      'fix this code',
-      'compile error',
-      'algorithm',
-      'python',
-      'java',
-      'javascript',
-      'sql query',
-      'solve this equation',
-      'math problem',
-      'derivative'
-    ]
-  },
-  {
-    category: 'legal, medical, or financial services',
-    keywords: [
-      'legal advice',
-      'sue someone',
-      'attorney',
-      'court case',
-      'medical diagnosis',
-      'prescription',
-      'treatment plan',
-      'side effects',
-      'investment tips',
-      'open a bank account',
-      'loan eligibility'
-    ]
-  }
-];
-
-const detectNonEmotionalIntent = (message = '', conversationHistory = []) => {
-  const haystacks = [];
-
-  if (typeof message === 'string' && message.trim().length > 0) {
-    haystacks.push(message.toLowerCase());
-  }
-
-  if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
-    conversationHistory
-      .filter((item) => item && item.role === 'user' && typeof item.message === 'string')
-      .slice(-4)
-      .forEach((item) => haystacks.push(item.message.toLowerCase()));
-  }
-
-  if (haystacks.length === 0) {
-    return { blocked: false };
-  }
-
-  const primaryText = haystacks[0];
-  const primaryHasEmotion = EMOTIONAL_KEYWORDS.some((word) => primaryText.includes(word));
-
-  for (const pattern of NON_EMOTIONAL_PATTERNS) {
-    for (const keyword of pattern.keywords) {
-      if (!primaryHasEmotion && primaryText.includes(keyword)) {
-        return {
-          blocked: true,
-          category: pattern.category,
-          keyword
-        };
-      }
-    }
-  }
-
-  // Fallback: if the most recent message is emotional, still check older ones
-  for (const pattern of NON_EMOTIONAL_PATTERNS) {
-    for (const keyword of pattern.keywords) {
-      const match = haystacks.slice(1).find((text) => {
-        if (!text.includes(keyword)) {
-          return false;
-        }
-        const hasEmotion = EMOTIONAL_KEYWORDS.some((word) => text.includes(word));
-        return !hasEmotion;
-      });
-
-      if (match) {
-        return {
-          blocked: true,
-          category: pattern.category,
-          keyword
-        };
-      }
-    }
-  }
-
-  return { blocked: false };
-};
-
-const buildScopeBoundaryMessage = (category) => {
-  const focusLine = 'I am here to support emotional wellbeing, feelings, and coping strategies.';
-  const categoryLine = category ? `It sounds like your question is about ${category}, which I am not able to help with directly.` : 'Your question seems outside that focus.';
-  const redirectLine = 'If something about this is causing stress or difficult feelings, let me know so I can support you emotionally.';
-  return `${focusLine} ${categoryLine} ${redirectLine}`;
-};
+import { createIndianContextPrompt } from '../config/indianContext.js';
 
 /**
  * Create empathetic prompt based on emotion, context, and chat history
  * Enhanced to provide better continuity and context awareness
  * IMPORTANT: Uses conversation history to understand the actual topic, not just emotion
- * NOW WITH INDIAN CONTEXT: Considers Indian cultural, economic, and social aspects
  */
 export const createEmpatheticPrompt = (emotion, context, transcript, chatHistory = []) => {
   const emotionPrompts = {
@@ -279,45 +35,24 @@ export const createEmpatheticPrompt = (emotion, context, transcript, chatHistory
   
   // Determine the actual underlying topic from conversation history
   let underlyingTopic = "general conversation";
-  let detectedContext = { isIndianRelevant: false, topic: '', keywords: [] };
-  
   if (chatHistory && chatHistory.length > 0) {
     const recentUserMessages = chatHistory.filter(msg => msg.role === 'user').map(msg => msg.message.toLowerCase());
-    const allText = recentUserMessages.join(' ');
     
-    if (recentUserMessages.some(msg => msg.includes('money') || msg.includes('afford') || msg.includes('celebrate') || msg.includes('festival') || msg.includes('diwali') || msg.includes('holi') || msg.includes('eid') || msg.includes('loan'))) {
-      underlyingTopic = "financial hardship and festival/celebration expenses (Indian context)";
-      detectedContext = { isIndianRelevant: true, topic: 'finance', keywords: ['money', 'festival', 'celebrate'] };
+    if (recentUserMessages.some(msg => msg.includes('money') || msg.includes('afford') || msg.includes('celebrate') || msg.includes('festival'))) {
+      underlyingTopic = "financial hardship and wanting to celebrate a festival";
     } else if (recentUserMessages.some(msg => msg.includes('die') || msg.includes('suicide') || msg.includes('harm'))) {
       underlyingTopic = "suicidal thoughts or severe distress";
-      detectedContext = { isIndianRelevant: true, topic: 'emergency', keywords: ['suicide', 'harm'] };
-    } else if (recentUserMessages.some(msg => msg.includes('marriage') || msg.includes('arrange') || msg.includes('parent') || msg.includes('approval') || msg.includes('dowry'))) {
-      underlyingTopic = "marriage and family approval (Indian context)";
-      detectedContext = { isIndianRelevant: true, topic: 'marriage', keywords: ['marriage', 'parent', 'approval'] };
-    } else if (recentUserMessages.some(msg => msg.includes('exam') || msg.includes('jee') || msg.includes('neet') || msg.includes('board') || msg.includes('iit') || msg.includes('coaching'))) {
-      underlyingTopic = "academic pressure and competitive exams (Indian context)";
-      detectedContext = { isIndianRelevant: true, topic: 'education', keywords: ['exam', 'jee', 'neet', 'board'] };
-    } else if (recentUserMessages.some(msg => msg.includes('job') || msg.includes('ias') || msg.includes('ips') || msg.includes('government') || msg.includes('ssc') || msg.includes('career'))) {
-      underlyingTopic = "career and job prospects (Indian context)";
-      detectedContext = { isIndianRelevant: true, topic: 'career', keywords: ['job', 'ias', 'career'] };
-    } else if (recentUserMessages.some(msg => msg.includes('parent') || msg.includes('father') || msg.includes('mother') || msg.includes('elder') || msg.includes('grandmother') || msg.includes('family'))) {
-      underlyingTopic = "family relationships and obligations (Indian context)";
-      detectedContext = { isIndianRelevant: true, topic: 'family', keywords: ['parent', 'family', 'elder'] };
     } else if (recentUserMessages.some(msg => msg.includes('break') || msg.includes('betray') || msg.includes('friend') || msg.includes('hurt'))) {
       underlyingTopic = "relationship betrayal or emotional pain";
-      detectedContext = { isIndianRelevant: false, topic: 'relationships', keywords: ['break', 'betray', 'friend'] };
-    } else if (recentUserMessages.some(msg => msg.includes('work') || msg.includes('boss'))) {
+    } else if (recentUserMessages.some(msg => msg.includes('work') || msg.includes('job') || msg.includes('boss'))) {
       underlyingTopic = "work-related stress or issues";
-      detectedContext = { isIndianRelevant: false, topic: 'work', keywords: ['work', 'boss'] };
     }
   }
 
-  // Start with system context and guidelines - INCLUDE INDIAN CONTEXT
-  let prompt = `${indianContextConfig.systemPrompt}
+  // Start with system context and guidelines
+  let prompt = `You are an empathetic AI assistant designed to provide emotional support and understanding through ongoing conversations.
 
-===========================================
-CONVERSATION CONTEXT
-===========================================
+🇮🇳 IMPORTANT CONTEXT: You are assisting an INDIAN user. Always keep this in mind when providing support, suggestions, or resources.
 
 IMPORTANT: This is a CONTINUOUS conversation about: ${underlyingTopic}
 
@@ -326,6 +61,7 @@ You have access to previous messages in this conversation thread. Use them to pr
 CRITICAL: Focus on the UNDERLYING TOPIC (${underlyingTopic}), not just the detected emotion. The emotion detection helps understand HOW the user feels, but the conversation history shows WHAT they're dealing with.
 
 CURRENT MESSAGE CONTEXT:
+- User Location: India
 - Underlying Topic: ${underlyingTopic}
 - Detected Emotion: ${emotion}
 - Confidence: ${context?.confidence || 'N/A'}
@@ -335,14 +71,11 @@ ${context?.context ? `- Additional context: ${context.context}` : ''}
 EMOTIONAL GUIDANCE:
 ${emotionGuidance}
 
-${detectedContext.isIndianRelevant ? `
-===========================================
-INDIAN CONTEXT DETECTED - SPECIAL GUIDANCE
-===========================================
-This appears to be related to: ${detectedContext.topic}
-Key aspects for Indian users in this situation:
-${buildIndianContextGuidance(detectedContext.topic)}
-` : ''}`;
+INDIAN CONTEXT GUIDELINES:
+- Always suggest Indian helplines, resources, and authorities when applicable
+- Consider Indian cultural context, festivals, family structures, and social norms
+- Use appropriate currency (₹/INR), time zones (IST), and local references
+- Suggest local Indian mental health services, NGOs, and government schemes when relevant
 
   // Add chat history for context - make it prominent and well-formatted
   if (chatHistory && chatHistory.length > 0) {
@@ -385,23 +118,39 @@ EXAMPLE:
 
 RESPONSE REQUIREMENTS:
 - Be warm, genuine, and conversational
-- Keep response concise (1-2 sentences, or more if continuing an important thread)
+- Keep response concise (2-3 sentences, or more if continuing an important thread)
 - Use simple, natural language
 - Show you understand their emotional journey AND their real-life situation
-- Consider Indian values: family, duty, respect, hard work, education, community
 - Offer support or encouragement as appropriate
 - Reference previous messages and the underlying topic when helpful
-- Suggest solutions considering Indian economic realities and social structures
 - Do NOT start fresh - treat this as an ongoing conversation
 - Do NOT ignore the real topic in favor of emotion detection
-- Do NOT provide generic advice - be specific to THEIR situation and INDIAN context
-- Do NOT ignore cultural/family aspects when relevant
+- Do NOT provide generic advice - be specific to THEIR situation
 - Do NOT say "I don't remember" - you have the conversation history above
+
+INDIAN HELPLINE NUMBERS (Use when appropriate for crisis situations):
+🚨 Emergency: 112 (National Emergency Number)
+💙 Mental Health: 
+  - KIRAN Mental Health Helpline: 1800-599-0019 (24/7)
+  - Vandrevala Foundation: +91 9999 666 555 (24/7)
+  - iCALL: 022-2556-3291 (10 AM - 8 PM)
+👩‍⚕️ Women's Helpline: 181 (24/7)
+👶 Child Helpline: 1098
+💰 Financial Crisis: 155260 (Citizens Financial Cyber Crime Reporting)
+🏥 Medical Emergency: 108
+👮‍♂️ Police: 100
+
+ONLY suggest helplines if the user expresses:
+- Suicidal thoughts or severe depression
+- Domestic violence or abuse situations
+- Financial fraud or cyber crimes
+- Medical emergencies or severe anxiety
+- Child safety concerns
 
 Now respond to help them with: ${underlyingTopic}
 Current message: "${transcript}"
 
-RESPOND NATURALLY, CONTEXTUALLY, AND WITH INDIAN AWARENESS:`;
+RESPOND NATURALLY AND CONTEXTUALLY:`;
 
   return prompt;
 };
@@ -651,21 +400,20 @@ export const generateWithLLaMA = async (prompt) => {
  */
 export const generateFallbackResponse = (emotion) => {
   const fallbackResponses = {
-    happy: "That's wonderful to hear! I'm so glad you're feeling good. Keep embracing those positive moments - your family and loved ones would be happy to see your joy!",
-    sad: "I hear you, and I want you to know that it's okay to feel this way. I'm here for you, and remember - you have your family and community around you. Things will get better with time and support.",
-    angry: "I understand you're feeling frustrated right now. Take a deep breath - your feelings are valid. It might help to talk with someone you trust or take some time for yourself. Let's work through this together.",
-    fear: "It's completely normal to feel anxious sometimes. Remember that you're stronger than you think, and you're not alone - your family, friends, and community are there to support you. I'm here too.",
-    surprise: "That sounds unexpected! Life can throw curveballs sometimes. It might help to talk with someone you trust about what you're feeling. How can I help you process this?",
-    disgust: "I can sense your discomfort. Your reaction is valid, and it's important to trust your feelings. Talk to someone you trust about this when you're ready.",
-    neutral: "I'm here and listening. Feel free to share what's on your mind whenever you're ready - I understand Indian challenges and will try my best to help with solutions relevant to you."
+    happy: "That's wonderful to hear! I'm glad you're feeling good. Keep embracing those positive moments!",
+    sad: "I hear you, and I want you to know that it's okay to feel this way. I'm here for you, and things will get better.",
+    angry: "I understand you're feeling frustrated right now. Take a deep breath - your feelings are valid. Let's work through this together.",
+    fear: "It's completely normal to feel anxious sometimes. Remember that you're stronger than you think, and I'm here to support you.",
+    surprise: "That sounds unexpected! Life can throw curveballs sometimes. How are you feeling about it?",
+    disgust: "I can sense your discomfort. Your reaction is valid, and it's important to trust your feelings.",
+    neutral: "I'm here and listening. Feel free to share what's on your mind whenever you're ready."
   };
 
   return {
     text: fallbackResponses[emotion] || fallbackResponses.neutral,
     model: 'fallback',
     success: true,
-    isFallback: true,
-    indianContextAware: true
+    isFallback: true
   };
 };
 
@@ -676,21 +424,6 @@ export const generateFallbackResponse = (emotion) => {
  */
 export const generateResponse = async ({ emotion, confidence, context, transcript, conversationHistory = [] }) => {
   console.log(`💬 Generating empathetic response for emotion: ${emotion}`);
-  console.log(`🇮🇳 Indian Context Awareness: ENABLED - Responses will be tailored for Indian users`);
-
-  // Guardrail: block non-emotional requests
-  const scopeCheck = detectNonEmotionalIntent(transcript, conversationHistory);
-  if (scopeCheck.blocked) {
-    console.log(`🚧 Message appears outside emotional support scope (category: ${scopeCheck.category}, keyword: ${scopeCheck.keyword})`);
-    return {
-      text: buildScopeBoundaryMessage(scopeCheck.category),
-      model: 'scope-guard',
-      success: true,
-      policyNotice: true,
-      boundaryCategory: scopeCheck.category,
-      boundaryKeyword: scopeCheck.keyword
-    };
-  }
 
   // Create prompt with conversation history
   const prompt = createEmpatheticPrompt(emotion, { confidence, context }, transcript, conversationHistory);
@@ -698,17 +431,15 @@ export const generateResponse = async ({ emotion, confidence, context, transcrip
   // Try Gemini first
   try {
     const geminiResponse = await generateWithGemini(prompt);
-    console.log(`✅ Response generated with Indian context awareness (Gemini)`);
     return geminiResponse;
   } catch (geminiError) {
     console.warn(`⚠️  Gemini failed: ${geminiError.message}`);
 
     // Try LLaMA as fallback only if enabled
     if (config.llama.enabled) {
-      console.log('🔄 Attempting LLaMA fallback with Indian context...');
+      console.log('🔄 Attempting LLaMA fallback...');
       try {
         const llamaResponse = await generateWithLLaMA(prompt);
-        console.log(`✅ Response generated with Indian context awareness (LLaMA)`);
         return llamaResponse;
       } catch (llamaError) {
         console.warn(`⚠️  LLaMA fallback failed: ${llamaError.message}`);
@@ -718,7 +449,7 @@ export const generateResponse = async ({ emotion, confidence, context, transcrip
     }
 
     // Use static fallback if LLaMA is disabled or failed
-    console.log('📝 Using static fallback response with Indian context awareness...');
+    console.log('📝 Using static fallback response...');
     const fallbackResponse = generateFallbackResponse(emotion);
     return fallbackResponse;
   }
@@ -739,13 +470,25 @@ export const generateConversationalResponse = async ({ message, emotion = 'neutr
     });
   }
 
-  const prompt = `You are an empathetic AI assistant. The user is in a ${emotion} emotional state.
+  const prompt = `You are an empathetic AI assistant helping an INDIAN user. The user is in a ${emotion} emotional state.
+
+IMPORTANT: Keep in mind this is an Indian user. When suggesting any helplines, resources, or authorities, ALWAYS use Indian services:
+
+INDIAN EMERGENCY HELPLINES (use when appropriate):
+- Emergency: 112 (National Emergency Number)
+- Mental Health: KIRAN 1800-599-0019, Vandrevala +91 9999 666 555
+- Women's Helpline: 181
+- Child Helpline: 1098
+- Medical Emergency: 108
+- Police: 100
+
+Consider Indian cultural context, use Indian Rupees (INR), and suggest local Indian mental health services when relevant.
 
 ${conversationContext}
 
 User: ${message}
 
-Provide a helpful, empathetic response (2-3 sentences):`;
+Provide a helpful, empathetic response (2-3 sentences) keeping Indian context in mind:`;
 
   // Try Gemini -> LLaMA -> Fallback
   try {

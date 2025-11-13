@@ -44,13 +44,19 @@ interface SpeechRecognitionProps {
   onError?: (error: string) => void;
   className?: string;
   disabled?: boolean;
+  compact?: boolean; // For compact button mode in chat input
+  onInterimTranscript?: (text: string) => void;
+  onListeningChange?: (listening: boolean) => void;
 }
 
 export function SpeechRecognition({ 
   onTranscript, 
   onError, 
   className, 
-  disabled = false 
+  disabled = false,
+  compact = false,
+  onInterimTranscript,
+  onListeningChange,
 }: SpeechRecognitionProps) {
   const [isListening, setIsListening] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
@@ -97,12 +103,17 @@ export function SpeechRecognition({
         
         // Always update display for real-time feedback
         if (fullTranscript.trim().length > 0) {
-          setCurrentTranscript(fullTranscript.trim());
+          const trimmed = fullTranscript.trim();
+          setCurrentTranscript(trimmed);
+          onInterimTranscript?.(trimmed);
           
           // Send transcript to parent component ONLY when final results are available
           if (finalTranscript.trim()) {
             onTranscript(finalTranscript.trim());
           }
+        } else {
+          setCurrentTranscript('');
+          onInterimTranscript?.('');
         }
       };
 
@@ -127,6 +138,7 @@ export function SpeechRecognition({
         }
         
         setIsListening(false);
+        onListeningChange?.(false);
         
         // For other errors, reset retry count and show message immediately
         retryCountRef.current = 0;
@@ -138,11 +150,14 @@ export function SpeechRecognition({
       recognition.onend = () => {
         console.log('Speech recognition ended naturally');
         setIsListening(false);
+        onListeningChange?.(false);
+        onInterimTranscript?.('');
       };
 
       // Handle speech start
       recognition.onstart = () => {
         setCurrentTranscript('');
+        onInterimTranscript?.('');
         retryCountRef.current = 0; // Reset retry count on successful start
       };
 
@@ -205,6 +220,7 @@ export function SpeechRecognition({
         try {
           recognitionRef.current.start();
           setIsListening(true);
+          onListeningChange?.(true);
           console.log('Speech recognition started successfully');
         } catch (startError) {
           console.error('Recognition start error:', startError);
@@ -220,9 +236,11 @@ export function SpeechRecognition({
                 try {
                   recognitionRef.current.start();
                   setIsListening(true);
+                  onListeningChange?.(true);
                 } catch (retryErr) {
                   console.error('Retry start failed:', retryErr);
                   setIsListening(false);
+                  onListeningChange?.(false);
                   onError?.('Failed to start speech recognition. Please try again.');
                 }
               }
@@ -236,6 +254,7 @@ export function SpeechRecognition({
     } catch (error) {
       console.error('Failed to start speech recognition:', error);
       setIsListening(false);
+      onListeningChange?.(false);
       
       if (error instanceof DOMException) {
         if (error.name === 'NotAllowedError') {
@@ -257,7 +276,9 @@ export function SpeechRecognition({
     if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
       setIsListening(false);
+      onListeningChange?.(false);
       setCurrentTranscript(''); // Clear transcript when stopping
+      onInterimTranscript?.('');
       // Reset retry count when manually stopping
       retryCountRef.current = 0;
     }
@@ -287,6 +308,39 @@ export function SpeechRecognition({
     );
   }
 
+  if (compact) {
+    // Compact mode for chat input integration
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleListening();
+        }}
+        disabled={disabled}
+        className={cn(
+          "h-8 w-8 p-0 rounded-full transition-all duration-200",
+          isListening 
+            ? "border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50"
+            : "border-blue-300 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50",
+          "hover:scale-105 active:scale-95",
+          className
+        )}
+        title={isListening ? 'Stop recording' : 'Start voice input'}
+      >
+        {isListening ? (
+          <Square className="h-4 w-4" />
+        ) : (
+          <Mic className="h-4 w-4" />
+        )}
+      </Button>
+    );
+  }
+
+  // Full mode with transcript display
   return (
     <div className="flex items-center gap-3">
       <Button

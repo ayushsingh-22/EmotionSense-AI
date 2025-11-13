@@ -20,7 +20,10 @@ import {
   getChatMessages, 
   getRecentChatMessages, 
   updateChatSessionTitle, 
-  deleteChatSession 
+  deleteChatSession,
+  getEmergencyContact,
+  logSafetyAlert,
+  getUserProfile
 } from '../storage-service/index.js';
 import { 
   translateToEnglishIfNeeded, 
@@ -29,6 +32,8 @@ import {
   isLanguageSupported
 } from '../utils/translationHelper.js';
 import { textToSpeech } from '../utils/voiceHelper.js';
+import { sendEmergencyAlert } from '../utils/nodemailerHelper.js';
+import { detectRiskLevel, shouldTriggerEmergencyAlert } from '../utils/safetyHelper.js';
 import config from '../config/index.js';
 import { 
   isIndianLanguageSupported, 
@@ -160,6 +165,79 @@ router.post('/message', asyncHandler(async (req, res) => {
     const emotionResult = await analyzeTextEmotion(englishText);
     
     console.log(`✅ Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
+
+    // Step 4.5: Check for high-risk messages and trigger emergency alert if needed
+    console.log(`🚨 Checking for high-risk indicators...`);
+    const riskAnalysis = detectRiskLevel(englishText);
+    console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
+    
+    if (riskAnalysis.matchedKeywords.length > 0) {
+      console.log(`⚠️ Detected keywords: ${riskAnalysis.matchedKeywords.join(', ')}`);
+    }
+
+    // Log safety alert if high or medium risk detected
+    if (riskAnalysis.riskLevel) {
+      try {
+        const emergencyContact = await getEmergencyContact(userId);
+        let alertSent = false;
+        
+        if (emergencyContact && emergencyContact.notify_enabled) {
+          console.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
+          
+          if (shouldTriggerEmergencyAlert(emotionResult.emotion, riskAnalysis.riskLevel)) {
+            console.log(`📧 Attempting to send emergency alert via email...`);
+            
+            // Fetch user profile from Supabase to get accurate user information
+            const userProfile = await getUserProfile(userId);
+            
+            // Prepare user data for emergency alert
+            let userData = {
+              id: userId,
+              full_name: userProfile?.full_name || userProfile?.name || req.user?.full_name || 'User',
+              email: userProfile?.email || userProfile?.user_email || userProfile?.auth_email || req.user?.email || 'Not available'
+            };
+            
+            console.log(`👤 User data for alert: ${userData.full_name} (${userData.email})`);
+            console.log(`🔍 User profile debug:`, { 
+              profile_exists: !!userProfile,
+              available_fields: userProfile ? Object.keys(userProfile) : 'none',
+              email_field: userProfile?.email,
+              user_email_field: userProfile?.user_email,
+              auth_email_field: userProfile?.auth_email
+            });
+            console.log(`📮 Sending alert to emergency contact: ${emergencyContact.contact_email}`);
+            
+            // Send email alert via Nodemailer to the emergency contact's email
+            alertSent = await sendEmergencyAlert(
+              userData,
+              emergencyContact,
+              emotionResult.emotion,
+              englishText,
+              riskAnalysis.riskLevel
+            );
+            
+            if (alertSent) {
+              console.log(`✅ Emergency alert email sent successfully to ${emergencyContact.contact_email}`);
+            } else {
+              console.warn(`⚠️ Failed to send emergency alert email to ${emergencyContact.contact_email}`);
+            }
+          }
+        }
+        
+        // Log the safety alert event
+        await logSafetyAlert(
+          userId,
+          emotionResult.emotion,
+          englishText,
+          emergencyContact?.id || null,
+          alertSent
+        );
+        
+      } catch (alertError) {
+        console.error(`⚠️ Error handling emergency alert:`, alertError.message);
+        // Don't fail the chat request if alert handling fails
+      }
+    }
 
     // Step 5: Save user message to database (save original message, not translated)
     console.log(`💾 Saving user message...`);

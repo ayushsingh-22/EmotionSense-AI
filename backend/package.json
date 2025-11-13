@@ -7,10 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "test:translation": "node test-translation.js",
-    "test:live": "node test-live-api.js",
-    "test:basic": "node test-basic.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "emotion-detection",
@@ -36,6 +33,7 @@
     "groq-sdk": "^0.33.0",
     "multer": "^1.4.5-lts.1",
     "node-wav": "^0.0.2",
+    "nodemailer": "^6.9.7",
     "sarvamai": "^0.1.10",
     "uuid": "^9.0.1",
     "wav": "^1.0.2"

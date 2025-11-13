@@ -278,3 +278,115 @@ export const requestMicrophonePermission = async (): Promise<boolean> => {
     return false;
   }
 };
+
+/**
+ * Emergency Contact API Functions
+ */
+
+export interface EmergencyContact {
+  id: string;
+  user_id: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone?: string;
+  notify_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Check if user has an emergency contact
+ */
+export const hasEmergencyContact = async (userId: string): Promise<boolean> => {
+  try {
+    const response = await api.get<{ success: boolean; hasEmergencyContact: boolean }>(
+      `/api/emergency/check/${userId}`
+    );
+    return response.data.hasEmergencyContact;
+  } catch (error) {
+    console.error('Error checking emergency contact:', error);
+    return false;
+  }
+};
+
+/**
+ * Get emergency contact for a user
+ */
+export const getEmergencyContact = async (userId: string): Promise<EmergencyContact | null> => {
+  try {
+    const response = await api.get<{ success: boolean; data: EmergencyContact }>(
+      `/api/emergency/${userId}`
+    );
+    return response.data.data;
+  } catch (error) {
+    console.error('Error fetching emergency contact:', error);
+    return null;
+  }
+};
+
+/**
+ * Save emergency contact
+ */
+export const saveEmergencyContact = async (
+  userId: string,
+  contactName: string,
+  contactEmail: string,
+  contactPhone?: string
+): Promise<EmergencyContact | null> => {
+  try {
+    const response = await api.post<{ success: boolean; data: EmergencyContact }>(
+      '/api/emergency/save',
+      {
+        userId,
+        contactName,
+        contactEmail,
+        contactPhone
+      }
+    );
+    return response.data.data;
+  } catch (error) {
+    console.error('Error saving emergency contact:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update emergency contact
+ */
+export const updateEmergencyContact = async (
+  userId: string,
+  contactName: string,
+  contactEmail: string,
+  contactPhone?: string
+): Promise<EmergencyContact | null> => {
+  try {
+    const response = await api.put<{ success: boolean; data: EmergencyContact }>(
+      '/api/emergency/update',
+      {
+        userId,
+        contactName,
+        contactEmail,
+        contactPhone
+      }
+    );
+    return response.data.data;
+  } catch (error) {
+    console.error('Error updating emergency contact:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete emergency contact
+ */
+export const deleteEmergencyContact = async (userId: string): Promise<boolean> => {
+  try {
+    const response = await api.delete<{ success: boolean }>(
+      `/api/emergency/${userId}`
+    );
+    return response.data.success;
+  } catch (error) {
+    console.error('Error deleting emergency contact:', error);
+    throw error;
+  }
+};

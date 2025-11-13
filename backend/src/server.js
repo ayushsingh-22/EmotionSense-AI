@@ -14,6 +14,9 @@ import fs from 'fs';
 // Import configuration
 import config from './config/index.js';
 
+// Import services
+import { initializeNodemailer } from './utils/nodemailerHelper.js';
+
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -26,6 +29,7 @@ import responseRoutes from './routes/responseRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import ttsRoutes from './routes/ttsRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
+import emergencyRoutes from './routes/emergencyRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -110,6 +114,9 @@ const configureRoutes = () => {
   // TTS routes
   app.use('/api/tts', ttsRoutes);
 
+  // Emergency contact routes
+  app.use('/api/emergency', emergencyRoutes);
+
   // Root endpoint
   app.get('/', (req, res) => {
     res.json({
@@ -144,6 +151,13 @@ const startServer = async () => {
   try {
     // Create required directories
     createRequiredDirectories();
+
+    // Initialize Nodemailer for emergency alerts
+    console.log('📧 Initializing email service (Nodemailer)...');
+    const emailInitialized = await initializeNodemailer();
+    if (!emailInitialized) {
+      console.log('⚠️ Email service not configured - emergency alerts via email will be disabled');
+    }
 
     // Configure middleware
     configureMiddleware();

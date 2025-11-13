@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { getChatSessions, getChatMessages } from '@/lib/api';
@@ -12,9 +11,9 @@ import { ChatSession, ChatMessage } from '@/lib/supabase';
 import { Search, MessageCircle, Calendar, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
-import { EMOTION_CONFIG } from '@/types';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { ChatMessage as ChatMessageComponent } from '@/components/chat/ChatMessage';
 
 interface ExtendedChatSession extends ChatSession {
   lastMessage?: string;
@@ -93,14 +92,6 @@ export default function HistoryPage() {
         variant: "destructive"
       });
     }
-  };
-
-  const getEmotionColor = (emotion: string) => {
-    return EMOTION_CONFIG[emotion as keyof typeof EMOTION_CONFIG]?.color || '#666';
-  };
-
-  const getEmotionEmoji = (emotion: string) => {
-    return EMOTION_CONFIG[emotion as keyof typeof EMOTION_CONFIG]?.emoji || '🤔';
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -223,17 +214,16 @@ export default function HistoryPage() {
                             </p>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-muted-foreground">{formatTimestamp(session.created_at)}</span>
-                              <Badge 
-                                variant="secondary" 
+                              <span
                                 className={cn(
-                                  "text-xs",
-                                  selectedSession === session.id 
-                                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                                    : ""
+                                  'rounded-full px-2 py-0.5 font-medium',
+                                  selectedSession === session.id
+                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200'
+                                    : 'bg-muted text-muted-foreground'
                                 )}
                               >
                                 {session.messageCount} msgs
-                              </Badge>
+                              </span>
                             </div>
                           </div>
                         </CardContent>
@@ -247,7 +237,7 @@ export default function HistoryPage() {
         </div>
 
         <div className="lg:col-span-2">
-          <Card className="h-[740px] border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
+          <Card className="h-[740px] border border-border/60 bg-background/90 backdrop-blur rounded-3xl shadow-lg">
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-3 text-xl">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
@@ -261,86 +251,26 @@ export default function HistoryPage() {
             </CardHeader>
             <CardContent className="p-0">
               {selectedSession ? (
-                <ScrollArea className="h-[640px] p-6 bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-900/50 dark:to-gray-900">
-                  <div className="space-y-6">
-                    {messages.length === 0 ? (
-                      <div className="text-center text-muted-foreground py-16">
-                        <MessageCircle className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                        <p className="text-lg font-medium">No messages in this conversation</p>
-                      </div>
-                    ) : (
-                      messages.map((message) => (
-                        <div
+                <ScrollArea className="h-[640px] p-6 bg-gradient-to-b from-gray-50/40 to-white dark:from-gray-900/40 dark:to-gray-900">
+                  {messages.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-16">
+                      <MessageCircle className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg font-medium">No messages in this conversation</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col space-y-4">
+                      {messages.map((message) => (
+                        <ChatMessageComponent
                           key={message.id}
-                          className={cn(
-                            'flex items-start gap-3',
-                            message.role === 'user' ? 'justify-end' : 'justify-start'
-                          )}
-                        >
-                          {/* Avatar - Left side for assistant */}
-                          {message.role === 'assistant' && (
-                            <div className="flex-shrink-0">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
-                                <MessageCircle className="h-5 w-5 text-white" />
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Message Content */}
-                          <div className={cn(
-                            "flex flex-col max-w-[70%] space-y-2",
-                            message.role === 'user' ? "items-end" : "items-start"
-                          )}>
-                            {/* Message Bubble */}
-                            <div className={cn(
-                              'px-6 py-4 rounded-2xl shadow-lg',
-                              message.role === 'user'
-                                ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-br-md'
-                                : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-md'
-                            )}>
-                              <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                                {message.message}
-                              </p>
-                            </div>
-
-                            {/* Metadata */}
-                            <div className={cn(
-                              "flex items-center gap-2 text-xs text-muted-foreground",
-                              message.role === 'user' ? "flex-row-reverse" : "flex-row"
-                            )}>
-                              <span>{formatMessageTime(message.created_at)}</span>
-                              {message.emotion_detected && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-xs px-2 py-1 rounded-full"
-                                  style={{
-                                    backgroundColor: getEmotionColor(message.emotion_detected) + '20',
-                                    borderColor: getEmotionColor(message.emotion_detected)
-                                  }}
-                                >
-                                  {getEmotionEmoji(message.emotion_detected)} {message.emotion_detected}
-                                  {message.confidence_score && (
-                                    <span className="ml-1">
-                                      ({Math.round(message.confidence_score * 100)}%)
-                                    </span>
-                                  )}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Avatar - Right side for user */}
-                          {message.role === 'user' && (
-                            <div className="flex-shrink-0">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg">
-                                <MessageCircle className="h-5 w-5 text-white" />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
+                          id={message.id}
+                          message={message.message}
+                          role={message.role as 'user' | 'assistant'}
+                          timestamp={message.created_at}
+                          editable={false}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </ScrollArea>
               ) : (
                 <div className="flex items-center justify-center h-[640px] text-muted-foreground">

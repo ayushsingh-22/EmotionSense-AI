@@ -31,6 +31,15 @@ interface AppState {
   setCurrentAnalysis: (
     analysis: TextAnalysisResult | VoiceAnalysisResult | MultiModalResult | null
   ) => void;
+
+  // Chat overrides for local-only edits and hidden messages
+  chatOverrides: Record<string, {
+    hiddenMessages: string[];
+    editedMessages: Record<string, string>;
+  }>;
+  hideChatMessage: (sessionId: string, messageId: string) => void;
+  setEditedChatMessage: (sessionId: string, messageId: string, message: string) => void;
+  clearChatOverrides: (sessionId: string) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -87,12 +96,45 @@ export const useStore = create<AppState>()(
       setCurrentAnalysis: (analysis) => set((state) => {
         state.currentAnalysis = analysis;
       }),
+
+      // Chat overrides (persisted locally to emulate editing without backend writes)
+      chatOverrides: {},
+      hideChatMessage: (sessionId, messageId) => set((state) => {
+        if (!sessionId || !messageId) return;
+
+        const session = state.chatOverrides[sessionId] || {
+          hiddenMessages: [],
+          editedMessages: {}
+        };
+
+        if (!session.hiddenMessages.includes(messageId)) {
+          session.hiddenMessages.push(messageId);
+        }
+
+        state.chatOverrides[sessionId] = session;
+      }),
+      setEditedChatMessage: (sessionId, messageId, message) => set((state) => {
+        if (!sessionId || !messageId) return;
+
+        const session = state.chatOverrides[sessionId] || {
+          hiddenMessages: [],
+          editedMessages: {}
+        };
+
+        session.editedMessages[messageId] = message;
+        state.chatOverrides[sessionId] = session;
+      }),
+      clearChatOverrides: (sessionId) => set((state) => {
+        if (!sessionId) return;
+        delete state.chatOverrides[sessionId];
+      }),
     })),
     {
       name: 'emotion-ai-storage',
       partialize: (state) => ({
         history: state.history,
         preferences: state.preferences,
+        chatOverrides: state.chatOverrides,
       }),
     }
   )

@@ -10,38 +10,59 @@ import { SidebarProvider } from "@/contexts/SidebarContext";
 import { Sidebar } from "@/components/sidebar";
 import { Toaster } from "@/components/ui/toaster";
 import { MainContent } from "@/components/MainContent";
+import { EmergencyContactChecker } from "@/components/EmergencyContactChecker";
 
-// Preload critical component to prevent hydration errors and improve performance
-const Navbar = dynamic(() => import("@/components/navbar").then(mod => ({ default: mod.Navbar })), { 
+// Preload improved navbar for better performance
+const ImprovedNavbar = dynamic(() => import("@/components/navbar").then(mod => ({ default: mod.Navbar })), { 
   ssr: false,
-  loading: () => <NavbarSkeleton /> // Show skeleton while navbar loads
+  loading: () => <NavbarSkeleton /> 
 });
 
-// Skeleton component for navbar loading state
+// Lightweight navbar skeleton for faster perceived load time
 function NavbarSkeleton() {
   return (
-    <div className="h-16 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-700 fixed top-0 w-full z-50 animate-pulse">
-      <div className="container flex h-16 items-center justify-between px-4">
-        <div className="w-40 h-8 bg-gray-200 dark:bg-gray-700 rounded" />
+    <div className="h-16 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 fixed top-0 w-full z-40">
+      <div className="container flex h-16 items-center justify-between px-4" style={{ maxWidth: '100%' }}>
+        <div className="flex items-center gap-2">
+          <div className="w-32 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+        </div>
         <div className="flex gap-2">
-          <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded" />
-          <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded" />
+          <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
+          <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
         </div>
       </div>
     </div>
   );
 }
 
-const inter = Inter({ subsets: ["latin"], display: 'swap' });
+// Page loading skeleton
+function PageLoadingSkeleton() {
+  return (
+    <div className="space-y-4 p-6">
+      <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+      <div className="space-y-3">
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4" />
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2" />
+      </div>
+    </div>
+  );
+}
+
+const inter = Inter({ 
+  subsets: ["latin"], 
+  display: 'swap',
+  variable: '--font-inter',
+});
 
 export const metadata: Metadata = {
-  title: "MantrAI - Your Intelligent Emotional Companion",
-  description: "Advanced emotion detection using text and voice analysis with AI-powered insights",
-  // Preload critical resources
-  other: {
-    'preload-as': 'style',
-    'preload-href': '/globals.css',
-  },
+  title: "MantrAI - Your Emotional Companion",
+  description: "Advanced emotion detection and AI-powered emotional support",
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({
@@ -52,34 +73,32 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Preload critical fonts and resources for faster loading */}
-        <link rel="preload" as="font" href="/fonts/inter-var.woff2" type="font/woff2" crossOrigin="anonymous" />
-        {/* Prefetch common routes to enable faster navigation */}
+        {/* Route prefetching for faster navigation */}
         <link rel="prefetch" href="/chat" />
         <link rel="prefetch" href="/profile" />
-        <link rel="prefetch" href="/history" />
+        {/* Color scheme meta tag */}
+        <meta name="theme-color" content="#5a67d8" />
       </head>
-      <body className={inter.className} suppressHydrationWarning>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem
-          disableTransitionOnChange={false} // Enable transitions for smoother dark mode switch
-        >
+      <body className={`${inter.className} antialiased bg-white dark:bg-gray-950`} suppressHydrationWarning>
+        <ThemeProvider>
           <AuthProvider>
             <ChatProvider>
               <SidebarProvider>
-                <div className="min-h-screen bg-background transition-colors duration-300">
-                  {/* Navbar with error boundary - uses Suspense for graceful loading */}
+                <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
+                  {/* Emergency Contact Checker Modal */}
+                  <EmergencyContactChecker />
+                  
+                  {/* Navigation Bar */}
                   <Suspense fallback={<NavbarSkeleton />}>
-                    <Navbar />
+                    <ImprovedNavbar />
                   </Suspense>
                   
-                  <div className="flex">
-                    {/* Sidebar - memoized to prevent unnecessary rerenders */}
+                  {/* Main Layout */}
+                  <div className="flex pt-16">
+                    {/* Sidebar Navigation */}
                     <Sidebar />
                     
-                    {/* Main content with lazy-loaded pages */}
+                    {/* Main Content */}
                     <MainContent>
                       <Suspense fallback={<PageLoadingSkeleton />}>
                         {children}
@@ -87,6 +106,8 @@ export default function RootLayout({
                     </MainContent>
                   </div>
                 </div>
+                
+                {/* Toast Notifications */}
                 <Toaster />
               </SidebarProvider>
             </ChatProvider>
@@ -94,19 +115,5 @@ export default function RootLayout({
         </ThemeProvider>
       </body>
     </html>
-  );
-}
-
-// Generic page loading skeleton for consistent UX during navigation
-function PageLoadingSkeleton() {
-  return (
-    <div className="space-y-4 animate-pulse">
-      <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded-lg w-1/3" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-        <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-      </div>
-      <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-    </div>
   );
 }

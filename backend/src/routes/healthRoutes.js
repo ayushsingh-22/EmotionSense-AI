@@ -5,6 +5,7 @@
 
 import express from 'express';
 import config from '../config/index.js';
+import { getEmailConfigStatus } from '../utils/nodemailerHelper.js';
 
 const router = express.Router();
 
@@ -47,6 +48,20 @@ router.get('/detailed', (req, res) => {
       used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
       total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB'
     }
+  });
+});
+
+/**
+ * GET /api/health/email
+ * Check email service status
+ */
+router.get('/email', (req, res) => {
+  const emailStatus = getEmailConfigStatus();
+
+  res.json({
+    success: true,
+    email: emailStatus,
+    timestamp: new Date().toISOString()
   });
 });
 

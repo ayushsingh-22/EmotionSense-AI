@@ -11,45 +11,45 @@ import axios from 'axios';
 // Type declarations
 type PermissionState = 'granted' | 'denied' | 'prompt';
 
-type TranslationInfo = {
-  inputTranslated: boolean;
-  outputTranslated: boolean;
-  languageName: string;
-};
-
 interface VoiceChatProps {
   userId: string;
   sessionId?: string;
-  language?: string;
   onMessageReceived?: (response: Record<string, unknown>) => void;
   onError?: (error: string) => void;
   className?: string;
   disabled?: boolean;
 }
 
+const ListeningWave = () => (
+  <div className="relative flex h-10 w-10 items-center justify-center" aria-hidden="true">
+    <span className="absolute h-10 w-10 rounded-full border border-primary/20 animate-ping" />
+    <span className="absolute h-7 w-7 rounded-full border border-primary/25 animate-ping" style={{ animationDelay: '0.25s' }} />
+    <span className="absolute h-4 w-4 rounded-full border border-primary/30 animate-ping" style={{ animationDelay: '0.5s' }} />
+    <span className="relative h-2 w-2 rounded-full bg-primary" />
+  </div>
+);
+
+const ThinkingDots = () => (
+  <div className="flex items-center gap-1" aria-hidden="true">
+    {Array.from({ length: 3 }).map((_, index) => (
+      <span
+        key={index}
+        className="h-2 w-2 rounded-full bg-primary/80 animate-pulse"
+        style={{ animationDelay: `${index * 0.2}s` }}
+      />
+    ))}
+  </div>
+);
+
 // Memoized component for better performance
 const VoiceChatComponent = React.memo<VoiceChatProps>(({
   userId,
   sessionId,
-  language = 'en-US',
   onMessageReceived,
   onError,
   className,
   disabled = false,
 }) => {
-  // Error handling helper
-  const handleError = (error: unknown) => {
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    setError(errorMessage);
-    if (onError) {
-      onError(errorMessage);
-    }
-    toast({
-      title: "Error",
-      description: errorMessage,
-      variant: "destructive",
-    });
-  };
   // State
   const [isMounted, setIsMounted] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -60,8 +60,14 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
   const [listeningDuration, setListeningDuration] = useState(0);
   const [audioResponseUrl, setAudioResponseUrl] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
-  const [translationInfo, setTranslationInfo] = useState<TranslationInfo | null>(null);
+
+  const handleError = useCallback((err: unknown, fallbackMessage: string) => {
+    console.error(fallbackMessage, err);
+    const message = err instanceof Error ? err.message : fallbackMessage;
+    setError(message);
+    onError?.(message);
+    return message;
+  }, [onError]);
 
   // Response type definitions - moved inline to avoid unused interface error
 
@@ -113,13 +119,13 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
   };
 
   // Audio playback functions
-  const stopAudioPlayback = () => {
+  const stopAudioPlayback = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
       setIsPlayingAudio(false);
     }
-  };
+  }, []);
 
   const playAudioResponse = useCallback(async (url: string) => {
     try {
@@ -148,17 +154,10 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       setIsPlayingAudio(true);
       await audio.play();
     } catch (error) {
-      handleError(error);
+      handleError(error, 'Failed to play audio response');
       setIsPlayingAudio(false);
     }
   }, [stopAudioPlayback, handleError]);
-
-  // Memoized values for performance
-  const statusText = useMemo(() => {
-    if (isListening) return `🎙️ Recording (${listeningDuration}s)`;
-    if (isProcessing) return '⏳ Processing...';
-    return '🎤 Ready to Record';
-  }, [isListening, isProcessing, listeningDuration]);
 
   const isButtonDisabled = useMemo(() => 
     disabled || isProcessing, 
@@ -244,7 +243,94 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
     }
   }, [disabled, permission, onError]);
 
-  const stopListening = async () => {
+  // Voice message submission - memoized
+  const submitVoiceMessage = useCallback(async () => {
+    if (disabled || isProcessing || audioChunksRef.current.length === 0) {
+      console.log('Cannot submit: disabled:', disabled, 'processing:', isProcessing, 'chunks:', audioChunksRef.current.length);
+      return;
+    }
+    
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      setCurrentTranscript('Processing voice message...');
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+
+      const formData = new FormData();
+      formData.append('userId', userId);
+      if (sessionId) formData.append('sessionId', sessionId);
+      formData.append('audio', audioBlob, 'voice-message.webm');
+      formData.append('type', 'voice');
+
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/chat/voice`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000
+        }
+      );
+
+      if (response.data.success) {
+        const data = response.data.data;
+
+        if (data.userMessage?.text) {
+          setCurrentTranscript(data.userMessage.text);
+        }
+
+        if (data.audio?.url) {
+          setAudioResponseUrl(data.audio.url);
+          await playAudioResponse(data.audio.url);
+        }
+
+        if (onMessageReceived) {
+          onMessageReceived(data);
+        }
+
+      } else {
+        throw new Error(response.data.error || 'Failed to process voice message');
+      }
+    } catch (err) {
+      console.error('Error submitting voice message:', err);
+      let errorMessage = 'Failed to submit voice message';
+      
+      if (axios.isAxiosError(err)) {
+        const statusCode = err.response?.status;
+        const responseError = err.response?.data?.error;
+
+        console.log(`API Error - Status: ${statusCode}, Message: ${responseError || err.message}`);
+
+        if (statusCode === 404) {
+          errorMessage = 'Voice chat endpoint not available. Please check server configuration.';
+        } else if (statusCode === 413) {
+          errorMessage = 'Audio file too large. Please record a shorter message.';
+        } else if (statusCode === 415) {
+          errorMessage = 'Unsupported audio format. Please try again.';
+        } else if (statusCode === 400 && responseError?.includes('message')) {
+          errorMessage = 'Failed to process voice message. Please try speaking clearly and try again.';
+        } else {
+          errorMessage = responseError || err.message;
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
+      if (onError) onError(errorMessage);
+
+      toast({
+        title: "Voice Message Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [disabled, isProcessing, userId, sessionId, onMessageReceived, onError, playAudioResponse]);
+
+  const stopListening = useCallback(async () => {
     try {
       if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
         setIsListening(false);
@@ -271,18 +357,13 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
         mediaRecorder.onstop = async () => {
           try {
             cleanup();
-            
-            // Create blob from audio chunks
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
-            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-            
             if (audioChunksRef.current.length > 0) {
-              setCurrentTranscript('Processing audio...');
+              setCurrentTranscript('Processing voice message...');
               setIsListening(false);
               setIsProcessing(true);
               
-              // Automatically send for transcription
-              await handleAudioTranscription(audioBlob);
+              // Automatically submit voice message (includes transcription, emotion analysis, LLM response, and TTS)
+              await submitVoiceMessage();
             } else {
               setCurrentTranscript('No audio recorded');
               setIsListening(false);
@@ -323,48 +404,7 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       setIsProcessing(false);
       throw error;
     }
-  };
-
-  // Separate function to handle audio transcription
-  const handleAudioTranscription = async (audioBlob: Blob) => {
-    try {
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-      
-      const response = await axios.post('/api/chat/transcribe', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        timeout: 30000,
-      });
-
-      if (response.data.success) {
-        const transcript = response.data.transcript || 'No speech detected';
-        setCurrentTranscript(transcript);
-        setDetectedLanguage(response.data.detectedLanguage);
-        
-        toast({
-          title: "Transcription Complete",
-          description: `Detected: ${response.data.detectedLanguage || 'Unknown language'}`,
-        });
-      } else {
-        throw new Error(response.data.error || 'Transcription failed');
-      }
-    } catch (error) {
-      console.error('Transcription error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Transcription failed';
-      setError(errorMsg);
-      setCurrentTranscript('Transcription failed. Please try again.');
-      
-      toast({
-        title: "Transcription Error",
-        description: errorMsg,
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  }, [submitVoiceMessage]);
 
   const clearTranscript = useCallback(() => {
     setCurrentTranscript('');
@@ -373,123 +413,6 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       stopListening();
     }
   }, [isListening, stopListening]);
-
-  // Voice message submission - memoized
-  const submitVoiceMessage = useCallback(async () => {
-    if (disabled || isProcessing || audioChunksRef.current.length === 0) {
-      console.log('Cannot submit: disabled:', disabled, 'processing:', isProcessing, 'chunks:', audioChunksRef.current.length);
-      return;
-    }
-    
-    setIsProcessing(true);
-    setError(null);
-
-    try {
-      // Create FormData for multipart upload
-      setCurrentTranscript('Processing voice message...');
-      
-      // Prepare audio data
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
-      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-      
-      // Create FormData for chat message with voice
-      const formData = new FormData();
-      formData.append('userId', userId);
-      if (sessionId) formData.append('sessionId', sessionId);
-      formData.append('audio', audioBlob, 'voice-message.webm');
-      formData.append('type', 'voice');
-
-      // Add language detection parameters
-      if (detectedLanguage) {
-      }
-
-      // Send to voice CHAT endpoint (not just analysis)
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/chat/voice`,
-        formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 120000
-        }
-      );
-
-      if (response.data.success) {
-        const data = response.data.data;
-        
-        // Update transcript from response
-        if (data.userMessage?.text) {
-          setCurrentTranscript(data.userMessage.text);
-        }
-        
-        // Get detected language from the response
-        const detectedLang = data.language?.detected || data.userMessage?.detectedLanguage;
-        if (detectedLang) {
-          setDetectedLanguage(detectedLang);
-          console.log('🌍 Detected language:', detectedLang);
-        }
-        
-        // Update translation info if available
-        if (data.language) {
-          setTranslationInfo({
-            inputTranslated: data.language.inputTranslated || false,
-            outputTranslated: data.language.outputTranslated || false,
-            languageName: data.language.name || 'Unknown'
-          });
-        }
-
-        // Play audio response if available (backend already generated it!)
-        if (data.audio?.url) {
-          console.log(`🎵 Playing voice response in ${data.language?.name || 'detected language'}`);
-          setAudioResponseUrl(data.audio.url);
-          await playAudioResponse(data.audio.url);
-        }
-
-        // Notify parent component
-        if (onMessageReceived) {
-          onMessageReceived(data);
-        }
-
-      } else {
-        throw new Error(response.data.error || 'Failed to process voice message');
-      }
-    } catch (err) {
-      console.error('Error submitting voice message:', err);
-      let errorMessage = 'Failed to submit voice message';
-      
-      if (axios.isAxiosError(err)) {
-        // Handle Axios specific errors
-        const statusCode = err.response?.status;
-        const responseError = err.response?.data?.error;
-        
-        console.log(`API Error - Status: ${statusCode}, Message: ${responseError || err.message}`);
-        
-        if (statusCode === 404) {
-          errorMessage = 'Voice chat endpoint not available. Please check server configuration.';
-        } else if (statusCode === 413) {
-          errorMessage = 'Audio file too large. Please record a shorter message.';
-        } else if (statusCode === 415) {
-          errorMessage = 'Unsupported audio format. Please try again.';
-        } else if (statusCode === 400 && responseError?.includes('message')) {
-          errorMessage = 'Failed to process voice message. Please try speaking clearly and try again.';
-        } else {
-          errorMessage = responseError || err.message;
-        }
-      } else if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-      
-      setError(errorMessage);
-      if (onError) onError(errorMessage);
-      
-      toast({
-        title: "Voice Message Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [disabled, isProcessing, userId, sessionId, detectedLanguage, onMessageReceived, onError, playAudioResponse]);
 
   // Don't render anything until mounted (avoid hydration issues)
   if (!isMounted) return null;
@@ -506,9 +429,27 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       <div className="flex flex-col space-y-4">
         {/* Status Display */}
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">
-            {statusText}
-          </span>
+          <div className="flex items-center gap-3">
+            {isListening ? (
+              <>
+                <ListeningWave />
+                <span className="text-sm font-medium text-primary">
+                  Listening{listeningDuration > 0 ? ` (${listeningDuration}s)` : ''}
+                </span>
+              </>
+            ) : isProcessing ? (
+              <>
+                <ThinkingDots />
+                <span className="text-sm font-medium text-muted-foreground">
+                  Thinking through your message...
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                Tap the mic when you are ready.
+              </span>
+            )}
+          </div>
           {error && (
             <div className="flex items-center gap-1 text-destructive">
               <AlertCircle className="h-4 w-4" />
@@ -516,13 +457,6 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
             </div>
           )}
         </div>
-
-        {/* Transcript Display */}
-        {currentTranscript && (
-          <div className="p-3 bg-secondary rounded-lg">
-            <p className="text-sm">{currentTranscript}</p>
-          </div>
-        )}
 
         {/* Audio Response Player */}
         {audioResponseUrl && (
@@ -602,32 +536,6 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
           </Button>
         </div>
 
-        {/* Translation Info */}
-        {translationInfo && translationInfo.inputTranslated && (
-          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-blue-900 dark:text-blue-100">
-                🌐 Multilingual Mode Active
-              </span>
-            </div>
-            <div className="text-xs text-blue-700 dark:text-blue-300 mt-1 space-y-0.5">
-              <p>• Detected: {translationInfo.languageName}</p>
-              <p>• Input: Translated to English for processing</p>
-              {translationInfo.outputTranslated && (
-                <p>• Output: Translated back to {translationInfo.languageName}</p>
-              )}
-              <p>• Voice: Audio response in {translationInfo.languageName}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Status Info */}
-        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-          <p>• Default Language: {language}</p>
-          {detectedLanguage && <p>• Detected: {detectedLanguage}</p>}
-          <p>• Status: {isListening ? 'Recording' : 'Ready'}</p>
-          {currentTranscript && <p>• Length: {currentTranscript.length} characters</p>}
-        </div>
       </div>
     </Card>
   );

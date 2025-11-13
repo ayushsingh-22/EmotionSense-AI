@@ -1,82 +1,60 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, memo, Suspense, lazy } from 'react';
-import { 
-  MessageCircle
-} from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { ChatMessage } from '@/components/chat/ChatMessage';
+import type { UIEvent } from 'react';
+import axios from 'axios';
+import { MessageSquare, Mic, MicOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { AuthGuard } from '@/components/auth/AuthGuard';
 import { toast } from '@/hooks/use-toast';
 import { getChatMessages } from '@/lib/api';
 import { ChatMessage as ChatMessageType } from '@/lib/supabase';
-import { debounce, PerformanceMonitor } from '@/lib/performance';
-import { AuthGuard } from '@/components/auth/AuthGuard';
-import { cn } from '@/lib/utils';
-import { NewUnifiedChatInput, VoiceState } from '@/components/chat/NewUnifiedChatInput';
-import axios from 'axios';
+import { PerformanceMonitor } from '@/lib/performance';
+import { useStore } from '@/store/useStore';
+import { api } from '@/lib/api';
 
-// Lazy loaded components for better performance
-const ChatLayout = lazy(() => import('@/components/chat/ChatLayout').then(m => ({ default: m.ChatLayout })));
-const ChatSidebar = lazy(() => import('@/components/chat/ChatSidebar').then(m => ({ default: m.ChatSidebar })));
-const ChatMessage = lazy(() => import('@/components/chat/ChatMessage').then(m => ({ default: m.ChatMessage })));
-const TypingIndicator = lazy(() => import('@/components/chat/TypingIndicator').then(m => ({ default: m.TypingIndicator })));
+const ChatLayout = lazy(() => import('@/components/chat/ChatLayout').then((m) => ({ default: m.ChatLayout })));
+const ChatSidebar = lazy(() => import('@/components/chat/ChatSidebar').then((m) => ({ default: m.ChatSidebar })));
+const ChatInput = lazy(() => import('@/components/chat/ChatInput').then((m) => ({ default: m.ChatInput })));
+const VoiceChatComponent = lazy(async () => {
+  const module = await import('@/components/chat/VoiceChatComponent');
+  return { default: module.VoiceChatComponent };
+});
 
 interface ExtendedChatMessage extends ChatMessageType {
   isLoading?: boolean;
   hasContext?: boolean;
   contextLength?: number;
-  transcript?: string; // Voice message transcript
-  voiceMetadata?: {
-    transcript: string;
-    confidence: number;
-    language: string;
-    languageName: string;
-    provider?: string;
-  };
+  editedFrom?: string | null;
 }
 
-// Loading skeleton components
-const MessageSkeleton = memo(function MessageSkeleton() {
-  return (
-    <div className="flex gap-4 px-4 py-6 animate-pulse">
-      <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full flex-shrink-0" />
-      <div className="flex-1 space-y-2">
-        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20" />
-        <div className="space-y-2">
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
-        </div>
-      </div>
-    </div>
-  );
-});
-
-const SidebarSkeleton = memo(function SidebarSkeleton() {
-  return (
-    <div className="w-80 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 p-4">
-      <div className="space-y-4 animate-pulse">
-        <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded" />
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-12 bg-gray-200 dark:bg-gray-700 rounded" />
-        ))}
-      </div>
-    </div>
-  );
-});
+interface EditingState {
+  messageId: string;
+  assistantMessageId?: string;
+  originalText: string;
+}
 
 export default function ChatPage() {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
-  const [isTyping, setIsTyping] = useState(false);
-  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
-  
-  const { user } = useAuth();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [messageText, setMessageText] = useState('');
+  const [chatMode, setChatMode] = useState<'text' | 'voice'>('text');
+  const [editingState, setEditingState] = useState<EditingState | null>(null);
 
-  // Performance tracking
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const userAtBottomRef = useRef(true);
+  const pendingScrollRef = useRef(false);
+
+  const chatOverrides = useStore((state) => state.chatOverrides);
+  const hideChatMessage = useStore((state) => state.hideChatMessage);
+  const setEditedChatMessage = useStore((state) => state.setEditedChatMessage);
+
   useEffect(() => {
     PerformanceMonitor.mark('chat-page-mount');
     return () => {
@@ -84,561 +62,392 @@ export default function ChatPage() {
     };
   }, []);
 
-  // Debounced scroll to prevent excessive scrolling during rapid message updates
-  const debouncedScrollToBottom = useCallback(
-    debounce(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 150),
-    []
-  );
+  const sessionOverrides = useMemo(() => currentSessionId ? chatOverrides[currentSessionId] : undefined, [chatOverrides, currentSessionId]);
 
-  // Auto-scroll to bottom when new messages arrive
+  const displayedMessages = useMemo(() => {
+    if (!sessionOverrides) {
+      return messages;
+    }
+
+    const hidden = new Set(sessionOverrides.hiddenMessages);
+    return messages
+      .filter((message) => !hidden.has(message.id))
+      .map((message) => {
+        const edited = sessionOverrides.editedMessages[message.id];
+        return edited
+          ? { ...message, message: edited, editedFrom: message.editedFrom ?? message.id }
+          : message;
+      });
+  }, [messages, sessionOverrides]);
+
+  const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
+    if (!messagesEndRef.current) {
+      return;
+    }
+    messagesEndRef.current.scrollIntoView({ behavior });
+  }, []);
+
   useEffect(() => {
-    debouncedScrollToBottom();
-  }, [messages, debouncedScrollToBottom]);
+    if (!pendingScrollRef.current && !userAtBottomRef.current) {
+      return;
+    }
 
-  // Handler for new unified input component
-  const handleSendMessage = useCallback(async (messageText: string) => {
-    if (!messageText.trim() || isLoading || !user?.id) return;
+    const behavior = pendingScrollRef.current ? 'auto' : 'smooth';
+    pendingScrollRef.current = false;
+    scrollToBottom(behavior);
+  }, [displayedMessages, scrollToBottom]);
 
-    const message = messageText.trim();
-    
+  const handleScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    const threshold = 120;
+    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    userAtBottomRef.current = distanceFromBottom <= threshold;
+    if (!userAtBottomRef.current) {
+      pendingScrollRef.current = false;
+    }
+  }, []);
+
+  const handleSendMessage = useCallback(async (input: string) => {
+    if (!input.trim() || isLoading || !user?.id) {
+      return;
+    }
+
+    pendingScrollRef.current = true;
+    userAtBottomRef.current = true;
+
+    const trimmed = input.trim();
+    const editing = editingState;
+
+    PerformanceMonitor.mark('message-send-start');
+    setIsLoading(true);
+
+    const tempMessage: ExtendedChatMessage = {
+      id: `temp-${Date.now()}`,
+      user_id: user.id,
+      session_id: currentSessionId || '',
+      role: 'user',
+      message: trimmed,
+      created_at: new Date().toISOString(),
+      editedFrom: editing?.messageId ?? null,
+    };
+
+    setMessages((prev) => {
+      const base = editing
+        ? prev.filter((m) => m.id !== editing.messageId && m.id !== editing.assistantMessageId)
+        : prev;
+      return [...base, tempMessage];
+    });
+
+    setMessageText('');
+    setEditingState(null);
+
     try {
-      PerformanceMonitor.mark('message-send-start');
-      setIsLoading(true);
-      setIsTyping(true);
-
-      // Add user message to UI immediately for better UX
-      const userMessage: ExtendedChatMessage = {
-        id: `temp-${Date.now()}`,
-        user_id: user.id,
-        session_id: currentSessionId || '',
-        role: 'user',
-        message: message,
-        created_at: new Date().toISOString()
-      };
-      
-      setMessages(prev => [...prev, userMessage]);
-
-      // Send message to backend
-      const response = await fetch('http://localhost:8080/api/chat/message', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: message.trim(),
-          sessionId: currentSessionId,
-          userId: user?.id,
-        }),
+      const { data } = await api.post('/api/chat/message', {
+        message: trimmed,
+        sessionId: currentSessionId,
+        userId: user.id,
       });
 
-      const data = await response.json();
-
-      if (data.success) {
-        // Extract user and AI messages from the backend response
-        const realUserMessage: ExtendedChatMessage = {
-          id: data.data.userMessage.id,
-          user_id: user.id,
-          session_id: data.data.sessionId,
-          role: 'user' as const,
-          message: data.data.userMessage.message,
-          emotion_detected: data.data.userMessage.emotion,
-          confidence_score: data.data.userMessage.confidence,
-          created_at: data.data.userMessage.timestamp
-        };
-
-        const aiMessage: ExtendedChatMessage = {
-          id: data.data.aiResponse.id,
-          user_id: user.id,
-          session_id: data.data.sessionId,
-          role: 'assistant' as const,
-          message: data.data.aiResponse.message,
-          created_at: data.data.aiResponse.timestamp,
-          hasContext: data.data.hasContext,
-          contextLength: data.data.contextLength
-        };
-
-        // Replace temporary message with real messages
-        setMessages(prev => {
-          const filtered = prev.filter(m => !m.id.startsWith('temp-'));
-          return [...filtered, realUserMessage, aiMessage];
-        });
-        
-        // Update session management
-        if (!currentSessionId && data.data.sessionId) {
-          setSidebarRefreshTrigger(prev => prev + 1);
-        }
-        setCurrentSessionId(data.data.sessionId);
-
-        // Show enhanced notifications
-        if (data.data.hasContext && data.data.contextLength > 0) {
-          toast({
-            title: "🧠 Using Conversation Context",
-            description: `Response considers ${data.data.contextLength} previous message${data.data.contextLength > 1 ? 's' : ''}`,
-            duration: 4000
-          });
-        }
-        
-        if (data.data.userMessage.emotion && data.data.userMessage.confidence) {
-          const emotion = data.data.userMessage.emotion as string;
-          const confidence = Math.round(data.data.userMessage.confidence * 100);
-          
-          const emotionEmojis = {
-            happy: "😊", sad: "😢", angry: "😠", fear: "😨", 
-            surprise: "😲", disgust: "🤢", neutral: "😐"
-          } as const;
-          
-          const emoji = emotionEmojis[emotion as keyof typeof emotionEmojis] || "🤔";
-          
-          toast({
-            title: `${emoji} Emotion Detected`,
-            description: `${emotion.charAt(0).toUpperCase() + emotion.slice(1)} (${confidence}% confidence)`,
-            duration: 3000
-          });
-        }
-
-        PerformanceMonitor.measure('message-send-complete', 'message-send-start');
-      } else {
-        throw new Error(data.error || 'Failed to send message');
+      if (!data?.success) {
+        throw new Error(data?.error || 'Failed to send message');
       }
 
+      const payload = data.data;
+      if (!payload) {
+        throw new Error('Unexpected response from server');
+      }
+      const newSessionId = payload.sessionId as string;
+
+      const realUserMessage: ExtendedChatMessage = {
+        id: payload.userMessage.id,
+        user_id: user.id,
+        session_id: newSessionId,
+        role: 'user',
+        message: payload.userMessage.message,
+        created_at: payload.userMessage.timestamp,
+        editedFrom: editing?.messageId ?? null,
+      };
+
+      const aiMessage: ExtendedChatMessage = {
+        id: payload.aiResponse.id,
+        user_id: user.id,
+        session_id: newSessionId,
+        role: 'assistant',
+        message: payload.aiResponse.message,
+        created_at: payload.aiResponse.timestamp,
+        hasContext: payload.hasContext,
+        contextLength: payload.contextLength,
+      };
+
+      if (!currentSessionId && newSessionId) {
+        setSidebarRefreshTrigger((prev) => prev + 1);
+      }
+
+      if (editing && currentSessionId) {
+        hideChatMessage(currentSessionId, editing.messageId);
+        if (editing.assistantMessageId) {
+          hideChatMessage(currentSessionId, editing.assistantMessageId);
+        }
+        setEditedChatMessage(newSessionId, realUserMessage.id, trimmed);
+      }
+
+      setMessages((prev) => {
+        const withoutTemp = prev.filter((m) => !m.id.startsWith('temp-'));
+        const base = editing
+          ? withoutTemp.filter((m) => m.id !== editing.messageId && m.id !== editing.assistantMessageId)
+          : withoutTemp;
+        return [...base, realUserMessage, aiMessage];
+      });
+
+      setCurrentSessionId(newSessionId);
+
+        PerformanceMonitor.measure('message-send-complete', 'message-send-start');
     } catch (error) {
       console.error('Failed to send message:', error);
-      
-      // Remove temporary message on error
-      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
-      
-      toast({
-        title: "Error",
-        description: "Failed to send message. Please try again.",
-        variant: "destructive"
-      });
+      const description = axios.isAxiosError(error)
+        ? error.code === 'ERR_NETWORK'
+          ? 'Unable to reach the server. Please ensure the backend is running at NEXT_PUBLIC_API_URL.'
+          : error.response?.data?.error || error.message
+        : 'Failed to send message. Please try again.';
+      toast({ title: 'Error', description, variant: 'destructive' });
+      setMessages((prev) => prev.filter((m) => !m.id.startsWith('temp-')));
     } finally {
       setIsLoading(false);
-      setIsTyping(false);
     }
-  }, [isLoading, user?.id, currentSessionId, toast]);
+  }, [isLoading, user?.id, editingState, currentSessionId, hideChatMessage, setEditedChatMessage]);
 
   const handleSessionSelect = useCallback(async (sessionId: string) => {
     if (!user?.id) return;
-    
     try {
       PerformanceMonitor.mark('session-load-start');
       const data = await getChatMessages(sessionId, user.id);
       setMessages(data.messages || []);
       setCurrentSessionId(sessionId);
+      setMessageText('');
+      setEditingState(null);
+      pendingScrollRef.current = false;
+      userAtBottomRef.current = false;
+      requestAnimationFrame(() => {
+        scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+      });
       PerformanceMonitor.measure('session-load-complete', 'session-load-start');
     } catch (error) {
       console.error('Failed to load session messages:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load chat history.",
-        variant: "destructive"
-      });
+      toast({ title: 'Error', description: 'Failed to load chat history.', variant: 'destructive' });
     }
   }, [user?.id]);
 
   const handleNewSession = useCallback(() => {
     setMessages([]);
     setCurrentSessionId(null);
+    setMessageText('');
+    setEditingState(null);
+    pendingScrollRef.current = false;
+    userAtBottomRef.current = true;
   }, []);
 
-  // Enhanced voice message handler with state management
-  const handleVoiceMessage = useCallback(async (audioBlob: Blob) => {
-    if (!user?.id || isLoading) return;
 
-    console.log(`🎙️ Voice message received: ${audioBlob.size} bytes, type: ${audioBlob.type}`)
 
-    setVoiceState('processing');
-    setIsLoading(true);
+  const handleEditRequest = useCallback((messageId: string) => {
+    const targetIndex = messages.findIndex((msg) => msg.id === messageId);
+    if (targetIndex === -1) return;
+    const target = messages[targetIndex];
+    if (target.role !== 'user') return;
 
-    try {
-      PerformanceMonitor.start('process-voice-message');
-      
-      // Create FormData for audio upload
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'voice-message.webm');
-      formData.append('userId', user.id);
-      if (currentSessionId) {
-        formData.append('sessionId', currentSessionId);
-      }
+    const followingAssistant = messages.slice(targetIndex + 1).find((msg) => msg.role === 'assistant');
 
-      console.log(`📤 Sending audio to backend: ${audioBlob.size} bytes`)
+    setEditingState({
+      messageId,
+      assistantMessageId: followingAssistant?.id,
+      originalText: target.message,
+    });
+    setMessageText(target.message);
+    setChatMode('text');
+  }, [messages]);
 
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/chat/voice`;
-      const response = await axios.post(apiUrl, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+  const handleSubmit = useCallback(() => {
+    if (!messageText.trim()) return;
+    handleSendMessage(messageText);
+  }, [handleSendMessage, messageText]);
 
-      PerformanceMonitor.end('process-voice-message');
-
-      if (response.data.success) {
-        setVoiceState('responding');
-        
-        const { userMessage, aiResponse, sessionId: newSessionId } = response.data.data;
-
-        // Update session ID if new
-        if (newSessionId && newSessionId !== currentSessionId) {
-          setCurrentSessionId(newSessionId);
-          setSidebarRefreshTrigger(prev => prev + 1);
-        }
-
-        // Add both user and AI messages
-        const newMessages: ExtendedChatMessage[] = [];
-
-        if (userMessage) {
-          newMessages.push({
-            id: userMessage.id || `voice-user-${Date.now()}`,
-            message: userMessage.text || userMessage.message,
-            transcript: userMessage.transcript, // Store transcript for voice
-            voiceMetadata: userMessage.transcript ? {
-              transcript: userMessage.transcript,
-              confidence: userMessage.confidence || 0,
-              language: userMessage.detectedLanguage || 'en',
-              languageName: userMessage.languageName || 'English',
-              provider: 'groq_whisper'
-            } : undefined,
-            role: 'user',
-            user_id: user.id,
-            session_id: newSessionId || currentSessionId || '',
-            created_at: new Date().toISOString()
-          });
-        }
-
-        if (aiResponse) {
-          newMessages.push({
-            id: aiResponse.id || `voice-ai-${Date.now()}`,
-            message: aiResponse.message || aiResponse.text,
-            role: 'assistant',
-            user_id: user.id,
-            session_id: newSessionId || currentSessionId || '',
-            created_at: new Date().toISOString()
-          });
-        }
-
-        setMessages(prev => [...prev, ...newMessages]);
-
-        // Handle audio response if available
-        const audioUrl = response.data.data.audio?.url || response.data.data.audioUrl;
-        if (audioUrl) {
-          try {
-            console.log(`🔊 Playing audio response from: ${audioUrl}`);
-            const audio = new Audio(audioUrl);
-            audio.onplay = () => {
-              console.log(`▶️ Audio playback started`);
-            };
-            audio.onended = () => {
-              console.log(`⏹️ Audio playback finished`);
-              setVoiceState('idle');
-            };
-            audio.onerror = (e) => {
-              console.error(`❌ Audio playback error:`, e);
-              setVoiceState('idle');
-            };
-            await audio.play();
-          } catch (audioError) {
-            console.warn('⚠️ Audio playback failed:', audioError);
-            setVoiceState('idle');
-          }
-        } else {
-          console.warn('⚠️ No audio URL available in response');
-          // Reset if no audio
-          setTimeout(() => setVoiceState('idle'), 2000);
-        }
-      } else {
-        throw new Error(response.data.error || 'Voice processing failed');
-      }
-    } catch (error) {
-      console.error('Voice message error:', error);
-      
-      // Enhanced error logging for debugging
-      if (axios.isAxiosError(error)) {
-        console.error('Axios Error Details:', {
-          message: error.message,
-          code: error.code,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          url: error.config?.url,
-          method: error.config?.method,
-          responseData: error.response?.data,
-        });
-        
-        let errorDescription = 'Failed to process voice message. Please try again.';
-        
-        if (error.code === 'ERR_BAD_REQUEST' && error.response?.status === 404) {
-          errorDescription = 'Backend voice endpoint not found. Make sure backend is running on ' + (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080');
-        } else if (!error.response) {
-          errorDescription = 'Cannot connect to backend. Make sure the backend server is running.';
-        } else if (error.response?.status === 400) {
-          errorDescription = error.response?.data?.error || 'Invalid audio file or format.';
-        } else if (error.response?.status === 500) {
-          errorDescription = 'Backend error processing voice. Please check backend logs.';
-        }
-        
-        toast({
-          title: "Voice Chat Error",
-          description: errorDescription,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Voice Chat Error",
-          description: "An unexpected error occurred. Please try again.",
-          variant: "destructive",
-        });
-      }
-      
-      setVoiceState('idle');
-    } finally {
-      setIsLoading(false);
+  const handleVoiceMessageReceived = useCallback((response: Record<string, unknown>) => {
+    if (userAtBottomRef.current) {
+      pendingScrollRef.current = true;
     }
-  }, [user?.id, isLoading, currentSessionId]);
 
-  const handleMessageEdit = useCallback(async (messageId: string, newMessage: string) => {
-    if (!newMessage.trim() || !user?.id) return;
+    const sessionId = response.sessionId as string | undefined;
+    const userMessage = response.userMessage as any;
+    const aiResponse = response.aiResponse as any;
 
-    try {
-      setIsLoading(true);
-
-      // Update the edited message in UI
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId ? { ...msg, message: newMessage.trim() } : msg
-      ));
-      
-      toast({
-        title: "🔄 Regenerating response...",
-        description: "Processing your edited message",
-      });
-
-      // Find the edited message to get session context
-      const editedMessageIndex = messages.findIndex(m => m.id === messageId);
-      if (editedMessageIndex === -1) return;
-
-      const sessionId = messages[editedMessageIndex].session_id || currentSessionId;
-
-      // Call backend to regenerate response for edited message
-      const response = await fetch('http://localhost:8080/api/chat/message', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: newMessage.trim(),
-          sessionId: sessionId,
-          userId: user?.id,
-          editedMessageId: messageId, // Send the original message ID
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Remove the old AI response that followed this user message
-        setMessages(prev => {
-          // Find all messages after the edited message and remove consecutive AI response
-          const newMessages = [...prev];
-          const editedIndex = newMessages.findIndex(m => m.id === messageId);
-          
-          // Remove the next AI response if it exists and is an assistant message
-          if (editedIndex !== -1 && editedIndex + 1 < newMessages.length) {
-            if (newMessages[editedIndex + 1].role === 'assistant') {
-              newMessages.splice(editedIndex + 1, 1);
-            }
-          }
-          
-          // Add new AI response
-          if (data.data.aiResponse) {
-            const newAiMessage: ExtendedChatMessage = {
-              id: data.data.aiResponse.id,
-              user_id: user.id,
-              session_id: sessionId || currentSessionId || '',
-              role: 'assistant' as const,
-              message: data.data.aiResponse.message,
-              created_at: data.data.aiResponse.timestamp,
-              hasContext: data.data.hasContext,
-              contextLength: data.data.contextLength
-            };
-            newMessages.push(newAiMessage);
-          }
-          
-          return newMessages;
-        });
-
-        toast({
-          title: "✅ Response regenerated",
-          description: "AI has generated a new response for your edited message",
-          duration: 3000
-        });
-      } else {
-        toast({
-          title: "❌ Regeneration failed",
-          description: data.error || "Could not regenerate response",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error regenerating response:', error);
-      toast({
-        title: "❌ Error",
-        description: "Failed to regenerate response",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+    if (userMessage) {
+      const reconstructed: ExtendedChatMessage = {
+        id: userMessage.id || `voice-user-${Date.now()}`,
+        user_id: user?.id || '',
+        session_id: sessionId || currentSessionId || '',
+        role: 'user',
+        message: userMessage.transcript || userMessage.message || '',
+        created_at: userMessage.timestamp || new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, reconstructed]);
     }
-  }, [user?.id, messages, currentSessionId]);
 
-  // Header component
-  const header = (
-    <div className="flex items-center gap-4 min-w-0 flex-1">
-      <div className="min-w-0 flex-1">
-        <h1 className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent truncate">
-          Chat with MantrAI
-        </h1>
-        <p className="text-sm text-muted-foreground hidden sm:block">
-          Your intelligent emotional companion with enhanced voice mode
-        </p>
+    if (aiResponse) {
+      const aiMsg: ExtendedChatMessage = {
+        id: aiResponse.id || `voice-ai-${Date.now()}`,
+        user_id: user?.id || '',
+        session_id: sessionId || currentSessionId || '',
+        role: 'assistant',
+        message: aiResponse.message,
+        created_at: aiResponse.timestamp || new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+    }
+
+    if (!currentSessionId && sessionId) {
+      setCurrentSessionId(sessionId);
+      setSidebarRefreshTrigger((prev) => prev + 1);
+    }
+  }, [currentSessionId, user?.id]);
+
+  const headerContent = (
+    <div className="flex w-full items-center justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="text-lg font-semibold text-foreground sm:text-xl">EmotionSense Companion</h1>
+        <p className="text-sm text-muted-foreground">A calm space to talk through what you feel.</p>
       </div>
-      
-      <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
-        <Button
-          onClick={handleNewSession}
-          variant="outline"
-          size="sm"
-          disabled={isLoading}
-          className="bg-white/50 dark:bg-gray-800/50 border-white/20 hover:bg-white/80 dark:hover:bg-gray-800/80"
-        >
-          <span className="hidden sm:inline">New Chat</span>
-          <span className="sm:hidden">New</span>
+
+      <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex rounded-full border border-border/60 bg-background p-1">
+          <Button
+            variant={chatMode === 'text' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setChatMode('text')}
+            className="gap-2"
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">Text</span>
+          </Button>
+          <Button
+            variant={chatMode === 'voice' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setChatMode('voice')}
+            className="gap-2"
+          >
+            {chatMode === 'voice' ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            <span className="hidden sm:inline">Voice</span>
+          </Button>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleNewSession} disabled={isLoading}>
+          New Chat
         </Button>
       </div>
     </div>
   );
 
-  // Sidebar component
-  const sidebar = (
-    <Suspense fallback={<SidebarSkeleton />}>
-      <ChatSidebar
-        onSessionSelect={handleSessionSelect}
-        onNewSession={handleNewSession}
-        currentSessionId={currentSessionId || undefined}
-        refreshTrigger={sidebarRefreshTrigger}
+  const sidebarRenderer = useCallback((options: { isCollapsed: boolean; isMobile: boolean; closeMobile: () => void }) => (
+    <ChatSidebar
+      currentSessionId={currentSessionId || undefined}
+      onSessionSelect={handleSessionSelect}
+      onNewSession={handleNewSession}
+      refreshTrigger={sidebarRefreshTrigger}
+      isCollapsed={options.isCollapsed}
+      isMobile={options.isMobile}
+      closeMobile={options.closeMobile}
+    />
+  ), [currentSessionId, handleSessionSelect, handleNewSession, sidebarRefreshTrigger]);
+
+  const suggestions = ['How are you feeling today?', "I'm having a difficult day...", 'Tell me about something that made you happy', 'I need someone to talk to'];
+
+  const content = (
+    <div className="flex-1 overflow-hidden">
+      {displayedMessages.length === 0 ? (
+        <div className="flex h-full items-center justify-center">
+          <div className="mx-auto max-w-md space-y-4 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+              <MessageSquare className="h-8 w-8 text-primary" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground">Welcome back</h3>
+            <p className="text-sm text-muted-foreground">Share anything on your mind. I&apos;m here to listen and respond with empathy.</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {suggestions.map((suggestion) => (
+                <Button key={suggestion} variant="outline" size="sm" onClick={() => handleSendMessage(suggestion)}>
+                  {suggestion}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex h-full flex-col space-y-4">
+          {displayedMessages.map((message) => (
+            <ChatMessage
+              key={message.id}
+              id={message.id}
+              message={message.message}
+              role={message.role}
+              timestamp={message.created_at}
+              isLoading={message.isLoading}
+              editable={message.role === 'user'}
+              onEditRequest={handleEditRequest}
+              isEdited={Boolean(message.editedFrom)}
+              isHighlighted={editingState?.messageId === message.id}
+            />
+          ))}
+          {isLoading && (
+            <ChatMessage
+              id="typing"
+              message=""
+              role="assistant"
+              isLoading
+            />
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      )}
+    </div>
+  );
+
+  const inputArea = chatMode === 'voice' ? (
+    <div className="rounded-3xl border border-border/60 bg-background/80 p-4 shadow-lg">
+      <Suspense fallback={<div className="flex h-48 items-center justify-center text-muted-foreground">Preparing voice studio…</div>}>
+        <VoiceChatComponent
+          userId={user?.id || ''}
+          sessionId={currentSessionId || undefined}
+          onMessageReceived={handleVoiceMessageReceived}
+          onError={(error: string) => toast({ title: 'Voice Chat Error', description: error, variant: 'destructive' })}
+        />
+      </Suspense>
+    </div>
+  ) : (
+    <Suspense fallback={<div className="flex h-20 items-center justify-center text-muted-foreground">Loading composer…</div>}>
+      <ChatInput
+        value={messageText}
+        onChange={setMessageText}
+        onSubmit={handleSubmit}
+        disabled={isLoading}
+        placeholder="Share your thoughts or feelings…"
+        isLoading={isLoading}
+        isEditing={Boolean(editingState)}
+        editingLabel={editingState ? 'Editing your previous message' : undefined}
+        onCancelEdit={() => {
+          setEditingState(null);
+          setMessageText('');
+        }}
       />
     </Suspense>
   );
 
-  // Chat messages area
-  const chatArea = (
-    <ScrollArea className="h-full">
-      <div className="max-w-4xl mx-auto">
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full min-h-[400px]">
-            <div className="text-center py-16">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mx-auto mb-6 shadow-lg">
-                <MessageCircle className="h-10 w-10 text-white" />
-              </div>
-              <h3 className="text-2xl font-semibold mb-4 text-primary">Start a conversation</h3>
-              <p className="text-muted-foreground text-lg leading-relaxed max-w-md mx-auto">
-                Share your thoughts and feelings. MantrAI is here to listen and provide emotional support with empathy and understanding.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-0">
-            {messages.map((message) => (
-              <Suspense key={message.id} fallback={<MessageSkeleton />}>
-                <ChatMessage
-                  id={message.id}
-                  message={message.message}
-                  role={message.role}
-                  timestamp={message.created_at}
-                  emotion={message.emotion_detected}
-                  confidence={message.confidence_score}
-                  isLoading={message.isLoading}
-                  hasContext={message.hasContext}
-                  contextLength={message.contextLength}
-                  onEdit={handleMessageEdit}
-                  editable={message.role === 'user'}
-                />
-              </Suspense>
-            ))}
-            
-            {isTyping && (
-              <Suspense fallback={<MessageSkeleton />}>
-                <TypingIndicator />
-              </Suspense>
-            )}
-            
-            <div ref={messagesEndRef} />
-          </div>
-        )}
-      </div>
-    </ScrollArea>
-  );
-
-  // Input area - Now unified for both text and voice
-  const inputArea = (
-    <div className="p-4 lg:p-6">
-      <div className="max-w-4xl mx-auto">
-        <Suspense fallback={<div className="h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />}>
-          <NewUnifiedChatInput
-            onSendMessage={handleSendMessage}
-            onVoiceMessage={handleVoiceMessage}
-            disabled={isLoading}
-            className="w-full"
-            placeholder="Ask me anything or use voice mode..."
-          />
-        </Suspense>
-        
-        {/* Enhanced status indicator */}
-        <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            {currentSessionId && (
-              <span>Session: {currentSessionId.slice(0, 8)}...</span>
-            )}
-            {messages.length > 0 && (
-              <span>• {messages.length} messages</span>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <span>Ctrl+M to switch input modes</span>
-            {voiceState !== 'idle' && (
-              <span className={cn(
-                "px-2 py-1 rounded-full text-xs font-medium",
-                voiceState === 'listening' && "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-                voiceState === 'processing' && "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-                voiceState === 'responding' && "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-              )}>
-                {voiceState}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
-    <AuthGuard requireAuth={true}>
-      <Suspense fallback={
-        <div className="h-[calc(100vh-4rem)] flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-gray-600 dark:text-gray-400">Loading chat...</p>
-          </div>
-        </div>
-      }>
+    <AuthGuard requireAuth>
+      <Suspense fallback={<div className="flex h-[calc(100vh-4rem)] items-center justify-center text-muted-foreground">Loading chat…</div>}>
         <ChatLayout
-          header={header}
-          sidebar={sidebar}
+          sidebar={sidebarRenderer}
           input={inputArea}
-          className="bg-gradient-to-br from-gray-50/30 to-white/80 dark:from-gray-900/30 dark:to-gray-900/80"
+          header={headerContent}
+          contentRef={scrollContainerRef}
+          onContentScroll={handleScroll}
         >
-          {chatArea}
+          {content}
         </ChatLayout>
       </Suspense>
     </AuthGuard>

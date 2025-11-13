@@ -135,6 +135,40 @@ const config = {
     level: process.env.LOG_LEVEL || 'info',
     enableConsole: true,
     enableFile: process.env.NODE_ENV === 'production'
+  },
+
+  // Safety and Emergency Contact Settings
+  safety: {
+    enableEmergencyAlerts: process.env.ENABLE_EMERGENCY_ALERTS !== 'false', // Enabled by default
+    highRiskKeywords: (process.env.HIGH_RISK_KEYWORDS || 'suicide,self-harm,harm myself,kill myself,end my life,hurt myself,suicidal').split(','),
+    mediumRiskKeywords: (process.env.MEDIUM_RISK_KEYWORDS || 'worthless,burden,give up,no point,hopeless').split(',')
+  },
+
+  // Email Configuration (Nodemailer)
+  email: {
+    nodemailer: {
+      enabled: process.env.EMAIL_ENABLED === 'true',
+      provider: process.env.EMAIL_PROVIDER || null, // gmail, outlook, smtp, sendgrid
+      gmail: {
+        email: process.env.GMAIL_EMAIL,
+        appPassword: process.env.GMAIL_APP_PASSWORD // Use App Password, not regular password
+      },
+      outlook: {
+        email: process.env.OUTLOOK_EMAIL,
+        password: process.env.OUTLOOK_PASSWORD
+      },
+      smtp: {
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT) || 587,
+        secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+        email: process.env.SMTP_EMAIL,
+        password: process.env.SMTP_PASSWORD
+      },
+      sendgrid: {
+        apiKey: process.env.SENDGRID_API_KEY,
+        fromEmail: process.env.SENDGRID_FROM_EMAIL
+      }
+    }
   }
 };
 

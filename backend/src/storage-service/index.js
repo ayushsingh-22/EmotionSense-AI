@@ -640,3 +640,263 @@ export const deleteOldResults = async (daysOld = 30) => {
     throw error;
   }
 };
+
+/**
+ * User Profile Management Functions
+ */
+
+/**
+ * Get user profile by user ID
+ * @param {string} userId - User ID (UUID)
+ * @returns {Promise<Object|null>} - User profile object or null
+ */
+/**
+ * Get user profile by user ID
+ * @param {string} userId - User ID (UUID)
+ * @returns {Promise<Object|null>} - User profile object or null
+ */
+export const getUserProfile = async (userId) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    // First try to get from profiles table
+    const { data: profileData, error: profileError } = await supabaseClient
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    let userProfile = null;
+
+    if (profileError && profileError.code !== 'PGRST116') {
+      console.warn(`⚠️ Failed to fetch user profile from profiles table: ${profileError.message}`);
+    } else if (profileData) {
+      userProfile = profileData;
+    }
+
+    // If no email found in profile, try to get from auth.users table (requires service role key)
+    if (!userProfile?.email && config.database.supabase.serviceRoleKey) {
+      try {
+        const { data: authData, error: authError } = await supabaseClient.auth.admin.getUserById(userId);
+        
+        if (!authError && authData?.user) {
+          // Merge profile data with auth email
+          userProfile = {
+            ...userProfile,
+            email: authData.user.email,
+            auth_email: authData.user.email, // Store as backup
+            phone: authData.user.phone || userProfile?.phone
+          };
+        }
+      } catch (authError) {
+        console.warn(`⚠️ Could not fetch auth data: ${authError.message}`);
+      }
+    }
+
+    return userProfile || null;
+  } catch (error) {
+    console.error('❌ Error fetching user profile:', error.message);
+    return null;
+  }
+};
+
+/**
+ * Emergency Contact Management Functions
+ */
+
+/**
+ * Get emergency contact for a user
+ */
+export const getEmergencyContact = async (userId) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    const { data, error } = await supabaseClient
+      .from('emergency_contacts')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      throw new Error(`Failed to fetch emergency contact: ${error.message}`);
+    }
+
+    return data || null;
+  } catch (error) {
+    console.error('❌ Error fetching emergency contact:', error.message);
+    return null;
+  }
+};
+
+/**
+ * Check if user has an emergency contact
+ */
+export const hasEmergencyContact = async (userId) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    const { data, error, count } = await supabaseClient
+      .from('emergency_contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error checking emergency contact:', error.message);
+      return false;
+    }
+
+    return count && count > 0;
+  } catch (error) {
+    console.error('❌ Error checking emergency contact:', error.message);
+    return false;
+  }
+};
+
+/**
+ * Create or update emergency contact
+ */
+export const createOrUpdateEmergencyContact = async (userId, contactName, contactEmail, contactPhone = null) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    // Check if contact already exists
+    const existing = await getEmergencyContact(userId);
+
+    let data, error;
+
+    if (existing) {
+      // Update existing contact
+      const result = await supabaseClient
+        .from('emergency_contacts')
+        .update({
+          contact_name: contactName,
+          contact_email: contactEmail,
+          contact_phone: contactPhone,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      data = result.data;
+      error = result.error;
+    } else {
+      // Create new contact
+      const result = await supabaseClient
+        .from('emergency_contacts')
+        .insert({
+          user_id: userId,
+          contact_name: contactName,
+          contact_email: contactEmail,
+          contact_phone: contactPhone
+        })
+        .select()
+        .single();
+
+      data = result.data;
+      error = result.error;
+    }
+
+    if (error) {
+      throw new Error(`Failed to save emergency contact: ${error.message}`);
+    }
+
+    console.log(`✅ Emergency contact saved for user: ${userId}`);
+    return data;
+  } catch (error) {
+    console.error('❌ Error saving emergency contact:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Delete emergency contact
+ */
+export const deleteEmergencyContact = async (userId) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    const { error } = await supabaseClient
+      .from('emergency_contacts')
+      .delete()
+      .eq('user_id', userId);
+
+    if (error) {
+      throw new Error(`Failed to delete emergency contact: ${error.message}`);
+    }
+
+    console.log(`✅ Emergency contact deleted for user: ${userId}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error deleting emergency contact:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Log safety alert event
+ */
+export const logSafetyAlert = async (userId, detectedEmotion, messageText, emergencyContactId = null, alertSent = false) => {
+  try {
+    if (!supabaseClient) {
+      await initializeSupabase();
+    }
+
+    if (!supabaseClient) {
+      throw new Error('Supabase not initialized');
+    }
+
+    const { data, error } = await supabaseClient
+      .from('safety_alerts')
+      .insert({
+        user_id: userId,
+        emergency_contact_id: emergencyContactId,
+        detected_emotion: detectedEmotion,
+        message_text: messageText,
+        alert_sent: alertSent,
+        alert_sent_at: alertSent ? new Date().toISOString() : null
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to log safety alert: ${error.message}`);
+    }
+
+    console.log(`✅ Safety alert logged for user: ${userId}`);
+    return data;
+  } catch (error) {
+    console.error('❌ Error logging safety alert:', error.message);
+    return null;
+  }
+};

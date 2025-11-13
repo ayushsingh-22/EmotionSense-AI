@@ -13,6 +13,8 @@ import { EMOTION_CONFIG } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { DeleteAccountDialog, DeleteDataDialog } from '@/components/auth/DeleteConfirmationDialog';
+import { EmergencyContactForm } from '@/components/auth/EmergencyContactForm';
+import { getEmergencyContact } from '@/lib/api';
 
 interface EmotionStats {
   emotion: string;
@@ -30,6 +32,17 @@ interface SessionStats {
   emotionBreakdown: EmotionStats[];
 }
 
+interface EmergencyContactData {
+  id: string;
+  user_id: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone?: string;
+  notify_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState('');
@@ -39,6 +52,9 @@ export default function ProfilePage() {
   const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
   const [isDeletingData, setIsDeletingData] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [showEmergencyForm, setShowEmergencyForm] = useState(false);
+  const [emergencyContact, setEmergencyContact] = useState<EmergencyContactData | null>(null);
+  const [emergencyLoading, setEmergencyLoading] = useState(true);
   
   const { user, profile, updateProfile, signOut, deleteAccount, deleteAllData: deleteAllUserData } = useAuth();
   const { toast } = useToast();
@@ -50,10 +66,28 @@ export default function ProfilePage() {
   }, [profile]);
 
   useEffect(() => {
-    if (user) {
-      fetchUserStats();
-    }
+    const fetchData = async () => {
+      if (user) {
+        await Promise.all([
+          fetchUserStats(),
+          fetchEmergencyContact()
+        ]);
+      }
+    };
+    fetchData();
   }, [user]);
+
+  const fetchEmergencyContact = async () => {
+    if (!user) return;
+    try {
+      const contact = await getEmergencyContact(user.id);
+      setEmergencyContact(contact);
+    } catch (error) {
+      console.error('Error fetching emergency contact:', error);
+    } finally {
+      setEmergencyLoading(false);
+    }
+  };
 
   const fetchUserStats = async () => {
     if (!user) return;
@@ -370,6 +404,137 @@ export default function ProfilePage() {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Emergency Contact Management - Enhanced */}
+      <Card className="backdrop-blur-sm bg-white/80 dark:bg-gray-900/80 border-blue-200 dark:border-blue-900/30 shadow-xl">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 rounded-t-lg border-b border-blue-200 dark:border-blue-800">
+          <CardTitle className="flex items-center text-lg">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 mr-3">
+              <span className="text-2xl">💙</span>
+            </div>
+            <div>
+              <div className="text-blue-800 dark:text-blue-200 font-semibold">Emergency Contact</div>
+              <p className="text-xs text-blue-600 dark:text-blue-300 font-normal mt-0.5">
+                Your safety net for emotional support
+              </p>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          {showEmergencyForm ? (
+            <EmergencyContactForm
+              userId={user?.id || ''}
+              onSuccess={() => {
+                setShowEmergencyForm(false);
+                fetchEmergencyContact();
+                toast({
+                  title: 'Success',
+                  description: emergencyContact
+                    ? 'Emergency contact updated successfully'
+                    : 'Emergency contact saved successfully',
+                  variant: 'default'
+                });
+              }}
+              onCancel={() => setShowEmergencyForm(false)}
+              isModal={true}
+              initialContact={emergencyContact}
+            />
+          ) : (
+            <div className="space-y-4">
+              {emergencyLoading ? (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 mb-4 animate-pulse">
+                    <span className="text-2xl">💙</span>
+                  </div>
+                  <p className="text-muted-foreground">Loading emergency contact...</p>
+                </div>
+              ) : emergencyContact ? (
+                <div className="space-y-4">
+                  {/* Contact Information Card */}
+                  <div className="p-5 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 flex items-center">
+                        <span className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
+                        Contact Information
+                      </p>
+                      {emergencyContact.notify_enabled && (
+                        <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-medium rounded-full">
+                          ✓ Active
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between bg-white dark:bg-gray-900 p-3 rounded-lg">
+                        <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">Name:</span>
+                        <span className="text-sm font-semibold text-blue-900 dark:text-blue-100 text-right">{emergencyContact.contact_name}</span>
+                      </div>
+                      <div className="flex items-start justify-between bg-white dark:bg-gray-900 p-3 rounded-lg">
+                        <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">Email:</span>
+                        <span className="text-sm font-semibold text-blue-900 dark:text-blue-100 text-right break-all">{emergencyContact.contact_email}</span>
+                      </div>
+                      {emergencyContact.contact_phone && (
+                        <div className="flex items-start justify-between bg-white dark:bg-gray-900 p-3 rounded-lg">
+                          <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">Phone:</span>
+                          <span className="text-sm font-semibold text-blue-900 dark:text-blue-100 text-right">{emergencyContact.contact_phone}</span>
+                        </div>
+                      )}
+                      <div className="flex items-start justify-between bg-white dark:bg-gray-900 p-3 rounded-lg">
+                        <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">Notifications:</span>
+                        <span className="text-sm font-semibold text-blue-900 dark:text-blue-100 text-right">
+                          {emergencyContact.notify_enabled ? '✓ Enabled' : '✗ Disabled'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Info Banner */}
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <p className="text-xs text-blue-800 dark:text-blue-200 flex items-start">
+                      <span className="mr-2 flex-shrink-0">ℹ️</span>
+                      <span>This contact will be notified if our AI detects signs of severe emotional distress in your conversations.</span>
+                    </p>
+                  </div>
+                  
+                  {/* Action Button */}
+                  <Button
+                    onClick={() => setShowEmergencyForm(true)}
+                    variant="outline"
+                    className="w-full border-2 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 font-medium"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Update Emergency Contact
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Warning Banner for No Contact */}
+                  <div className="p-6 bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-950/20 dark:to-orange-950/20 border-2 border-yellow-300 dark:border-yellow-800 rounded-xl text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-yellow-100 dark:bg-yellow-900/30 mb-4">
+                      <span className="text-4xl">⚠️</span>
+                    </div>
+                    <h4 className="text-lg font-semibold text-yellow-900 dark:text-yellow-100 mb-2">
+                      No Emergency Contact Set
+                    </h4>
+                    <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-4">
+                      Add a trusted contact to help us keep you safe. They&apos;ll be notified only in cases of severe emotional distress.
+                    </p>
+                  </div>
+                  
+                  {/* Add Contact Button */}
+                  <Button
+                    onClick={() => setShowEmergencyForm(true)}
+                    className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-medium py-6 text-base shadow-lg hover:shadow-xl transition-all duration-200"
+                  >
+                    <span className="text-xl mr-2">💙</span>
+                    Add Emergency Contact Now
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

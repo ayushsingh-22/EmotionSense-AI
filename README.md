@@ -32,12 +32,14 @@ A full-stack **AI-powered emotion detection platform** combining **dual-model te
 - **Multi-Modal Fusion** - Weighted combination of text and voice emotions
 - **AI Responses** - Google Gemini 2.0 Flash with LLaMA 3.3 fallback
 - **Chat Persistence** - Supabase PostgreSQL with session management
+- **Safety Alerts** - Emergency contact notifications with configurable high-risk keyword detection
 
 ### Use Cases
 - Mental health support chatbot
 - Empathetic customer service
 - Mood tracking application
 - Emotion-aware voice assistants
+- Crisis escalation and wellbeing monitoring
 - Research on emotion detection
 
 ---
@@ -55,6 +57,7 @@ A full-stack **AI-powered emotion detection platform** combining **dual-model te
 | **STT** | Groq Whisper v3 | Speech-to-text |
 | **TTS** | Google Cloud, Piper, Sarvam | Text-to-speech |
 | **Emotion Models** | HuggingFace | DistilRoBERTa, Wav2Vec2 |
+| **Email Alerts** | Nodemailer (Gmail/SMTP/SendGrid) | Emergency notifications |
 | **Database** | Supabase (PostgreSQL) | User data & chat history |
 | **Cache** | In-memory | 5-min emotion cache |
 
@@ -118,14 +121,21 @@ A full-stack **AI-powered emotion detection platform** combining **dual-model te
    │ • All Model Scores       │
    └────────┬─────────────────┘
             │
-   ┌────────▼────────────────────────────┐
-   │  LLM Response Generation            │
-   │  (with Fallback Chain)              │
-   │ • Primary: Google Gemini 2.0 Flash  │
-   │ • Fallback: LLaMA 3.3 via Groq     │
-   │ • Context: Chat History (5-10 msgs) │
-   └────────┬───────────────────────────┘
-            │
+  ┌────────▼────────────────────────────┐
+  │  Safety Analysis & Alerting         │
+  │ • High-Risk Keyword Scan            │
+  │ • Emergency Contact Lookup          │
+  │ • Alert Logging & Notification      │
+  └────────┬────────────────────────────┘
+        │
+  ┌────────▼────────────────────────────┐
+  │  LLM Response Generation            │
+  │  (with Fallback Chain)              │
+  │ • Primary: Google Gemini 2.0 Flash  │
+  │ • Fallback: LLaMA 3.3 via Groq     │
+  │ • Context: Chat History (5-10 msgs) │
+  └────────┬───────────────────────────┘
+        │
    ┌────────▼──────────────────────┐
    │  Response Enhancement         │
    │ • Optional TTS Synthesis      │
@@ -195,6 +205,8 @@ A full-stack **AI-powered emotion detection platform** combining **dual-model te
        │ • User Profiles          │
        │ • Analytics              │
        └──────────────────────────┘
+
+  Safety-specific utilities (`emergencyNotifier`, `safetyHelper`, `nodemailerHelper`) plug into the chat request flow, allowing high-risk detections to query Supabase for emergency contacts and dispatch alerts without blocking the main response pipeline.
 ```
 
 ---
@@ -235,6 +247,7 @@ A full-stack **AI-powered emotion detection platform** combining **dual-model te
 - **Waveform Visualization**: Real-time audio visualization
 - **Chat History**: Searchable message history with emotion filters
 - **Performance Monitoring**: Track API response times
+- **Safety Prompts**: Emergency contact setup flows with gentle modal nudges
 
 ### 🔐 Security
 - **Supabase RLS**: Row-Level Security for data isolation
@@ -242,6 +255,13 @@ A full-stack **AI-powered emotion detection platform** combining **dual-model te
 - **CORS Configuration**: Controlled cross-origin access
 - **Input Validation**: Server-side text and audio validation
 - **Rate Limiting**: (Configurable) API request throttling
+
+### 🆘 Safety & Emergency Support
+- **Emergency Contacts**: Users can register trusted contacts stored with Supabase RLS protection
+- **High-Risk Detection**: Configurable keyword scanner escalates concerning language in real time
+- **Automated Outreach**: Nodemailer-powered alerts notify emergency contacts with context and emotion insight
+- **Safety Logging**: Every alert is persisted to `safety_alerts` for audit trails and analytics
+- **Gentle Prompts**: Frontend setup flow and modals encourage users to add or update contacts without friction
 
 ---
 
@@ -261,6 +281,7 @@ emotion-sense-ai/
 │   │   │   └── uploadMiddleware.js      # Multer file upload config
 │   │   ├── routes/
 │   │   │   ├── chatRoutes.js            # Chat session endpoints
+│   │   │   ├── emergencyRoutes.js       # Emergency contact management
 │   │   │   ├── textRoutes.js            # Text emotion endpoints
 │   │   │   ├── voiceRoutes.js           # Voice emotion endpoints
 │   │   │   ├── multiModalRoutes.js      # Combined emotion endpoints
@@ -295,11 +316,17 @@ emotion-sense-ai/
 │   │   │   ├── helpers.js               # Utility functions
 │   │   │   ├── logger.js                # Logging utility
 │   │   │   ├── translationHelper.js     # Translation utilities
+│   │   │   ├── emergencyNotifier.js     # Safety alert orchestration
+│   │   │   ├── safetyHelper.js          # High-risk detection helpers
+│   │   │   ├── nodemailerHelper.js      # Email provider abstraction
 │   │   │   └── voiceHelper.js           # Voice utilities
 │   │   └── models/
 │   │       └── emotion_bilstm_final.onnx # BiLSTM model file
 │   ├── migrations/
-│   │   └── add_audio_features_column.sql # Database migrations
+│   │   ├── add_audio_features_column.sql     # Audio feature storage
+│   │   ├── create_alert_logs_table.sql       # Initial alert logging schema
+│   │   ├── create_alert_logs_table_FIXED.sql # Patched alert logging schema
+│   │   └── create_emergency_contacts.sql     # Emergency contacts + safety alerts
 │   ├── .env                             # Environment variables
 │   ├── .env.example                     # Environment template
 │   ├── package.json                     # Dependencies
@@ -324,8 +351,11 @@ emotion-sense-ai/
 │   │   ├── history/page.tsx             # Chat history page
 │   │   ├── profile/page.tsx             # User profile page
 │   │   ├── settings/page.tsx            # Settings page
+│   │   ├── setup/
+│   │   │   └── emergency-contact/page.tsx # Guided emergency contact onboarding
 │   │   └── globals.css                  # Global styles
 │   ├── components/
+│   │   ├── EmergencyContactChecker.tsx  # Safety prompt modal wrapper
 │   │   ├── navbar.tsx                   # Navigation bar
 │   │   ├── sidebar.tsx                  # Side navigation
 │   │   ├── MainContent.tsx              # Main content wrapper
@@ -334,7 +364,9 @@ emotion-sense-ai/
 │   │   ├── theme-toggle.tsx             # Dark mode toggle
 │   │   ├── auth/
 │   │   │   ├── AuthGuard.tsx            # Route protection
-│   │   │   └── DeleteConfirmationDialog.tsx
+│   │   │   ├── DeleteConfirmationDialog.tsx
+│   │   │   ├── EmergencyContactForm.tsx # Create/update safety contact
+│   │   │   └── EmergencyContactModal.tsx # Modal experience for prompts
 │   │   ├── chat/
 │   │   │   ├── ChatLayout.tsx           # Chat container
 │   │   │   ├── ChatSidebar.tsx          # Chat session list
@@ -362,6 +394,7 @@ emotion-sense-ai/
 │   │   └── SidebarContext.tsx           # Sidebar state
 │   ├── hooks/
 │   │   ├── use-toast.ts                 # Toast hook
+│   │   ├── useEmergencyContactSetup.ts  # Safety setup logic
 │   │   ├── useVoiceRecorder.ts          # Voice recording logic
 │   │   └── useVoiceRecording.ts         # Alternative recording
 │   ├── lib/
@@ -427,10 +460,13 @@ cp .env.example .env
 nano .env
 # (See Configuration Guide below)
 
-# 6. Verify ONNX model file
+# 6. Run emergency contact migrations (Supabase service role required)
+psql $SUPABASE_DATABASE_URL -f migrations/create_emergency_contacts.sql
+
+# 7. Verify ONNX model file
 ls -la src/models/emotion_bilstm_final.onnx
 
-# 7. Start development server
+# 8. Start development server
 npm run dev
 
 # Backend runs on: http://localhost:8080
@@ -479,6 +515,7 @@ cd backend && npm run test:basic
 - [ ] ONNX model file exists in `backend/src/models/`
 - [ ] All environment variables are set
 - [ ] Supabase connection established
+- [ ] Emergency contact migration applied (tables visible in Supabase)
 - [ ] API endpoints respond to health checks
 
 ```bash
@@ -622,6 +659,8 @@ Supabase ORM layer for persistent data storage.
 - `chat_sessions`: Chat session metadata
 - `messages`: Individual chat messages
 - `emotions`: Emotion analysis logs
+- `emergency_contacts`: Trusted contacts per user (unique)
+- `safety_alerts`: High-risk message audit trail
 
 **Features:**
 - Row-Level Security (RLS) for user isolation
@@ -646,6 +685,13 @@ deleteMessage(messageId)
 createUser(userData)
 updateUserProfile(userId, data)
 getUserAnalytics(userId)
+
+// Emergency Contacts
+getEmergencyContact(userId)
+hasEmergencyContact(userId)
+createOrUpdateEmergencyContact(userId, name, email, phone?)
+deleteEmergencyContact(userId)
+logSafetyAlert(userId, emotion, message, contactId?, alertSent?)
 ```
 
 ---
@@ -680,6 +726,40 @@ Orchestrates text, voice, and data services.
 - Service coordination
 - Error handling & fallbacks
 - Response normalization
+
+---
+
+### 8. **Emergency & Safety Service** (`src/routes/emergencyRoutes.js` + `src/utils/emergencyNotifier.js`)
+Safeguards users by monitoring high-risk language and managing emergency outreach.
+
+**Features:**
+- Emergency contact CRUD with Supabase RLS and REST endpoints
+- High/medium risk keyword detection configurable via environment
+- Automated email alerts via Nodemailer with per-contact opt-in (`notify_enabled`)
+- Persistent `safety_alerts` logging for auditability and analytics
+- Optional escalation hooks reusable across services
+
+**Key Endpoints:**
+```http
+POST /api/emergency/save        # Create or replace contact
+POST /api/emergency/update      # Update existing contact (PUT supported)
+GET  /api/emergency/:userId     # Fetch saved contact
+GET  /api/emergency/check/:id   # Boolean presence check
+DELETE /api/emergency/:userId   # Remove contact
+GET  /api/emergency/email/status# Inspect email provider configuration
+```
+
+**Sample Alert Log:**
+```json
+{
+  "user_id": "uuid",
+  "detected_emotion": "sad",
+  "message_text": "I don't want to live anymore",
+  "alert_sent": true,
+  "alert_sent_at": "2025-11-13T10:32:45.120Z",
+  "emergency_contact_id": "contact-uuid"
+}
+```
 
 ---
 
@@ -746,6 +826,10 @@ App
 ├── History Page
 │   └── AnalysisTable (filterable, sortable)
 │
+├── Safety Setup
+│   ├── EmergencyContactForm (guided onboarding)
+│   └── EmergencyContactModal (in-app reminders)
+│
 └── Settings Page
     ├── ThemeToggle
     ├── LanguageSelect
@@ -768,6 +852,7 @@ export const analyzeText = async (text: string) => {
 // - Error handling & retry logic
 // - Performance monitoring
 // - Type-safe responses
+// - Emergency contact helpers (`hasEmergencyContact`, `saveEmergencyContact`, etc.)
 ```
 
 ### Performance Optimizations
@@ -837,6 +922,26 @@ Response:
   "audioUrl": "/api/tts/audio/file.wav",
   "messageId": "uuid"
 }
+```
+
+### Emergency Contact Management
+```
+POST   /api/emergency/save
+Content-Type: application/json
+
+Request:
+{
+  "userId": "uuid",
+  "contactName": "Jane Doe",
+  "contactEmail": "jane@example.com",
+  "contactPhone": "+1-555-123-4567"
+}
+
+GET    /api/emergency/{userId}        - Retrieve saved contact
+POST   /api/emergency/update          - Update contact (PUT alias supported)
+GET    /api/emergency/check/{userId}  - Returns { hasEmergencyContact: boolean }
+DELETE /api/emergency/{userId}        - Remove contact and disable alerts
+GET    /api/emergency/email/status    - Inspect Nodemailer configuration
 ```
 
 ### Chat Sessions
@@ -955,6 +1060,36 @@ CREATE TABLE emotions (
   confidence FLOAT,
   model_used VARCHAR(100),
   input_type VARCHAR(20) CHECK (input_type IN ('text', 'voice', 'multimodal')),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+#### `emergency_contacts`
+```sql
+CREATE TABLE emergency_contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  contact_name TEXT NOT NULL,
+  contact_email TEXT NOT NULL,
+  contact_phone TEXT,
+  notify_enabled BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+```
+
+#### `safety_alerts`
+```sql
+CREATE TABLE safety_alerts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  emergency_contact_id UUID REFERENCES emergency_contacts(id) ON DELETE SET NULL,
+  detected_emotion TEXT NOT NULL,
+  message_text TEXT,
+  alert_sent BOOLEAN DEFAULT FALSE,
+  alert_sent_at TIMESTAMP,
+  alert_response TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 ```
@@ -1129,6 +1264,21 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-service-role-key
 
 # ============================================
+# SAFETY & EMERGENCY ALERTS
+# ============================================
+ENABLE_EMERGENCY_ALERTS=true
+HIGH_RISK_KEYWORDS=suicide,self-harm,kill myself,end my life,hurt myself
+MEDIUM_RISK_KEYWORDS=worthless,burden,give up,hopeless,no point
+
+# Nodemailer provider (choose one)
+EMAIL_ENABLED=true
+EMAIL_PROVIDER=gmail        # gmail|outlook|smtp|sendgrid
+GMAIL_EMAIL=your.gmail@example.com
+GMAIL_APP_PASSWORD=generated-app-password
+# SMTP_HOST= # Required when EMAIL_PROVIDER=smtp
+# SENDGRID_API_KEY= # Required when EMAIL_PROVIDER=sendgrid
+
+# ============================================
 # ONNX MODEL
 # ============================================
 BILSTM_TEXT_ENABLED=true
@@ -1219,6 +1369,29 @@ export async function generateResponse(message, emotion) {
 
 ---
 
+### Enabling Emergency Alert Workflow
+
+1. **Run Database Migration**
+  ```bash
+  psql $SUPABASE_DATABASE_URL -f migrations/create_emergency_contacts.sql
+  ```
+  This creates `emergency_contacts`, `safety_alerts`, and associated RLS policies.
+
+2. **Configure Email Provider**
+  - Set `EMAIL_ENABLED=true` and select a provider via `EMAIL_PROVIDER`
+  - Supply credentials (`GMAIL_APP_PASSWORD`, SMTP secrets, or `SENDGRID_API_KEY`)
+  - Verify configuration with `GET /api/emergency/email/status`
+
+3. **Seed Emergency Contacts (Optional)**
+  - Users can add contacts via `/setup/emergency-contact`
+  - For testing, POST to `/api/emergency/save` with a Supabase-authenticated user ID
+
+4. **Trigger a Safe Test**
+  - Send a chat message containing a high-risk keyword (e.g., "I want to hurt myself")
+  - Confirm an email is sent and an entry appears in `safety_alerts`
+
+---
+
 ### Testing Emotion Detection
 
 ```bash
@@ -1239,6 +1412,29 @@ curl -X POST http://localhost:8080/api/chat/message \
     "message": "I had a bad day",
     "sessionId": "session-123"
   }'
+```
+
+---
+
+### Testing Emergency Contact APIs
+
+```bash
+# Save or update contact
+curl -X POST http://localhost:8080/api/emergency/save \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "userId": "your-user-uuid",
+    "contactName": "Support Friend",
+    "contactEmail": "friend@example.com"
+  }'
+
+# Check if contact exists
+curl -X GET http://localhost:8080/api/emergency/check/your-user-uuid \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# Inspect email configuration status
+curl -X GET http://localhost:8080/api/emergency/email/status
 ```
 
 ---
@@ -1282,6 +1478,11 @@ npm run test:translation
 - Implement `useMemo()` for heavy computations
 - Use dynamic imports for large components
 - Cache API responses
+
+**5. Safety Prompts**
+- Mount `EmergencyContactChecker` near the app shell so it can prompt authenticated users once
+- Reuse `EmergencyContactForm` in onboarding pages and modals to keep validation consistent
+- Gate alert-related UI behind Supabase-authenticated `user.id` to avoid anonymous API calls
 
 ---
 
@@ -1434,6 +1635,19 @@ pip install -r requirements.txt
 # Or manually:
 pip install onnxruntime numpy librosa
 ```
+
+---
+
+#### 8. **Emergency Alerts Not Sending**
+```
+Warning: Failed to send emergency alert email
+```
+**Solution:**
+- Ensure `EMAIL_ENABLED=true` and `EMAIL_PROVIDER` matches your credential set
+- For Gmail, use an App Password and enable `Less secure app access` (or Workspace equivalent)
+- Confirm `GET /api/emergency/email/status` reports `configured: true`
+- Verify recipient email exists in `emergency_contacts` (`notify_enabled` must be true)
+- Check server logs for SMTP errors and adjust firewall/port settings
 
 ---
 

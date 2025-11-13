@@ -5,62 +5,100 @@
 /* Import our optimized chat styles */
 @import '../styles/chat-optimized.css';
 
-/* Global theme transition support for smooth dark/light mode switches */
-* {
-  @apply transition-colors duration-300 ease-in-out;
-}
+/**
+ * Global Color Scheme (ChatGPT-inspired professional design)
+ * Primary: #5a67d8 (Indigo)
+ * Accent: #667eea (Light Indigo)
+ * Background: #f9fafb (Light) / #0f172a (Dark)
+ * Text: #111827 (Dark) / #f3f4f6 (Light)
+ */
 
 @layer base {
   :root {
     --radius: 0.5rem;
-    --background: 0 0% 100%;
-    --foreground: 224 71.4% 4.1%;
-    --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 71.4% 4.1%;
-    --primary: 220.9 39.3% 11%;
-    --primary-foreground: 210 20% 98%;
-    --secondary: 220 14.3% 95.9%;
-    --secondary-foreground: 220.9 39.3% 11%;
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 220 8.9% 46.1%;
-    --accent: 220 14.3% 95.9%;
-    --accent-foreground: 220.9 39.3% 11%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 224 71.4% 4.1%;
     
-    /* Performance: disable transitions during animations */
-    --disable-transitions: 0;
+    /* Light Mode: Clean and professional */
+    --background: 0 0% 100%;
+    --foreground: 217 33% 17%;
+    --card: 0 0% 100%;
+    --card-foreground: 217 33% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 217 33% 17%;
+    
+    /* Primary: #5a67d8 (Indigo) */
+    --primary: 262 80% 50%;
+    --primary-foreground: 0 0% 100%;
+    
+    /* Secondary: #667eea (Light Indigo) */
+    --secondary: 260 84% 62%;
+    --secondary-foreground: 0 0% 100%;
+    
+    --muted: 220 13% 95%;
+    --muted-foreground: 217 10% 47%;
+    
+    /* Accent: #667eea */
+    --accent: 260 84% 62%;
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 13% 90%;
+    --input: 220 13% 91%;
+    --ring: 262 80% 50%;
+    
+    /* Chart colors for data visualization */
+    --chart-1: 262 80% 50%;
+    --chart-2: 260 84% 62%;
+    --chart-3: 193 82% 31%;
+    --chart-4: 280 85% 63%;
+    --chart-5: 45 93% 47%;
   }
 
   .dark {
-    --background: 224 71.4% 4.1%;
+    /* Dark Mode: Professional dark theme */
+    --background: 224 71% 4%;
     --foreground: 210 20% 98%;
-    --card: 224 71.4% 4.1%;
+    --card: 217 33% 17%;
     --card-foreground: 210 20% 98%;
-    --popover: 224 71.4% 4.1%;
+    --popover: 217 33% 17%;
     --popover-foreground: 210 20% 98%;
-    --primary: 210 20% 98%;
-    --primary-foreground: 220.9 39.3% 11%;
-    --secondary: 215 27.9% 16.9%;
-    --secondary-foreground: 210 20% 98%;
-    --muted: 215 27.9% 16.9%;
-    --muted-foreground: 217.9 10.6% 64.9%;
-    --accent: 215 27.9% 16.9%;
-    --accent-foreground: 210 20% 98%;
-    --destructive: 0 62.8% 30.6%;
+    
+    /* Primary remains consistent: #5a67d8 */
+    --primary: 262 80% 60%;
+    --primary-foreground: 224 71% 4%;
+    
+    /* Secondary: #667eea */
+    --secondary: 260 84% 62%;
+    --secondary-foreground: 224 71% 4%;
+    
+    --muted: 217 33% 25%;
+    --muted-foreground: 217 9% 65%;
+    
+    /* Accent: #667eea */
+    --accent: 260 84% 62%;
+    --accent-foreground: 224 71% 4%;
+    
+    --destructive: 0 63% 31%;
     --destructive-foreground: 210 20% 98%;
-    --border: 215 27.9% 16.9%;
-    --input: 215 27.9% 16.9%;
-    --ring: 216 12.2% 83.9%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 262 80% 60%;
+    
+    /* Chart colors for dark mode */
+    --chart-1: 262 80% 60%;
+    --chart-2: 260 84% 62%;
+    --chart-3: 193 82% 51%;
+    --chart-4: 280 85% 63%;
+    --chart-5: 45 93% 57%;
+  }
+
+  * {
+    @apply border-border;
   }
 
   html, body {
     @apply bg-background text-foreground antialiased scroll-smooth;
+    font-feature-settings: "rlig" 1, "calt" 1;
     transition-property: background-color, color, border-color;
     transition-duration: 300ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -68,6 +106,11 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  /* Smooth focus visible styles */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
   }
 }
 
@@ -84,30 +127,6 @@
   /* Theme transition styles */
   .theme-transition {
     @apply transition-all duration-300;
-  }
-  
-  /* Mobile styles */
-  @screen sm {
-    .mobile-padding {
-      @apply p-4;
-    }
-    .mobile-text {
-      @apply text-sm;
-    }
-  }
-  
-  /* Tablet styles */
-  @screen md {
-    .tablet-padding {
-      @apply p-6;
-    }
-  }
-  
-  /* Desktop styles */
-  @screen lg {
-    .desktop-padding {
-      @apply p-8;
-    }
   }
 
   /* Performance optimizations */
@@ -147,21 +166,9 @@
     @apply focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary;
   }
   
-  /* Mobile-first layout utilities */
-  .mobile-nav {
-    @apply fixed bottom-0 left-0 right-0 bg-background border-t dark:border-gray-800 
-           md:relative md:border-t-0;
-  }
-  
-  .mobile-menu {
-    @apply fixed inset-0 bg-background/95 backdrop-blur-sm z-50
-           md:relative md:bg-transparent md:backdrop-blur-none;
-  }
-  
   /* Card and container styles */
   .card {
-    @apply bg-card text-card-foreground rounded-lg border shadow-sm
-           dark:border-gray-800 dark:shadow-none;
+    @apply bg-card text-card-foreground rounded-lg border shadow-sm dark:shadow-none;
   }
   
   .glass-effect {
@@ -180,6 +187,15 @@
   .body-text {
     @apply text-base leading-7 text-muted-foreground;
   }
+
+  /* Chat-specific utilities */
+  .chat-message-user {
+    @apply bg-blue-500/10 dark:bg-blue-900/20 rounded-2xl px-4 py-3 max-w-xl;
+  }
+
+  .chat-message-assistant {
+    @apply bg-gray-50/50 dark:bg-gray-800/50 rounded-2xl px-4 py-3 max-w-2xl;
+  }
 }
 
 /* Custom scrollbar for better dark/light mode compatibility */
@@ -193,7 +209,7 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-700 rounded-full;
+  @apply bg-gray-300 dark:bg-gray-700 rounded-full transition-colors;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -207,113 +223,10 @@ select {
   @apply bg-background border-input;
 }
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 224 71.4% 4.1%;
-    --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 71.4% 4.1%;
-    --primary: 220.9 39.3% 11%;
-    --primary-foreground: 210 20% 98%;
-    --secondary: 220 14.3% 95.9%;
-    --secondary-foreground: 220.9 39.3% 11%;
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 220 8.9% 46.1%;
-    --accent: 220 14.3% 95.9%;
-    --accent-foreground: 220.9 39.3% 11%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 224 71.4% 4.1%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.75rem;
-  }
-  
-  .dark {
-    --background: 224 71.4% 4.1%;
-    --foreground: 210 20% 98%;
-    --card: 224 71.4% 4.1%;
-    --card-foreground: 210 20% 98%;
-    --popover: 224 71.4% 4.1%;
-    --popover-foreground: 210 20% 98%;
-    --primary: 210 20% 98%;
-    --primary-foreground: 220.9 39.3% 11%;
-    --secondary: 215 27.9% 16.9%;
-    --secondary-foreground: 210 20% 98%;
-    --muted: 215 27.9% 16.9%;
-    --muted-foreground: 217.9 10.6% 64.9%;
-    --accent: 215 27.9% 16.9%;
-    --accent-foreground: 210 20% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 215 27.9% 16.9%;
-    --input: 215 27.9% 16.9%;
-    --ring: 216 12.2% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
-  
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-  }
-  
-  /* Better focus styles */
-  *:focus-visible {
-    @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-background;
-  }
-  
-  /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  
-  ::-webkit-scrollbar-track {
-    @apply bg-muted/20;
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    @apply bg-muted-foreground/30 rounded-full;
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/50;
-  }
-  
-  /* Animation for smooth transitions */
-  * {
-    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 150ms;
-  }
-}
-
 @layer components {
   /* Custom gradient text */
   .gradient-text {
-    @apply bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent;
   }
   
   /* Glass morphism effect */
@@ -342,7 +255,7 @@ select {
   
   /* Glow effect */
   .glow {
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 20px rgba(90, 103, 216, 0.5);
   }
   
   /* Floating animation */
