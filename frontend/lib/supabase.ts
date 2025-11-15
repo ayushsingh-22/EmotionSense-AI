@@ -51,8 +51,14 @@ export interface ChatMessage {
   user_id: string;
   session_id: string;
   role: 'user' | 'assistant';
-  message: string;
-  emotion_detected?: string;
-  confidence_score?: number;
+  content: string;
+  emotion?: string | null;
+  emotion_confidence?: number | null;
+  metadata?: Record<string, unknown> | null;
+  audio_url?: string | null;
   created_at: string;
+  // Legacy fields (to support existing components while we migrate usage)
+  message?: string;
+  emotion_detected?: string | null;
+  confidence_score?: number | null;
 }

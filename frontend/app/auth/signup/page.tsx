@@ -15,9 +15,7 @@ export default function SignUpPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const { signUp, user } = useAuth();
@@ -35,13 +33,8 @@ export default function SignUpPage() {
     e.preventDefault();
     setError('');
 
-    if (!fullName || !email || !password || !confirmPassword) {
+    if (!fullName || !email || !password) {
       setError('Please fill in all fields');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
       return;
     }
 
@@ -59,21 +52,16 @@ export default function SignUpPage() {
 
     try {
       setIsLoading(true);
-      console.log('Starting signup process...', { email, fullName });
       
       const result = await signUp(email, password, fullName);
       
-      console.log('Signup result:', result);
-      
       if (!result.error) {
-        console.log('Signup successful, redirecting to main screen...');
         toast({
           title: 'Account created successfully!',
           description: 'Welcome to MantrAI! You can now start chatting.',
         });
         router.push('/');
       } else {
-        console.error('Signup error:', result.error);
         setError(result.error.message || 'Failed to create account. Please try again.');
       }
     } catch (error) {
@@ -143,7 +131,7 @@ export default function SignUpPage() {
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Create a password"
+                  placeholder="Create a password (min. 6 characters)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -168,41 +156,10 @@ export default function SignUpPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-sm font-medium">Confirm Password</Label>
-              <div className="relative">
-                <Input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  placeholder="Confirm your password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  minLength={6}
-                  className="h-12 rounded-xl border-2 focus:border-blue-500 transition-all duration-300 pr-12"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  disabled={isLoading}
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
-
             <Button 
               type="submit" 
               className="w-full h-12 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105" 
-              disabled={isLoading || !fullName || !email || !password || !confirmPassword || password !== confirmPassword}
+              disabled={isLoading || !fullName || !email || !password}
             >
               {isLoading ? (
                 <div className="flex items-center">
@@ -213,41 +170,7 @@ export default function SignUpPage() {
                 'Create account'
               )}
             </Button>
-
-            {/* Debug information */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="text-xs text-gray-500 space-y-1">
-                <p>Debug: Form valid: {!(!fullName || !email || !password || !confirmPassword || password !== confirmPassword)}</p>
-                <p>Loading: {isLoading.toString()}</p>
-                <p>Email: {email}</p>
-                <p>Full Name: {fullName}</p>
-              </div>
-            )}
           </form>
-
-          {/* Development test button */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-4">
-              <Button 
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={async () => {
-                  console.log('Testing direct signup...');
-                  try {
-                    const result = await signUp('test@gmail.com', 'testpass123', 'Test User');
-                    console.log('Direct signup result:', result);
-                    alert(`Direct signup result: ${result.error ? 'Error: ' + result.error.message : 'Success!'}`);
-                  } catch (err) {
-                    console.error('Direct signup error:', err);
-                    alert('Direct signup error: ' + err);
-                  }
-                }}
-              >
-                🧪 Test Direct Signup (Dev Only)
-              </Button>
-            </div>
-          )}
 
           <div className="mt-8 text-center">
             <p className="text-sm text-muted-foreground">

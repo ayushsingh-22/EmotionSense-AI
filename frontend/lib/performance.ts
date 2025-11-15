@@ -244,13 +244,14 @@ export function useVirtualScrolling<T>(
 // Performance optimized callback
 export function useOptimizedCallback<T extends (...args: unknown[]) => unknown>(
   callback: T,
-  deps: React.DependencyList,
   delay = 0
 ): T {
   const debouncedCallback = useMemo(
-    () => delay > 0 ? debounce(callback, delay) : callback,
-    [...deps, callback, delay]
+    () => (delay > 0 ? debounce(callback, delay) : callback),
+    [callback, delay]
   )
-  
-  return useCallback(debouncedCallback, [debouncedCallback]) as T
+
+  const memoized = useCallback((...args: Parameters<T>) => debouncedCallback(...args), [debouncedCallback])
+
+  return memoized as T
 }

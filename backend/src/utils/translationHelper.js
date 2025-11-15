@@ -3,7 +3,7 @@
  * Handles language detection and translation using Google Translate API with Gemini fallback
  * 
  * Features:
- * 1. Detects input language automatically
+ * 1. Detects input language automatically (including Hinglish)
  * 2. Translates non-English text to English for processing
  * 3. Translates English responses back to user's original language
  * 4. Fallback to Gemini 2.5 Flash if Google Translate fails
@@ -13,6 +13,7 @@
 import { translate } from '@vitalets/google-translate-api';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import config from '../config/index.js';
+import { detectHinglish } from '../config/indianLanguages.js';
 
 // Helper function to get Gemini model with API key fallback
 const getGeminiModel = (modelName = 'gemini-2.0-flash-exp') => {
@@ -36,6 +37,19 @@ export async function translateToEnglishIfNeeded(text) {
 
   try {
     console.log(`🌐 Detecting language for: "${text.substring(0, 50)}..."`);
+    
+    // First check if text is Hinglish (romanized Hindi)
+    const isHinglish = detectHinglish(text);
+    if (isHinglish) {
+      console.log(`✅ Hinglish detected! Using Gemini for translation...`);
+      const hinglishResult = await geminiTranslateHinglish(text);
+      return {
+        translatedText: hinglishResult.translatedText,
+        sourceLang: 'hi-Latn', // Hinglish language code
+        needsTranslation: true,
+        isHinglish: true
+      };
+    }
     
     // Attempt translation using Google Translate API
     const result = await translate(text, { to: 'en' });
@@ -89,7 +103,7 @@ export async function translateToEnglishIfNeeded(text) {
 /**
  * Translate text back to user's original language
  * @param {string} text - English text to translate back
- * @param {string} targetLang - Target language code (e.g., 'hi', 'es', 'fr')
+ * @param {string} targetLang - Target language code (e.g., 'hi', 'hi-Latn', 'es', 'fr')
  * @returns {Promise<string>} - Translated text
  */
 export async function translateBackToUserLanguage(text, targetLang) {
@@ -100,6 +114,18 @@ export async function translateBackToUserLanguage(text, targetLang) {
   if (!targetLang || targetLang === 'en' || targetLang === 'unknown') {
     console.log(`✅ No translation needed, target language is ${targetLang || 'unknown'}`);
     return text;
+  }
+
+  // Handle Hinglish (romanized Hindi)
+  if (targetLang === 'hi-Latn') {
+    console.log(`🔄 Translating response back to Hinglish using Gemini...`);
+    try {
+      return await geminiTranslateToHinglish(text);
+    } catch (error) {
+      console.error('❌ Hinglish translation failed:', error.message);
+      console.warn('⚠️ Returning English response instead of Hinglish');
+      return text;
+    }
   }
 
   try {
@@ -222,6 +248,70 @@ Respond with ONLY the translated text, no additional comments or formatting.`;
 }
 
 /**
+ * Translate Hinglish (romanized Hindi) to English using Gemini
+ * @param {string} text - Hinglish text to translate
+ * @returns {Promise<{translatedText: string}>}
+ */
+async function geminiTranslateHinglish(text) {
+  try {
+    const model = getGeminiModel('gemini-2.0-flash-exp');
+    
+    const prompt = `You are a Hinglish (Romanized Hindi + English mix) to English translator.
+
+The following text is in Hinglish - a mix of Hindi words written in Roman script and English. Please translate it to proper English while preserving the meaning, tone, and emotion.
+
+Hinglish text: "${text}"
+
+Respond with ONLY the English translation, no additional comments.`;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const translatedText = response.text().trim();
+    
+    console.log(`🤖 Gemini Hinglish→English translation: "${translatedText}"`);
+    return { translatedText };
+    
+  } catch (error) {
+    console.error('❌ Gemini Hinglish translation failed:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Translate English to Hinglish (romanized Hindi) using Gemini
+ * @param {string} text - English text to translate
+ * @returns {Promise<string>}
+ */
+async function geminiTranslateToHinglish(text) {
+  try {
+    const model = getGeminiModel('gemini-2.0-flash-exp');
+    
+    const prompt = `You are an English to Hinglish translator. Hinglish is a natural mix of Hindi and English where Hindi words are written in Roman script (Latin alphabet).
+
+Translate the following English text to Hinglish. Use a conversational, natural style that Indians commonly use in daily chat:
+- Mix Hindi and English words naturally
+- Write Hindi words in Roman script (like "kaise ho", "theek hai", "main", "kya")
+- Keep some English words as-is when commonly used in Hinglish
+- Maintain the emotion and tone
+
+English text: "${text}"
+
+Respond with ONLY the Hinglish translation in Roman script, no additional comments.`;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const hinglishText = response.text().trim();
+    
+    console.log(`🤖 Gemini English→Hinglish translation: "${hinglishText}"`);
+    return hinglishText;
+    
+  } catch (error) {
+    console.error('❌ Gemini Hinglish translation failed:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Get language name from language code for user-friendly display
  * @param {string} langCode - Language code (e.g., 'hi', 'es', 'fr')
  * @returns {string} - Human-readable language name
@@ -229,6 +319,7 @@ Respond with ONLY the translated text, no additional comments or formatting.`;
 export function getLanguageName(langCode) {
   const languageNames = {
     'hi': 'Hindi',
+    'hi-Latn': 'Hinglish',
     'es': 'Spanish',
     'fr': 'French',
     'de': 'German',

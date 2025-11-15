@@ -16,11 +16,14 @@ export function ChatDebugPanel() {
         <div>Is Typing: {isTyping ? '✅' : '❌'}</div>
         <div className="mt-2">
           <div>Last 3 messages:</div>
-          {messages.slice(-3).map((msg, i) => (
-            <div key={i} className="text-xs opacity-70">
-              {msg.role}: {msg.message.slice(0, 30)}...
-            </div>
-          ))}
+          {messages.slice(-3).map((msg, i) => {
+            const preview = (msg.content || msg.message || '').slice(0, 30);
+            return (
+              <div key={i} className="text-xs opacity-70">
+                {msg.role}: {preview}...
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

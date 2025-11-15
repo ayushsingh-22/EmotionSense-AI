@@ -359,9 +359,13 @@ router.post('/message', asyncHandler(async (req, res) => {
         sessionId: currentSessionId,
         userMessage: {
           id: userMessage.id,
+          content: userMessage.content || message,
           message: message,
-          emotion: emotionResult.emotion,
-          confidence: emotionResult.confidence,
+          emotion: userMessage.emotion || emotionResult.emotion,
+          emotionConfidence: userMessage.emotion_confidence ?? emotionResult.confidence,
+          confidence: userMessage.emotion_confidence ?? emotionResult.confidence,
+          metadata: userMessage.metadata,
+          audioUrl: userMessage.audio_url,
           timestamp: userMessage.created_at,
           // Language detection info
           detectedLanguage: detectedLanguage,
@@ -372,8 +376,11 @@ router.post('/message', asyncHandler(async (req, res) => {
         },
         aiResponse: {
           id: assistantMessage.id,
+          content: assistantMessage.content || finalResponse,
           message: finalResponse, // Response in user's language
           model: llmResponse.model,
+          metadata: assistantMessage.metadata,
+          audioUrl: assistantMessage.audio_url,
           timestamp: assistantMessage.created_at,
           // Translation info for response
           originalEnglishText: responseTranslated ? llmResponse.text : null,
@@ -889,13 +896,18 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
         sessionId: currentSessionId,
         userMessage: {
           id: userMessage.id,
+          content: userMessage.content || transcript,
+          message: transcript,
           // Original user text in their language
           text: transcript,
           // English translation for internal processing
           englishText: needsTranslation ? englishText : null,
           transcript: transcript, // Keep for backward compatibility
-          emotion: emotionResult.emotion,
-          confidence: emotionResult.confidence,
+          emotion: userMessage.emotion || emotionResult.emotion,
+          emotionConfidence: userMessage.emotion_confidence ?? emotionResult.confidence,
+          confidence: userMessage.emotion_confidence ?? emotionResult.confidence,
+          metadata: userMessage.metadata,
+          audioUrl: userMessage.audio_url,
           timestamp: userMessage.created_at,
           // Indian Language information
           detectedLanguage: detectedLanguage,
@@ -909,6 +921,7 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
         },
         aiResponse: {
           id: assistantMessage.id,
+          content: assistantMessage.content || finalResponse,
           // Response in user's language
           message: finalResponse,
           text: finalResponse, // Add for consistency
@@ -916,6 +929,8 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
           englishText: llmResponse.text,
           originalEnglishText: llmResponse.text, // Keep for backward compatibility
           model: llmResponse.model,
+          metadata: assistantMessage.metadata,
+          audioUrl: assistantMessage.audio_url,
           timestamp: assistantMessage.created_at,
           // Translation info
           wasTranslated: responseTranslated,

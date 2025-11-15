@@ -59,13 +59,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     try {
       // Add user message to state immediately
+      const now = new Date().toISOString();
       const userMessage: ChatMessage = {
         id: `temp_${Date.now()}`,
         session_id: sessionId,
         user_id: user.id,
         role: 'user',
+        content,
         message: content,
-        created_at: new Date().toISOString(),
+        created_at: now,
       };
 
       setMessages(prev => [...prev, userMessage]);
@@ -79,8 +81,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const updatedUserMessage: ChatMessage = {
         ...userMessage,
         id: chatResult.userMessage.id || userMessage.id, // Use backend record ID if available
+        emotion: chatResult.userMessage.emotion,
         emotion_detected: chatResult.userMessage.emotion,
+        emotion_confidence: chatResult.userMessage.confidence,
         confidence_score: chatResult.userMessage.confidence,
+        metadata: chatResult.userMessage.metadata,
       };
 
       // Add assistant response
@@ -89,9 +94,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         session_id: sessionId,
         user_id: user.id,
         role: 'assistant',
+        content: chatResult.aiResponse.message,
         message: chatResult.aiResponse.message,
+        emotion: chatResult.userMessage.emotion,
         emotion_detected: chatResult.userMessage.emotion,
+        emotion_confidence: chatResult.userMessage.confidence,
         confidence_score: chatResult.userMessage.confidence,
+        metadata: chatResult.aiResponse.metadata,
         created_at: new Date().toISOString(),
       };
 
@@ -134,16 +143,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     try {
       console.log('🔄 Regenerating AI response...');
+      const lastUserContent = lastUserMessage.content || lastUserMessage.message;
       const { response } = await regenerateResponse(
-        lastAssistantMessage.emotion_detected || 'neutral',
-        lastUserMessage.message
+        lastAssistantMessage.emotion_detected || lastAssistantMessage.emotion || 'neutral',
+        lastUserContent || ''
       );
 
       // Update the last assistant message in frontend state only
       setMessages(prev =>
         prev.map(msg =>
           msg.id === lastAssistantMessage.id
-            ? { ...msg, content: response }
+            ? { ...msg, content: response, message: response }
             : msg
         )
       );
@@ -299,6 +309,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         session_id: currentSessionId || 'welcome',
         user_id: 'system',
         role: 'assistant',
+        content: "Welcome to MantrAI! 👋 I'm here to listen, understand, and support you through our conversations. Feel free to share anything on your mind - whether you're celebrating, struggling, or just want to chat. What would you like to talk about today?",
         message: "Welcome to MantrAI! 👋 I'm here to listen, understand, and support you through our conversations. Feel free to share anything on your mind - whether you're celebrating, struggling, or just want to chat. What would you like to talk about today?",
         created_at: new Date().toISOString(),
       };

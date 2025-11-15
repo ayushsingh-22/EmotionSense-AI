@@ -45,7 +45,7 @@ export default function VoicePage() {
         variant: 'destructive',
       });
     }
-  }, []);
+  }, [toast]);
 
   // Check audio permission on mount
   useEffect(() => {

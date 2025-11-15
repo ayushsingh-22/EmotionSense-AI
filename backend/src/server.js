@@ -30,6 +30,7 @@ import chatRoutes from './routes/chatRoutes.js';
 import ttsRoutes from './routes/ttsRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import emergencyRoutes from './routes/emergencyRoutes.js';
+import insightsRoutes from './routes/insightsRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -117,6 +118,9 @@ const configureRoutes = () => {
   // Emergency contact routes
   app.use('/api/emergency', emergencyRoutes);
 
+  // Insights routes (emotion insights and analytics)
+  app.use('/api/insights', insightsRoutes);
+
   // Root endpoint
   app.get('/', (req, res) => {
     res.json({
@@ -130,7 +134,11 @@ const configureRoutes = () => {
         multiModalAnalysis: '/api/analyze/multimodal',
         responseGeneration: '/api/response/generate',
         chat: '/api/chat/message',
-        tts: '/api/tts'
+        tts: '/api/tts',
+        insightsDaily: '/api/insights/daily',
+        insightsWeekly: '/api/insights/weekly',
+        insightsStats: '/api/insights/stats',
+        insightsTimeline: '/api/insights/timeline/:date'
       }
     });
   });

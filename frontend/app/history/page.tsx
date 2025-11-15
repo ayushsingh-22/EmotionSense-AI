@@ -1,19 +1,23 @@
 ﻿'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { getChatSessions, getChatMessages } from '@/lib/api';
 import { ChatSession, ChatMessage } from '@/lib/supabase';
-import { Search, MessageCircle, Calendar, ChevronRight } from 'lucide-react';
+import { Search, MessageCircle, Calendar, ChevronRight, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { ChatMessage as ChatMessageComponent } from '@/components/chat/ChatMessage';
+import { motion } from 'framer-motion';
+import { GradientHeader } from '@/components/ui/GradientHeader';
+import { GlassPanel } from '@/components/ui/GlassPanel';
+import { AnimatedIcon } from '@/components/ui/AnimatedIcon';
 
 interface ExtendedChatSession extends ChatSession {
   lastMessage?: string;
@@ -29,13 +33,7 @@ export default function HistoryPage() {
   
   const { user } = useAuth();
 
-  useEffect(() => {
-    if (user?.id) {
-      loadChatSessions();
-    }
-  }, [user?.id]);
-
-  const loadChatSessions = async () => {
+  const loadChatSessions = useCallback(async () => {
     if (!user?.id) return;
     
     try {
@@ -47,10 +45,11 @@ export default function HistoryPage() {
           try {
             const messagesData = await getChatMessages(session.id, user.id);
             const sessionMessages = messagesData.messages || [];
-            
+            const lastEntry = sessionMessages[sessionMessages.length - 1];
+
             return {
               ...session,
-              lastMessage: sessionMessages[sessionMessages.length - 1]?.message || 'No messages',
+              lastMessage: lastEntry?.message || lastEntry?.content || 'No messages',
               messageCount: sessionMessages.length
             };
           } catch (error) {
@@ -64,7 +63,10 @@ export default function HistoryPage() {
         })
       );
       
-      setSessions(enhancedSessions);
+      // Filter out sessions with no messages (orphaned sessions)
+      const sessionsWithMessages = enhancedSessions.filter(session => session.messageCount > 0);
+      
+      setSessions(sessionsWithMessages);
     } catch (error) {
       console.error('Failed to load chat sessions:', error);
       toast({
@@ -75,7 +77,13 @@ export default function HistoryPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadChatSessions();
+    }
+  }, [user?.id, loadChatSessions]);
 
   const loadSessionMessages = async (sessionId: string) => {
     if (!user?.id) return;
@@ -96,10 +104,6 @@ export default function HistoryPage() {
 
   const formatTimestamp = (timestamp: string) => {
     return format(new Date(timestamp), 'MMM dd, yyyy HH:mm');
-  };
-
-  const formatMessageTime = (timestamp: string) => {
-    return format(new Date(timestamp), 'HH:mm');
   };
 
   const filteredSessions = sessions.filter(session =>
@@ -125,50 +129,46 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-600/5 rounded-2xl"></div>
-        <div className="relative bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Chat History
-              </h1>
-              <p className="text-muted-foreground mt-3 text-lg">
-                Review your past conversations with MantrAI and track your emotional journey
-              </p>
-            </div>
-            <Link href="/chat">
-              <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-                <MessageCircle className="mr-2 h-4 w-4" />
-                New Chat
-              </Button>
-            </Link>
-          </div>
-        </div>
+    <div className="space-y-8 p-6">
+      <div className="flex items-center justify-between">
+        <GradientHeader 
+          title="Chat History"
+          subtitle="Review your past conversations with MantrAI and track your emotional journey"
+          icon={<Sparkles className="h-10 w-10 text-primary" />}
+        />
+        <Link href="/chat">
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-2xl hover:shadow-purple-500/50 transition-all duration-300 rounded-2xl">
+              <MessageCircle className="mr-2 h-5 w-5" />
+              New Chat
+            </Button>
+          </motion.div>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1 space-y-6">
-          <Card className="border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-3 text-xl">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-calendar-500 to-calendar-600 flex items-center justify-center">
-                  <Calendar className="h-5 w-5 text-white" />
-                </div>
-                Chat Sessions ({sessions.length})
-              </CardTitle>
+          <GlassPanel gradient="from-purple-500/10" delay={0.2}>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <AnimatedIcon 
+                  icon={<Calendar className="h-6 w-6" />}
+                  gradient="from-purple-500 to-pink-600"
+                  glowColor="rgba(168, 85, 247, 0.3)"
+                />
+                <h3 className="text-xl font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  Chat Sessions ({sessions.length})
+                </h3>
+              </div>
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   placeholder="Search conversations..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-12 h-12 rounded-xl border-2 focus:border-blue-500 transition-all duration-300"
+                  className="pl-12 h-12 rounded-2xl border-2 focus:border-primary/60 focus:ring-4 focus:ring-primary/20 transition-all duration-300 bg-background/80 backdrop-blur-sm"
                 />
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
               <ScrollArea className="h-[600px]">
                 {isLoading ? (
                   <div className="p-8 text-center text-muted-foreground">
@@ -186,18 +186,24 @@ export default function HistoryPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3 p-6">
-                    {filteredSessions.map((session) => (
-                      <Card
+                  <div className="space-y-3">
+                    {filteredSessions.map((session, index) => (
+                      <motion.div
                         key={session.id}
-                        className={cn(
-                          'cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-105 border-0',
-                          selectedSession === session.id 
-                            ? 'bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 shadow-lg scale-105' 
-                            : 'bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800'
-                        )}
-                        onClick={() => loadSessionMessages(session.id)}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        whileHover={{ scale: 1.02, x: 4 }}
                       >
+                        <Card
+                          className={cn(
+                            'cursor-pointer transition-all duration-300 border-2 rounded-2xl shadow-lg',
+                            selectedSession === session.id 
+                              ? 'bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 border-primary/40 shadow-2xl shadow-primary/20' 
+                              : 'bg-background/80 border-border/40 hover:border-primary/30 hover:shadow-xl backdrop-blur-sm'
+                          )}
+                          onClick={() => loadSessionMessages(session.id)}
+                        >
                         <CardContent className="p-4">
                           <div className="space-y-3">
                             <div className="flex items-start justify-between">
@@ -227,31 +233,39 @@ export default function HistoryPage() {
                             </div>
                           </div>
                         </CardContent>
-                      </Card>
+                        </Card>
+                      </motion.div>
                     ))}
                   </div>
                 )}
               </ScrollArea>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassPanel>
         </div>
 
         <div className="lg:col-span-2">
-          <Card className="h-[740px] border border-border/60 bg-background/90 backdrop-blur rounded-3xl shadow-lg">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-3 text-xl">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                  <MessageCircle className="h-5 w-5 text-white" />
-                </div>
-                {selectedSession ? 
-                  sessions.find(s => s.id === selectedSession)?.session_title || 'Conversation' :
-                  'Select a conversation'
-                }
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
+          <GlassPanel 
+            gradient="from-blue-500/10"
+            delay={0.3}
+            className="h-[740px]"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <AnimatedIcon 
+                  icon={<MessageCircle className="h-6 w-6" />}
+                  gradient="from-blue-500 to-cyan-600"
+                  glowColor="rgba(59, 130, 246, 0.3)"
+                  delay={0.5}
+                />
+                <h3 className="text-xl font-semibold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                  {selectedSession ? 
+                    sessions.find(s => s.id === selectedSession)?.session_title || 'Conversation' :
+                    'Select a conversation'
+                  }
+                </h3>
+              </div>
               {selectedSession ? (
-                <ScrollArea className="h-[640px] p-6 bg-gradient-to-b from-gray-50/40 to-white dark:from-gray-900/40 dark:to-gray-900">
+                <ScrollArea className="h-[640px] p-6 bg-gradient-to-b from-primary/5 to-background rounded-2xl border border-border/30">
                   {messages.length === 0 ? (
                     <div className="text-center text-muted-foreground py-16">
                       <MessageCircle className="h-16 w-16 mx-auto mb-4 opacity-50" />
@@ -263,7 +277,7 @@ export default function HistoryPage() {
                         <ChatMessageComponent
                           key={message.id}
                           id={message.id}
-                          message={message.message}
+                          message={(message.content || message.message) ?? ''}
                           role={message.role as 'user' | 'assistant'}
                           timestamp={message.created_at}
                           editable={false}
@@ -274,17 +288,25 @@ export default function HistoryPage() {
                 </ScrollArea>
               ) : (
                 <div className="flex items-center justify-center h-[640px] text-muted-foreground">
-                  <div className="text-center">
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center mx-auto mb-6">
-                      <MessageCircle className="h-12 w-12 opacity-50" />
-                    </div>
-                    <h3 className="text-xl font-semibold mb-2">Select a conversation</h3>
-                    <p>Choose a conversation from the sidebar to view messages</p>
-                  </div>
+                  <motion.div 
+                    className="text-center"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    <AnimatedIcon 
+                      icon={<MessageCircle className="h-12 w-12" />}
+                      gradient="from-blue-500 to-purple-600"
+                      glowColor="rgba(59, 130, 246, 0.3)"
+                      size="lg"
+                      className="mx-auto mb-6"
+                    />
+                    <h3 className="text-2xl font-semibold mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Select a conversation</h3>
+                    <p className="text-muted-foreground">Choose a conversation from the sidebar to view messages</p>
+                  </motion.div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </GlassPanel>
         </div>
       </div>
     </div>

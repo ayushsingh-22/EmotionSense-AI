@@ -16,6 +16,8 @@ interface ChatInputProps {
   isEditing?: boolean;
   editingLabel?: string;
   onCancelEdit?: () => void;
+  onSpeechTranscript?: (transcript: string) => void;
+  onSpeechError?: (error: string) => void;
 }
 
 export const ChatInput = memo(function ChatInput({
@@ -57,22 +59,23 @@ export const ChatInput = memo(function ChatInput({
   return (
     <div
       className={cn(
-        'space-y-3 rounded-3xl border border-border/60 bg-background/70 p-4 shadow-lg backdrop-blur',
+        'space-y-3 rounded-3xl border-2 border-primary/20 bg-background/80 p-5 shadow-2xl backdrop-blur-lg',
+        'hover:border-primary/40 transition-all duration-300',
         className
       )}
     >
       {isEditing && (
-        <div className="flex items-center justify-between rounded-2xl bg-primary/10 px-3 py-2 text-xs text-primary">
-          <span>{editingLabel || 'Editing previous message'}</span>
+        <div className="flex items-center justify-between rounded-2xl bg-primary/10 px-4 py-2.5 text-sm text-primary backdrop-blur-sm">
+          <span className="font-medium">{editingLabel || 'Editing previous message'}</span>
           {onCancelEdit && (
-            <Button variant="ghost" size="sm" onClick={onCancelEdit} className="h-7 px-2 text-primary">
+            <Button variant="ghost" size="sm" onClick={onCancelEdit} className="h-8 px-3 text-primary hover:bg-primary/20 rounded-xl">
               Cancel
             </Button>
           )}
         </div>
       )}
 
-      <div className="flex items-end gap-2 sm:gap-3">
+      <div className="flex items-end gap-3">
         <div className="relative flex-1">
           <textarea
             ref={textareaRef}
@@ -83,36 +86,38 @@ export const ChatInput = memo(function ChatInput({
             disabled={disabled || isLoading}
             rows={1}
             className={cn(
-              'w-full min-h-[44px] max-h-[140px] resize-none rounded-2xl border border-transparent bg-background/60 px-4 py-3 text-sm text-foreground transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/40 dark:bg-background/80',
-              'disabled:opacity-60 disabled:cursor-not-allowed'
+              'w-full min-h-[52px] max-h-[140px] resize-none rounded-2xl border-2 border-border/40 bg-background/90 px-5 py-4 text-base text-foreground transition-all',
+              'focus:border-primary/60 focus:ring-4 focus:ring-primary/20 dark:bg-background/95',
+              'placeholder:text-muted-foreground/60',
+              'disabled:opacity-60 disabled:cursor-not-allowed',
+              'shadow-inner'
             )}
             style={{
-              lineHeight: '1.5',
+              lineHeight: '1.6',
               fontFamily: 'inherit',
             }}
           />
         </div>
-
-
 
         <Button
           type="button"
           onClick={onSubmit}
           disabled={!canSubmit}
           className={cn(
-            'h-10 w-10 flex-shrink-0 rounded-full p-0 shadow-md transition-all duration-200',
+            'h-12 w-12 flex-shrink-0 rounded-2xl p-0 shadow-lg transition-all duration-300',
             'flex items-center justify-center',
-            'bg-gradient-to-br from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white',
+            'bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 text-white',
             'disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed disabled:shadow-none',
-            canSubmit && 'hover:scale-110 hover:shadow-lg active:scale-95'
+            canSubmit && 'hover:scale-110 hover:shadow-2xl hover:shadow-primary/40 active:scale-95',
+            'border-2 border-white/20'
           )}
           title="Send message (Shift+Enter for new line)"
         >
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
         </Button>
       </div>
 
-      <div className="px-1 text-xs text-muted-foreground">Shift + Enter for new line</div>
+      <div className="px-2 text-xs text-muted-foreground/70 font-medium">✨ Shift + Enter for new line</div>
     </div>
   );
 });

@@ -178,20 +178,23 @@ chat_sessions (
 )
 ```
 
-### Chat Messages
+### Messages
 ```sql
-chat_messages (
+messages (
   id UUID PRIMARY KEY,
   session_id UUID REFERENCES chat_sessions(id),
   user_id UUID REFERENCES auth.users(id),
-  content TEXT NOT NULL,
   role VARCHAR(20) CHECK (role IN ('user', 'assistant')),
-  emotion VARCHAR(50),
-  created_at TIMESTAMP
+  content TEXT NOT NULL,
+  emotion TEXT,
+  emotion_confidence NUMERIC,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  audio_url TEXT,
+  created_at TIMESTAMP DEFAULT timezone('utc', now())
 )
 ```
 
-**Note:** Run the `supabase_schema_migration.sql` file in your Supabase SQL editor to create these tables with proper RLS policies.
+**Note:** Run the migration scripts inside `backend/migrations` (starting with `create_chat_tables.sql`) to provision these tables with the latest schema and RLS policies.
 
 ## 📁 Project Structure
 
