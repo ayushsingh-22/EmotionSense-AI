@@ -12,6 +12,7 @@ import {
   LogIn,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -19,7 +20,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 const sidebarLinks = [
-  { name: 'Dashboard', href: '/', icon: Home },
+  { name: 'Home', href: '/', icon: Home },
+  { name: 'Insights', href: '/insights', icon: Sparkles },
   { name: 'Chat', href: '/chat', icon: MessageCircle },
   { name: 'History', href: '/history', icon: History },
   { name: 'Settings', href: '/settings', icon: Settings },

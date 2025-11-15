@@ -169,6 +169,15 @@ const config = {
         fromEmail: process.env.SENDGRID_FROM_EMAIL
       }
     }
+  },
+
+  // Dashboard and analytics configuration
+  dashboard: {
+    dayStartHour: parseInt(process.env.DASHBOARD_DAY_START_HOUR || '5', 10),
+    defaultWeekStart: process.env.DASHBOARD_WEEK_START || 'monday',
+    maxTimelineDays: parseInt(process.env.DASHBOARD_MAX_TIMELINE_DAYS || '45', 10),
+    generateStories: process.env.DASHBOARD_GENERATE_STORIES !== 'false',
+    defaultLookbackDays: parseInt(process.env.DASHBOARD_LOOKBACK_DAYS || '3650', 10)
   }
 };
 

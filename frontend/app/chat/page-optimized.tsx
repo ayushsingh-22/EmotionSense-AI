@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, memo, Suspense, lazy } from 'react';
+import { useState, useRef, useEffect, useCallback, memo, Suspense, lazy, useMemo } from 'react';
 import { 
   MessageCircle,
   MessageSquare,
@@ -82,10 +82,11 @@ export default function ChatPage() {
   }, []);
 
   // Debounced scroll to prevent excessive scrolling during rapid message updates
-  const debouncedScrollToBottom = useCallback(
-    debounce(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 150),
+  const debouncedScrollToBottom = useMemo(
+    () =>
+      debounce(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 150),
     []
   );
 
@@ -118,6 +119,7 @@ export default function ChatPage() {
         user_id: user.id,
         session_id: currentSessionId || '',
         role: 'user',
+        content: message,
         message: message,
         created_at: new Date().toISOString()
       };
@@ -146,9 +148,11 @@ export default function ChatPage() {
           user_id: user.id,
           session_id: data.data.sessionId,
           role: 'user' as const,
+          content: data.data.userMessage.content || data.data.userMessage.message,
           message: data.data.userMessage.message,
           emotion_detected: data.data.userMessage.emotion,
           confidence_score: data.data.userMessage.confidence,
+          emotion_confidence: data.data.userMessage.emotionConfidence,
           created_at: data.data.userMessage.timestamp
         };
 
@@ -157,6 +161,7 @@ export default function ChatPage() {
           user_id: user.id,
           session_id: data.data.sessionId,
           role: 'assistant' as const,
+          content: data.data.aiResponse.content || data.data.aiResponse.message,
           message: data.data.aiResponse.message,
           created_at: data.data.aiResponse.timestamp,
           hasContext: data.data.hasContext,
@@ -184,9 +189,10 @@ export default function ChatPage() {
           });
         }
         
-        if (data.data.userMessage.emotion && data.data.userMessage.confidence) {
+        const emotionConfidence = data.data.userMessage.emotionConfidence ?? data.data.userMessage.confidence;
+        if (data.data.userMessage.emotion && emotionConfidence) {
           const emotion = data.data.userMessage.emotion as string;
-          const confidence = Math.round(data.data.userMessage.confidence * 100);
+          const confidence = Math.round(emotionConfidence * 100);
           
           const emotionEmojis = {
             happy: "😊", sad: "😢", angry: "😠", fear: "😨", 
@@ -283,6 +289,7 @@ export default function ChatPage() {
         user_id: user?.id || '',
         session_id: sessionId,
         role: 'user',
+        content: messageText,
         message: messageText,
         emotion_detected: userMessage.emotion,
         confidence_score: userMessage.confidence,
@@ -297,6 +304,7 @@ export default function ChatPage() {
         user_id: user?.id || '',
         session_id: sessionId,
         role: 'assistant',
+        content: aiResponse.message,
         message: aiResponse.message,
         created_at: aiResponse.timestamp || new Date().toISOString()
       };
@@ -321,7 +329,7 @@ export default function ChatPage() {
     // This would trigger a new API call to edit and regenerate response
     // For now, just update the message locally
     setMessages(prev => prev.map(msg => 
-      msg.id === messageId ? { ...msg, message: newMessage } : msg
+      msg.id === messageId ? { ...msg, content: newMessage, message: newMessage } : msg
     ));
     
     toast({
@@ -430,7 +438,7 @@ export default function ChatPage() {
               <Suspense key={message.id} fallback={<MessageSkeleton />}>
                 <ChatMessage
                   id={message.id}
-                  message={message.message}
+                  message={(message.content || message.message) ?? ''}
                   role={message.role}
                   timestamp={message.created_at}
                   emotion={message.emotion_detected}

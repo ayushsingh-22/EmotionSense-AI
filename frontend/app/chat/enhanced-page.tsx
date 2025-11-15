@@ -114,6 +114,7 @@ export default function EnhancedChatPage() {
     // Add user message immediately for better UX
     const userMessage: ExtendedChatMessage = {
       id: `temp-user-${Date.now()}`,
+      content: messageToSend,
       message: messageToSend,
       role: 'user',
       user_id: user.id,
@@ -149,6 +150,7 @@ export default function EnhancedChatPage() {
         // Add AI response
         const aiMessage: ExtendedChatMessage = {
           id: data.messageId || `ai-${Date.now()}`,
+          content: data.response,
           message: data.response,
           role: 'assistant',
           user_id: user.id,
@@ -185,7 +187,7 @@ export default function EnhancedChatPage() {
       setIsLoading(false);
       setIsTyping(false);
     }
-  }, [inputMessage, user?.id, isLoading, currentSessionId]);
+  }, [user?.id, isLoading, currentSessionId]);
 
   // Session management
   const handleSessionSelect = useCallback((sessionId: string) => {
@@ -296,7 +298,7 @@ export default function EnhancedChatPage() {
                     <Suspense key={message.id || index} fallback={<MessageSkeleton />}>
                       <ChatMessage
                         id={message.id}
-                        message={message.message}
+                        message={(message.content || message.message) ?? ''}
                         role={message.role}
                         timestamp={message.created_at}
                         isLoading={message.isLoading}

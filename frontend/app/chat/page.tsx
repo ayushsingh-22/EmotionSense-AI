@@ -19,8 +19,8 @@ const ChatLayout = lazy(() => import('@/components/chat/ChatLayout').then((m) =>
 const ChatSidebar = lazy(() => import('@/components/chat/ChatSidebar').then((m) => ({ default: m.ChatSidebar })));
 const ChatInput = lazy(() => import('@/components/chat/ChatInput').then((m) => ({ default: m.ChatInput })));
 const VoiceChatComponent = lazy(async () => {
-  const module = await import('@/components/chat/VoiceChatComponent');
-  return { default: module.VoiceChatComponent };
+  const voiceModule = await import('@/components/chat/VoiceChatComponent');
+  return { default: voiceModule.VoiceChatComponent };
 });
 
 interface ExtendedChatMessage extends ChatMessageType {
@@ -34,6 +34,19 @@ interface EditingState {
   messageId: string;
   assistantMessageId?: string;
   originalText: string;
+}
+
+interface VoiceMessagePayload {
+  id?: string;
+  transcript?: string;
+  message?: string;
+  timestamp?: string;
+}
+
+interface VoiceResponsePayload {
+  sessionId?: string;
+  userMessage?: VoiceMessagePayload;
+  aiResponse?: VoiceMessagePayload;
 }
 
 export default function ChatPage() {
@@ -126,6 +139,7 @@ export default function ChatPage() {
       user_id: user.id,
       session_id: currentSessionId || '',
       role: 'user',
+      content: trimmed,
       message: trimmed,
       created_at: new Date().toISOString(),
       editedFrom: editing?.messageId ?? null,
@@ -163,7 +177,13 @@ export default function ChatPage() {
         user_id: user.id,
         session_id: newSessionId,
         role: 'user',
+        content: payload.userMessage.content || payload.userMessage.message,
         message: payload.userMessage.message,
+        emotion: payload.userMessage.emotion,
+        emotion_detected: payload.userMessage.emotion,
+        emotion_confidence: payload.userMessage.emotionConfidence ?? payload.userMessage.confidence,
+        confidence_score: payload.userMessage.confidence,
+        metadata: payload.userMessage.metadata,
         created_at: payload.userMessage.timestamp,
         editedFrom: editing?.messageId ?? null,
       };
@@ -173,7 +193,13 @@ export default function ChatPage() {
         user_id: user.id,
         session_id: newSessionId,
         role: 'assistant',
+        content: payload.aiResponse.content || payload.aiResponse.message,
         message: payload.aiResponse.message,
+        emotion: payload.emotion?.detected,
+        emotion_detected: payload.emotion?.detected,
+        emotion_confidence: payload.emotion?.confidence,
+        confidence_score: payload.emotion?.confidence,
+        metadata: payload.aiResponse.metadata,
         created_at: payload.aiResponse.timestamp,
         hasContext: payload.hasContext,
         contextLength: payload.contextLength,
@@ -259,9 +285,9 @@ export default function ChatPage() {
     setEditingState({
       messageId,
       assistantMessageId: followingAssistant?.id,
-      originalText: target.message,
+      originalText: (target.content || target.message) ?? '',
     });
-    setMessageText(target.message);
+    setMessageText((target.content || target.message) ?? '');
     setChatMode('text');
   }, [messages]);
 
@@ -270,34 +296,36 @@ export default function ChatPage() {
     handleSendMessage(messageText);
   }, [handleSendMessage, messageText]);
 
-  const handleVoiceMessageReceived = useCallback((response: Record<string, unknown>) => {
+  const handleVoiceMessageReceived = useCallback((response: VoiceResponsePayload) => {
     if (userAtBottomRef.current) {
       pendingScrollRef.current = true;
     }
 
-    const sessionId = response.sessionId as string | undefined;
-    const userMessage = response.userMessage as any;
-    const aiResponse = response.aiResponse as any;
+    const { sessionId, userMessage, aiResponse } = response;
 
     if (userMessage) {
+      const messageText = userMessage.transcript || userMessage.message || '';
       const reconstructed: ExtendedChatMessage = {
         id: userMessage.id || `voice-user-${Date.now()}`,
         user_id: user?.id || '',
         session_id: sessionId || currentSessionId || '',
         role: 'user',
-        message: userMessage.transcript || userMessage.message || '',
+        content: messageText,
+        message: messageText,
         created_at: userMessage.timestamp || new Date().toISOString(),
       };
       setMessages((prev) => [...prev, reconstructed]);
     }
 
     if (aiResponse) {
+      const messageText = aiResponse.message || '';
       const aiMsg: ExtendedChatMessage = {
         id: aiResponse.id || `voice-ai-${Date.now()}`,
         user_id: user?.id || '',
         session_id: sessionId || currentSessionId || '',
         role: 'assistant',
-        message: aiResponse.message,
+        content: messageText,
+        message: messageText,
         created_at: aiResponse.timestamp || new Date().toISOString(),
       };
       setMessages((prev) => [...prev, aiMsg]);
@@ -351,7 +379,6 @@ export default function ChatPage() {
       onNewSession={handleNewSession}
       refreshTrigger={sidebarRefreshTrigger}
       isCollapsed={options.isCollapsed}
-      isMobile={options.isMobile}
       closeMobile={options.closeMobile}
     />
   ), [currentSessionId, handleSessionSelect, handleNewSession, sidebarRefreshTrigger]);
@@ -383,7 +410,7 @@ export default function ChatPage() {
             <ChatMessage
               key={message.id}
               id={message.id}
-              message={message.message}
+              message={(message.content || message.message) ?? ''}
               role={message.role}
               timestamp={message.created_at}
               isLoading={message.isLoading}

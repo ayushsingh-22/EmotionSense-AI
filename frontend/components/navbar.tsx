@@ -19,6 +19,7 @@ import {
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Activity },
   { name: 'Chat', href: '/chat' },
+  { name: 'Insights', href: '/insights' },
   { name: 'History', href: '/history' },
   { name: 'Settings', href: '/settings' },
 ];

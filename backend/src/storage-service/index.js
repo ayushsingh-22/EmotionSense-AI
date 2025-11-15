@@ -18,6 +18,61 @@ import config from '../config/index.js';
  */
 let supabaseClient = null;
 
+const ensureSupabaseClient = async () => {
+  if (!supabaseClient) {
+    await initializeSupabase();
+  }
+
+  if (!supabaseClient) {
+    throw new Error('Supabase not initialized');
+  }
+
+  return supabaseClient;
+};
+
+const parseJsonField = (value, fallback = null) => {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.warn('⚠️ Failed to parse JSON field, returning fallback');
+    return fallback;
+  }
+};
+
+const normalizeMessageRow = (row) => {
+  if (!row) {
+    return row;
+  }
+
+  const content = row.content ?? row.message ?? '';
+  const emotion = row.emotion ?? row.emotion_detected ?? null;
+  const emotionConfidence =
+    row.emotion_confidence ?? row.confidence_score ?? null;
+  const metadata = parseJsonField(row.metadata, {});
+  const audioUrl = row.audio_url ?? row.audioUrl ?? null;
+
+  return {
+    ...row,
+    content,
+    message: content,
+    emotion,
+    emotion_detected: emotion,
+    emotion_confidence: emotionConfidence,
+    confidence_score: emotionConfidence,
+    metadata,
+    audio_url: audioUrl,
+    audioUrl
+  };
+};
+
 export const initializeSupabase = async () => {
   try {
     if (config.database.type !== 'supabase') {
@@ -237,39 +292,66 @@ export const createChatSession = async (userId, sessionTitle = 'New Chat') => {
  */
 export const saveChatMessage = async (userId, sessionId, role, message, emotionData = null) => {
   try {
-    if (!supabaseClient) {
-      await initializeSupabase();
-    }
-
-    if (!supabaseClient) {
-      throw new Error('Supabase not initialized');
-    }
+    const client = await ensureSupabaseClient();
 
     const messageData = {
       user_id: userId,
       session_id: sessionId,
-      role: role, // 'user' or 'assistant'
-      message: message
+      role,
+      content: message
     };
 
-    // Add emotion data if provided
-    if (emotionData) {
-      messageData.emotion_detected = emotionData.emotion;
-      messageData.confidence_score = emotionData.confidence;
+    if (emotionData && typeof emotionData === 'object') {
+      const {
+        emotion = null,
+        confidence = null,
+        audioUrl = null,
+        audio_url: legacyAudioUrl = null,
+        metadata: existingMetadata = null,
+        ...metadataRest
+      } = emotionData;
+
+      if (emotion) {
+        messageData.emotion = emotion;
+      }
+
+      if (confidence !== undefined && confidence !== null) {
+        messageData.emotion_confidence = confidence;
+      }
+
+      const resolvedAudioUrl = audioUrl || legacyAudioUrl;
+      if (resolvedAudioUrl) {
+        messageData.audio_url = resolvedAudioUrl;
+      }
+
+      const mergedMetadata = {
+        ...(existingMetadata && typeof existingMetadata === 'object' ? existingMetadata : {}),
+        ...Object.fromEntries(
+          Object.entries(metadataRest).filter(([, value]) => value !== undefined)
+        )
+      };
+
+      if (Object.keys(mergedMetadata).length > 0) {
+        messageData.metadata = mergedMetadata;
+      }
     }
 
-    const { data, error } = await supabaseClient
-      .from('chat_messages')
+    console.log('📋 Attempting to insert message with fields:', Object.keys(messageData));
+
+    const { data, error } = await client
+      .from('messages')
       .insert(messageData)
       .select()
       .single();
 
     if (error) {
+      console.error('❌ Failed to save message:', error);
       throw new Error(`Failed to save message: ${error.message}`);
     }
 
-    console.log(`✅ Saved chat message: ${data.id}`);
-    return data;
+    const normalized = normalizeMessageRow(data);
+    console.log(`✅ Saved chat message: ${normalized.id}`);
+    return normalized;
   } catch (error) {
     console.error('❌ Error saving chat message:', error.message);
     throw error;
@@ -320,7 +402,7 @@ export const getChatMessages = async (userId, sessionId, limit = null) => {
     }
 
     let query = supabaseClient
-      .from('chat_messages')
+      .from('messages')
       .select('*')
       .eq('user_id', userId)
       .eq('session_id', sessionId)
@@ -336,7 +418,7 @@ export const getChatMessages = async (userId, sessionId, limit = null) => {
       throw new Error(`Failed to fetch messages: ${error.message}`);
     }
 
-    return data || [];
+    return (data || []).map(normalizeMessageRow);
   } catch (error) {
     console.error('❌ Error fetching chat messages:', error.message);
     throw error;
@@ -357,8 +439,8 @@ export const getRecentChatMessages = async (userId, sessionId, limit = 10) => {
     }
 
     const { data, error } = await supabaseClient
-      .from('chat_messages')
-      .select('role, message, emotion_detected, confidence_score, created_at')
+      .from('messages')
+      .select('id, user_id, session_id, role, content, emotion, emotion_confidence, metadata, audio_url, created_at')
       .eq('user_id', userId)
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false })
@@ -369,7 +451,7 @@ export const getRecentChatMessages = async (userId, sessionId, limit = 10) => {
     }
 
     // Return in chronological order (oldest first) for context
-    return (data || []).reverse();
+    return (data || []).map(normalizeMessageRow).reverse();
   } catch (error) {
     console.error('❌ Error fetching recent chat messages:', error.message);
     throw error;
@@ -424,7 +506,7 @@ export const deleteChatSession = async (userId, sessionId) => {
 
     // Delete messages first (due to foreign key constraint)
     const { error: messagesError } = await supabaseClient
-      .from('chat_messages')
+      .from('messages')
       .delete()
       .eq('user_id', userId)
       .eq('session_id', sessionId);
@@ -899,4 +981,356 @@ export const logSafetyAlert = async (userId, detectedEmotion, messageText, emerg
     console.error('❌ Error logging safety alert:', error.message);
     return null;
   }
+};
+
+const transformAnalysisRow = (row) => ({
+  id: row.id,
+  userId: row.user_id,
+  type: row.type,
+  input: row.input_text,
+  transcript: row.transcript,
+  emotion: row.emotion,
+  confidence: row.confidence,
+  scores: parseJsonField(row.scores, {}),
+  audioFeatures: parseJsonField(row.audio_features, null),
+  timestamp: row.timestamp,
+  createdAt: row.created_at
+});
+
+const transformDailySummaryRow = (row) => ({
+  id: row.id,
+  userId: row.user_id,
+  date: row.date,
+  dominantEmotion: row.dominant_emotion,
+  emotionDistribution: parseJsonField(row.emotion_distribution, {}),
+  moodScore: row.mood_score !== null && row.mood_score !== undefined ? Number(row.mood_score) : null,
+  totalEntries: row.total_entries ?? 0,
+  timeSegments: parseJsonField(row.time_segments, []),
+  trendPoints: parseJsonField(row.trend_points, []),
+  compassPoints: parseJsonField(row.compass_points, []),
+  emotionFlow: parseJsonField(row.emotion_flow, []),
+  segmentSummary: parseJsonField(row.segment_summary, []),
+  keyMoments: parseJsonField(row.key_moments, []),
+  summaryText: row.summary_text,
+  eJournalEntry: row.ejournal_entry,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at
+});
+
+const transformWeeklySummaryRow = (row) => ({
+  id: row.id,
+  userId: row.user_id,
+  weekStart: row.week_start,
+  weekEnd: row.week_end,
+  dominantEmotion: row.dominant_emotion,
+  weeklyArc: parseJsonField(row.weekly_arc, []),
+  averageMoodScore: row.average_mood_score !== null && row.average_mood_score !== undefined ? Number(row.average_mood_score) : null,
+  keyHighlights: parseJsonField(row.key_highlights, []),
+  weeklyMomentFlow: parseJsonField(row.weekly_moment_flow, []),
+  weeklyReflection: row.weekly_reflection,
+  weeklySummaryText: row.weekly_summary_text,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at
+});
+
+export const getEmotionAnalysisByDateRange = async (userId, startISO, endISO) => {
+  if (config.database.type !== 'supabase') {
+    return [];
+  }
+
+  const client = await ensureSupabaseClient();
+
+  const { data, error } = await client
+    .from('emotion_analysis')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('timestamp', startISO)
+    .lte('timestamp', endISO)
+    .order('timestamp', { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to fetch analysis range: ${error.message}`);
+  }
+
+  return (data || []).map(transformAnalysisRow);
+};
+
+export const getUserMessagesByDateRange = async (userId, startISO, endISO) => {
+  if (config.database.type !== 'supabase') {
+    return [];
+  }
+
+  const client = await ensureSupabaseClient();
+
+  const { data, error } = await client
+    .from('messages')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('created_at', startISO)
+    .lte('created_at', endISO)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to fetch chat messages for range: ${error.message}`);
+  }
+
+  return (data || []).map(normalizeMessageRow);
+};
+
+export const getEarliestUserMessageDate = async (userId) => {
+  if (config.database.type !== 'supabase') {
+    return null;
+  }
+
+  const client = await ensureSupabaseClient();
+
+  const { data, error } = await client
+    .from('messages')
+    .select('created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') {
+    throw new Error(`Failed to fetch earliest message: ${error.message}`);
+  }
+
+  return data?.created_at || null;
+};
+
+export const replaceEmotionFlowSegments = async (userId, dateISO, segments = []) => {
+  if (config.database.type !== 'supabase') {
+    return segments;
+  }
+
+  const client = await ensureSupabaseClient();
+
+  await client
+    .from('emotion_flow_segments')
+    .delete()
+    .eq('user_id', userId)
+    .eq('date', dateISO);
+
+  if (!segments.length) {
+    return [];
+  }
+
+  const payload = segments.map((segment) => ({
+    id: segment.id || uuidv4(),
+    user_id: userId,
+    date: dateISO,
+    segment: segment.segment?.toLowerCase() || null,
+    dominant_emotion: segment.dominantEmotion || segment.emotion || null,
+    intensity: segment.intensity ?? null,
+    summary: segment.summary || null
+  }));
+
+  const { error } = await client.from('emotion_flow_segments').insert(payload);
+
+  if (error) {
+    throw new Error(`Failed to upsert emotion flow segments: ${error.message}`);
+  }
+
+  return payload;
+};
+
+export const getDailyEmotionSummary = async (userId, dateISO) => {
+  if (config.database.type !== 'supabase') {
+    return null;
+  }
+
+  const client = await ensureSupabaseClient();
+
+  const { data, error } = await client
+    .from('daily_emotion_summary')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('date', dateISO)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') {
+    throw new Error(`Failed to fetch daily summary: ${error.message}`);
+  }
+
+  return data ? transformDailySummaryRow(data) : null;
+};
+
+export const upsertDailyEmotionSummary = async (payload) => {
+  if (config.database.type !== 'supabase') {
+    return payload;
+  }
+
+  const client = await ensureSupabaseClient();
+  const recordId = payload.id || uuidv4();
+  const timestamp = new Date().toISOString();
+
+  const record = {
+    id: recordId,
+    user_id: payload.userId,
+    date: payload.date,
+    dominant_emotion: payload.dominantEmotion,
+    emotion_distribution: payload.emotionDistribution || {},
+    mood_score: payload.moodScore,
+    total_entries: payload.totalEntries ?? 0,
+    time_segments: payload.timeSegments || [],
+    trend_points: payload.trendPoints || [],
+    compass_points: payload.compassPoints || [],
+    emotion_flow: payload.emotionFlow || [],
+    segment_summary: payload.segmentSummary || [],
+    key_moments: payload.keyMoments || [],
+    summary_text: payload.summaryText || null,
+    ejournal_entry: payload.eJournalEntry || null,
+    created_at: payload.createdAt || timestamp,
+    updated_at: timestamp
+  };
+
+  const { data, error } = await client
+    .from('daily_emotion_summary')
+    .upsert(record, { onConflict: 'user_id,date' })
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to upsert daily summary: ${error.message}`);
+  }
+
+  return data ? transformDailySummaryRow(data) : transformDailySummaryRow(record);
+};
+
+export const listDailyEmotionSummaries = async (userId, limit = 3650) => {
+  if (config.database.type !== 'supabase') {
+    return [];
+  }
+
+  const client = await ensureSupabaseClient();
+
+  // If limit is very large or explicitly unlimited, fetch all without .limit()
+  let query = client
+    .from('daily_emotion_summary')
+    .select('*')
+    .eq('user_id', userId)
+    .order('date', { ascending: false });
+
+  if (limit < 10000) {
+    query = query.limit(limit);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to list daily summaries: ${error.message}`);
+  }
+
+  return (data || []).map(transformDailySummaryRow);
+};
+
+export const getWeeklyEmotionSummary = async (userId, weekStartISO, weekEndISO) => {
+  if (config.database.type !== 'supabase') {
+    return null;
+  }
+
+  const client = await ensureSupabaseClient();
+
+  const { data, error } = await client
+    .from('weekly_emotion_summary')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('week_start', weekStartISO)
+    .eq('week_end', weekEndISO)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') {
+    throw new Error(`Failed to fetch weekly summary: ${error.message}`);
+  }
+
+  return data ? transformWeeklySummaryRow(data) : null;
+};
+
+export const upsertWeeklyEmotionSummary = async (payload) => {
+  if (config.database.type !== 'supabase') {
+    return payload;
+  }
+
+  const client = await ensureSupabaseClient();
+  const recordId = payload.id || uuidv4();
+  const timestamp = new Date().toISOString();
+
+  const record = {
+    id: recordId,
+    user_id: payload.userId,
+    week_start: payload.weekStart,
+    week_end: payload.weekEnd,
+    dominant_emotion: payload.dominantEmotion,
+    weekly_arc: payload.weeklyArc || [],
+    average_mood_score: payload.averageMoodScore,
+    key_highlights: payload.keyHighlights || [],
+    weekly_moment_flow: payload.weeklyMomentFlow || [],
+    weekly_reflection: payload.weeklyReflection || null,
+    weekly_summary_text: payload.weeklySummaryText || null,
+    created_at: payload.createdAt || timestamp,
+    updated_at: timestamp
+  };
+
+  const { data, error } = await client
+    .from('weekly_emotion_summary')
+    .upsert(record, { onConflict: 'user_id,week_start,week_end' })
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to upsert weekly summary: ${error.message}`);
+  }
+
+  return data ? transformWeeklySummaryRow(data) : transformWeeklySummaryRow(record);
+};
+
+export const listWeeklyEmotionSummaries = async (userId, limit = 500) => {
+  if (config.database.type !== 'supabase') {
+    return [];
+  }
+
+  const client = await ensureSupabaseClient();
+
+  // If limit is very large or explicitly unlimited, fetch all without .limit()
+  let query = client
+    .from('weekly_emotion_summary')
+    .select('*')
+    .eq('user_id', userId)
+    .order('week_start', { ascending: false });
+
+  if (limit < 10000) {
+    query = query.limit(limit);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to list weekly summaries: ${error.message}`);
+  }
+
+  return (data || []).map(transformWeeklySummaryRow);
+};
+
+export const getRecentKeyMoments = async (userId, lookbackDays = 30) => {
+  const summaries = await listDailyEmotionSummaries(userId, lookbackDays + 5);
+
+  const moments = summaries.flatMap((summary) =>
+    (summary.emotionFlow || []).map((flow, index) => ({
+      id: flow.id || `${summary.date}-${flow.segment || index}`,
+      emotion: flow.emotion,
+      intensity: flow.intensity,
+      timestamp: summary.date,
+      excerpt: flow.summary,
+      timeOfDay: flow.segment,
+      date: summary.date,
+      summaryId: summary.id
+    }))
+  );
+
+  return moments.sort((a, b) => {
+    const intensityA = typeof a.intensity === 'number' ? a.intensity : 0;
+    const intensityB = typeof b.intensity === 'number' ? b.intensity : 0;
+    return intensityB - intensityA;
+  });
 };

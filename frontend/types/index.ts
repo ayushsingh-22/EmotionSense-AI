@@ -58,16 +58,23 @@ export interface ChatMessageResult {
   sessionId: string;
   userMessage: {
     id: string;
+    content: string;
     message: string;
-    emotion: string;
-    confidence: number;
+    emotion: string | null;
+    emotionConfidence: number | null;
+    confidence: number | null;
+    metadata?: Record<string, unknown>;
+    audioUrl?: string | null;
     timestamp: string;
   };
   aiResponse: {
     id: string;
+    content: string;
     message: string;
     model?: string;
     timestamp: string;
+    metadata?: Record<string, unknown>;
+    audioUrl?: string | null;
   };
   emotion: {
     detected: string;
@@ -106,3 +113,112 @@ export const EMOTION_CONFIG: Record<EmotionType, { color: string; emoji: string;
   sad: { color: '#3498DB', emoji: '😢', bgColor: 'bg-blue-500' },
   surprise: { color: '#E67E22', emoji: '😲', bgColor: 'bg-orange-600' },
 };
+
+export interface EmotionFlowSegment {
+  id: string;
+  segment: string;
+  emotion: string | null;
+  intensity: number | null;
+  summary?: string | null;
+}
+
+export interface SegmentInsight {
+  segment: string;
+  dominantEmotion: string | null;
+  intensity: number | null;
+  summary: string | null;
+  keywords: string[];
+  moodScore: number | null;
+  messageCount: number;
+  analysisCount: number;
+}
+
+export interface DashboardKeyMoment extends EmotionFlowSegment {
+  date?: string;
+  timeOfDay?: string;
+}
+
+export interface DailyTimeSegment {
+  label: string;
+  dominantEmotion: string | null;
+  moodScore: number | null;
+  entryCount: number;
+  valence?: number | null;
+  energy?: number | null;
+}
+
+export interface DailyTrendPoint {
+  timestamp: string;
+  emotion: string;
+  moodScore: number;
+  confidence?: number | null;
+}
+
+export interface DailyCompassPoint {
+  segment: string;
+  valence: number;
+  energy: number;
+  moodScore: number | null;
+  emotion: string | null;
+}
+
+export interface DailyEmotionSummary {
+  id: string | null;
+  userId: string;
+  date: string;
+  dominantEmotion: string | null;
+  emotionDistribution: Record<string, number>;
+  moodScore: number | null;
+  totalEntries: number;
+  timeSegments: DailyTimeSegment[];
+  trendPoints: DailyTrendPoint[];
+  compassPoints: DailyCompassPoint[];
+  keyMoments: DashboardKeyMoment[];
+  emotionFlow?: EmotionFlowSegment[];
+  segmentSummary?: SegmentInsight[];
+  eJournalEntry?: string | null;
+  summaryText?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  generatedAt?: string;
+  source?: string;
+  hasData?: boolean;
+}
+
+export interface WeeklyArcPoint {
+  date: string;
+  moodScore: number | null;
+  dominantEmotion: string | null;
+}
+
+export interface WeeklyEmotionSummary {
+  id: string | null;
+  userId: string;
+  weekStart: string;
+  weekEnd: string;
+  dominantEmotion: string | null;
+  weeklyArc: WeeklyArcPoint[];
+  averageMoodScore: number | null;
+  keyHighlights: Array<{
+    date: string;
+    emotion: string;
+    intensity: number;
+    excerpt: string;
+    timeOfDay?: string;
+  }>;
+  weeklyMomentFlow?: Array<{
+    date: string;
+    flow: EmotionFlowSegment[];
+  }>;
+  weeklyReflection?: string | null;
+  weeklySummaryText?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  generatedAt?: string;
+  source?: string;
+}
+
+export interface TrackingMetadata {
+  trackedSince: string | null;
+  trackedDays: number;
+}

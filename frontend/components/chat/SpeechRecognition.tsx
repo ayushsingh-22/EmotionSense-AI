@@ -169,7 +169,7 @@ export function SpeechRecognition({
         recognitionRef.current.stop();
       }
     };
-  }, [onTranscript, onError, isListening]);
+  }, [onTranscript, onError, onInterimTranscript, onListeningChange, isListening]);
 
   const getErrorMessage = (error: string): string => {
     switch (error) {

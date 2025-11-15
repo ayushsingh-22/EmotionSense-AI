@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -117,14 +117,16 @@ export function EmergencyContactForm({
       } else {
         throw new Error(response.data.error || 'Failed to save emergency contact');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error saving emergency contact:', error);
+      const errorMessage = axios.isAxiosError(error)
+        ? error.response?.data?.error || error.message
+        : error instanceof Error
+          ? error.message
+          : 'Failed to save emergency contact';
       toast({
         title: 'Error',
-        description:
-          error.response?.data?.error ||
-          error.message ||
-          'Failed to save emergency contact',
+        description: errorMessage,
         variant: 'destructive'
       });
     } finally {

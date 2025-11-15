@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Mic, MicOff, Loader2, AlertCircle, Volume2, RotateCcw, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -14,32 +13,12 @@ type PermissionState = 'granted' | 'denied' | 'prompt';
 interface VoiceChatProps {
   userId: string;
   sessionId?: string;
+  language?: string;
   onMessageReceived?: (response: Record<string, unknown>) => void;
   onError?: (error: string) => void;
   className?: string;
   disabled?: boolean;
 }
-
-const ListeningWave = () => (
-  <div className="relative flex h-10 w-10 items-center justify-center" aria-hidden="true">
-    <span className="absolute h-10 w-10 rounded-full border border-primary/20 animate-ping" />
-    <span className="absolute h-7 w-7 rounded-full border border-primary/25 animate-ping" style={{ animationDelay: '0.25s' }} />
-    <span className="absolute h-4 w-4 rounded-full border border-primary/30 animate-ping" style={{ animationDelay: '0.5s' }} />
-    <span className="relative h-2 w-2 rounded-full bg-primary" />
-  </div>
-);
-
-const ThinkingDots = () => (
-  <div className="flex items-center gap-1" aria-hidden="true">
-    {Array.from({ length: 3 }).map((_, index) => (
-      <span
-        key={index}
-        className="h-2 w-2 rounded-full bg-primary/80 animate-pulse"
-        style={{ animationDelay: `${index * 0.2}s` }}
-      />
-    ))}
-  </div>
-);
 
 // Memoized component for better performance
 const VoiceChatComponent = React.memo<VoiceChatProps>(({
@@ -418,126 +397,159 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
   if (!isMounted) return null;
 
   return (
-    <Card
+    <div
       className={cn(
-        'flex flex-col space-y-4 p-4 relative min-w-[300px]',
+        'space-y-3 rounded-3xl border-2 border-primary/20 bg-background/80 p-5 shadow-2xl backdrop-blur-lg',
+        'hover:border-primary/40 transition-all duration-300',
         { 'opacity-50 cursor-not-allowed': disabled },
         className
       )}
     >
-      {/* Main Content */}
-      <div className="flex flex-col space-y-4">
-        {/* Status Display */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {isListening ? (
-              <>
-                <ListeningWave />
-                <span className="text-sm font-medium text-primary">
+      {/* Error Display */}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-destructive/10 border border-destructive/30 rounded-2xl">
+          <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+          <span className="text-xs text-destructive font-medium">{error}</span>
+        </div>
+      )}
+
+      {/* Main Input Area */}
+      <div className="flex items-end gap-3">
+        {/* Status/Transcript Display */}
+        <div className="relative flex-1 min-h-[52px] max-h-[140px] rounded-2xl border-2 border-border/40 bg-background/90 px-5 py-4 transition-all focus-within:border-primary/60 focus-within:ring-4 focus-within:ring-primary/20 dark:bg-background/95 shadow-inner overflow-y-auto">
+          {isListening ? (
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-8 w-8 items-center justify-center flex-shrink-0">
+                <span className="absolute h-8 w-8 rounded-full bg-gradient-to-r from-primary/20 to-purple-500/20 animate-ping" />
+                <span className="relative h-3 w-3 rounded-full bg-gradient-to-r from-primary to-purple-600" />
+              </div>
+              <div className="flex items-center gap-2 flex-1">
+                <div className="flex items-center justify-center gap-0.5 h-6">
+                  {[...Array(5)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-0.5 bg-gradient-to-t from-primary to-purple-600 rounded-full"
+                      style={{
+                        height: '100%',
+                        animation: `wave 1s ease-in-out infinite`,
+                        animationDelay: `${i * 0.1}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs font-semibold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
                   Listening{listeningDuration > 0 ? ` (${listeningDuration}s)` : ''}
                 </span>
-              </>
-            ) : isProcessing ? (
-              <>
-                <ThinkingDots />
-                <span className="text-sm font-medium text-muted-foreground">
-                  Thinking through your message...
-                </span>
-              </>
-            ) : (
-              <span className="text-sm text-muted-foreground">
-                Tap the mic when you are ready.
+              </div>
+            </div>
+          ) : isProcessing ? (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <span
+                    key={index}
+                    className="h-2 w-2 rounded-full bg-gradient-to-r from-primary to-purple-600 animate-pulse"
+                    style={{ animationDelay: `${index * 0.2}s` }}
+                  />
+                ))}
+              </div>
+              <span className="text-xs font-semibold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+                Processing...
               </span>
-            )}
-          </div>
-          {error && (
-            <div className="flex items-center gap-1 text-destructive">
-              <AlertCircle className="h-4 w-4" />
-              <span className="text-sm">{error}</span>
+            </div>
+          ) : currentTranscript ? (
+            <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+              {currentTranscript}
+            </p>
+          ) : (
+            <div className="flex items-center gap-3 text-muted-foreground/60">
+              <Mic className="h-5 w-5" />
+              <span className="text-base">Tap the mic to start recording...</span>
             </div>
           )}
         </div>
 
-        {/* Audio Response Player */}
-        {audioResponseUrl && (
-          <div className="p-3 bg-secondary rounded-lg space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                {isPlayingAudio ? '🔊 Playing response...' : '✅ Response ready'}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={isPlayingAudio ? stopAudioPlayback : () => playAudioResponse(audioResponseUrl)}
-                className="h-8 w-8 p-0"
-              >
-                <Volume2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Control Buttons */}
-        <div className="flex gap-2 flex-wrap">
-          {/* Microphone Button */}
-          <Button
-            onClick={isListening ? stopListening : startListening}
-            disabled={isButtonDisabled}
-            variant={isListening ? 'destructive' : 'default'}
-            size="lg"
-            className="flex-1 gap-2"
-          >
-            {isListening ? (
-              <>
-                <MicOff className="h-5 w-5" />
-                Stop Recording
-              </>
-            ) : (
-              <>
-                <Mic className="h-5 w-5" />
-                Start Recording
-              </>
-            )}
-          </Button>
-
-          {/* Clear Button */}
-          {currentTranscript && (
-            <Button
-              onClick={clearTranscript}
-              disabled={disabled || isProcessing || isListening}
-              variant="outline"
-              size="lg"
-              className="gap-2"
-            >
-              <RotateCcw className="h-5 w-5" />
-              Clear
-            </Button>
+        {/* Microphone Button */}
+        <Button
+          onClick={isListening ? stopListening : startListening}
+          disabled={isButtonDisabled}
+          className={cn(
+            'h-12 w-12 flex-shrink-0 rounded-2xl p-0 shadow-lg transition-all duration-300',
+            'flex items-center justify-center',
+            !isListening && 'bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 text-white',
+            isListening && 'bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white',
+            'disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed disabled:shadow-none',
+            !isButtonDisabled && 'hover:scale-110 hover:shadow-2xl active:scale-95',
+            'border-2 border-white/20'
           )}
+          title={isListening ? "Stop recording" : "Start recording"}
+        >
+          {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+        </Button>
 
-          {/* Submit Button */}
+        {/* Submit/Action Button */}
+        {currentTranscript && !isListening && (
           <Button
             onClick={submitVoiceMessage}
-            disabled={disabled || isProcessing || !currentTranscript.trim() || isListening}
-            variant="outline"
-            size="lg"
-            className="gap-2"
-          >
-            {isProcessing ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Send className="h-5 w-5" />
-                Send
-              </>
+            disabled={disabled || isProcessing || !currentTranscript.trim()}
+            className={cn(
+              'h-12 w-12 flex-shrink-0 rounded-2xl p-0 shadow-lg transition-all duration-300',
+              'flex items-center justify-center',
+              'bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white',
+              'disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed disabled:shadow-none',
+              !disabled && !isProcessing && 'hover:scale-110 hover:shadow-2xl hover:shadow-green-500/40 active:scale-95',
+              'border-2 border-white/20'
             )}
+            title="Send voice message"
+          >
+            {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+          </Button>
+        )}
+
+        {/* Clear Button */}
+        {currentTranscript && !isListening && !isProcessing && (
+          <Button
+            onClick={clearTranscript}
+            disabled={disabled}
+            variant="outline"
+            className={cn(
+              'h-12 w-12 flex-shrink-0 rounded-2xl p-0 shadow-md transition-all duration-300',
+              'flex items-center justify-center border-2',
+              'hover:bg-accent/50 hover:scale-110 active:scale-95'
+            )}
+            title="Clear transcript"
+          >
+            <RotateCcw className="h-5 w-5" />
+          </Button>
+        )}
+      </div>
+
+      {/* Audio Response Player */}
+      {audioResponseUrl && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-2 border-green-500/30 rounded-2xl">
+          <span className="text-xs font-semibold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+            {isPlayingAudio ? '🔊 Playing response...' : '✅ Response ready'}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={isPlayingAudio ? stopAudioPlayback : () => playAudioResponse(audioResponseUrl)}
+            className="h-8 w-8 p-0 rounded-xl hover:bg-green-500/20 transition-all"
+          >
+            <Volume2 className="h-4 w-4 text-green-600" />
           </Button>
         </div>
+      )}
 
-      </div>
-    </Card>
+      <div className="px-2 text-xs text-muted-foreground/70 font-medium">🎙️ Voice input for hands-free interaction</div>
+      
+      <style jsx>{`
+        @keyframes wave {
+          0%, 100% { transform: scaleY(0.3); }
+          50% { transform: scaleY(1); }
+        }
+      `}</style>
+    </div>
   );
 });
 
