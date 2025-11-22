@@ -31,6 +31,9 @@ import ttsRoutes from './routes/ttsRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import emergencyRoutes from './routes/emergencyRoutes.js';
 import insightsRoutes from './routes/insightsRoutes.js';
+import journalRoutes from './routes/journalRoutes.js';
+import activityRoutes from './routes/activityRoutes.js';
+import { journalService } from './journal-service/index.js';
 
 // Load environment variables
 dotenv.config();
@@ -70,8 +73,31 @@ const configureMiddleware = () => {
 
   // Enable CORS for frontend communication
   app.use(cors({
-    origin: process.env.CORS_ORIGIN || '*',
-    credentials: true
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      
+      // Allow any localhost port
+      if (origin.match(/^http:\/\/localhost:\d+$/)) {
+        return callback(null, true);
+      }
+      
+      // Allow specific origins from environment variable
+      if (process.env.CORS_ORIGIN && origin === process.env.CORS_ORIGIN) {
+        return callback(null, true);
+      }
+      
+      // For development, allow any origin
+      if (process.env.NODE_ENV === 'development') {
+        return callback(null, true);
+      }
+      
+      // Default: reject
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
   }));
 
   // Parse JSON bodies with increased limit
@@ -121,6 +147,12 @@ const configureRoutes = () => {
   // Insights routes (emotion insights and analytics)
   app.use('/api/insights', insightsRoutes);
 
+  // Activity routes (unified activity data access)
+  app.use('/api/activity', activityRoutes);
+
+  // Journal routes (daily auto-journaling)
+  app.use('/api/journal', journalRoutes);
+
   // Root endpoint
   app.get('/', (req, res) => {
     res.json({
@@ -135,10 +167,17 @@ const configureRoutes = () => {
         responseGeneration: '/api/response/generate',
         chat: '/api/chat/message',
         tts: '/api/tts',
+        activity: '/api/activity',
+        activityHistory: '/api/activity/history/:userId',
+        activityInsights: '/api/activity/insights/:userId',
         insightsDaily: '/api/insights/daily',
         insightsWeekly: '/api/insights/weekly',
         insightsStats: '/api/insights/stats',
-        insightsTimeline: '/api/insights/timeline/:date'
+        insightsTimeline: '/api/insights/timeline/:date',
+        journalToday: '/api/journal/today',
+        journalList: '/api/journal/list',
+        journalGenerate: '/api/journal/generate',
+        journalRefresh: '/api/journal/refresh'
       }
     });
   });
@@ -176,6 +215,15 @@ const startServer = async () => {
     // Error handling middleware (must be last)
     app.use(errorHandler);
 
+    // Initialize journal service (non-blocking)
+    try {
+      console.log('🚀 Initializing Journal Service...');
+      await journalService.initialize();
+      console.log('✅ Journal Service initialized successfully');
+    } catch (error) {
+      console.warn('⚠️ Journal service initialization failed (non-critical):', error.message);
+    }
+
     // Start listening
     app.listen(PORT, () => {
       console.log('='.repeat(50));
@@ -192,6 +240,7 @@ const startServer = async () => {
       console.log(`  ✓ Multi-Modal Analysis`);
       console.log(`  ✓ LLM Response Generation (Gemini + LLaMA fallback)`);
       console.log(`  ✓ TTS Service (${process.env.TTS_ENABLED === 'true' ? 'Enabled' : 'Disabled'})`);
+      console.log(`  ✓ Daily Auto-Journaling (Scheduled at 23:30)`);
       console.log('='.repeat(50));
     });
   } catch (error) {
@@ -210,6 +259,41 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
   process.exit(1);
+});
+
+// Graceful shutdown handling
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Received SIGINT. Graceful shutdown...');
+  
+  try {
+    // Stop journal service
+    if (journalService.isInitialized) {
+      await journalService.shutdown();
+    }
+    
+    console.log('✅ Graceful shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during shutdown:', error);
+    process.exit(1);
+  }
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 Received SIGTERM. Graceful shutdown...');
+  
+  try {
+    // Stop journal service
+    if (journalService.isInitialized) {
+      await journalService.shutdown();
+    }
+    
+    console.log('✅ Graceful shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during shutdown:', error);
+    process.exit(1);
+  }
 });
 
 // Start the server

@@ -1,10 +1,13 @@
 /**
  * Insights Storage Service
  * Handles all database operations for emotion insights, daily journals, and weekly summaries
+ * UPDATED: Now uses unified emotion service for consistency
  */
 
 import { createClient } from '@supabase/supabase-js';
 import config from '../config/index.js';
+import * as unifiedEmotion from './unifiedEmotionService.js';
+import logger from '../utils/logger.js';
 
 const supabase = createClient(
   config.database.supabase.url, 
@@ -13,15 +16,17 @@ const supabase = createClient(
 
 /**
  * Get daily insights for a user
+ * UPDATED: Returns journals with unified emotion data from messages
  * @param {string} userId - User ID
  * @param {string} startDate - Start date (YYYY-MM-DD)
  * @param {string} endDate - End date (YYYY-MM-DD)
- * @returns {Promise<Array>} Daily journal entries
+ * @returns {Promise<Array>} Daily journal entries with consistent emotion data
  */
 async function getDailyInsights(userId, startDate, endDate) {
   try {
+    // Get journal entries
     let query = supabase
-      .from('daily_journals')
+      .from('journal_entries')
       .select('*')
       .eq('user_id', userId)
       .order('date', { ascending: false });
@@ -33,12 +38,47 @@ async function getDailyInsights(userId, startDate, endDate) {
       query = query.lte('date', endDate);
     }
 
-    const { data, error } = await query;
+    const { data: journals, error } = await query;
 
     if (error) throw error;
-    return data || [];
+
+    // If no journals, return empty array
+    if (!journals || journals.length === 0) return [];
+
+    // Enrich each journal with message-based emotion data
+    const enrichedJournals = await Promise.all(journals.map(async (journal) => {
+      try {
+        // Get emotion summary from messages for this date
+        const messageSummary = await unifiedEmotion.getDailyEmotionSummary(userId, journal.date);
+        
+        // Fuse journal emotion with message emotions
+        const fusedEmotion = unifiedEmotion.fuseJournalAndMessageEmotions(journal, messageSummary);
+        
+        // Return enriched journal with consistent emotion data
+        return {
+          ...journal,
+          emotion_summary: {
+            ...journal.emotion_summary,
+            dominant_emotion: fusedEmotion.dominantEmotion,
+            mood_score: fusedEmotion.moodScore,
+            emotion_counts: messageSummary.emotionCounts || journal.emotion_summary?.emotion_counts || {},
+            time_segments: messageSummary.timeSegments || journal.emotion_summary?.time_segments || [],
+            context_summary: messageSummary.contextSummary || journal.emotion_summary?.context_summary || '',
+            message_count: messageSummary.messageCount || 0
+          },
+          emotion: fusedEmotion.dominantEmotion,
+          emotion_emoji: fusedEmotion.emotionEmoji
+        };
+      } catch (enrichError) {
+        logger.error(`Error enriching journal for ${journal.date}:`, enrichError);
+        // Return original journal if enrichment fails
+        return journal;
+      }
+    }));
+
+    return enrichedJournals;
   } catch (error) {
-    console.error('Error fetching daily insights:', error);
+    logger.error('Error fetching daily insights:', error);
     throw error;
   }
 }
@@ -68,39 +108,56 @@ async function getWeeklyInsights(userId, limit = 4) {
 
 /**
  * Get emotion timeline for a specific date
+ * UPDATED: Uses unified emotion service and includes journal context
  * @param {string} userId - User ID
  * @param {string} date - Date (YYYY-MM-DD)
- * @returns {Promise<Object>} Timeline with hourly emotion breakdown
+ * @returns {Promise<Object>} Timeline with hourly emotion breakdown and journal
  */
 async function getEmotionTimeline(userId, date) {
   try {
-    // Get all emotions for the specified date
-    const { data: emotions, error } = await supabase
-      .from('emotions')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('created_at', `${date}T00:00:00Z`)
-      .lt('created_at', `${date}T23:59:59Z`)
-      .order('created_at', { ascending: true });
+    // Get daily summary from messages (unified source)
+    const dailySummary = await unifiedEmotion.getDailyEmotionSummary(userId, date);
 
-    if (error) throw error;
-
-    // Get daily journal for context
+    // Get journal entry for this date
     const { data: journal } = await supabase
-      .from('daily_journals')
+      .from('journal_entries')
       .select('*')
       .eq('user_id', userId)
       .eq('date', date)
       .single();
 
+    // Fuse emotions if journal exists
+    let fusedData = dailySummary;
+    if (journal) {
+      fusedData = {
+        ...dailySummary,
+        ...unifiedEmotion.fuseJournalAndMessageEmotions(journal, dailySummary),
+        journal: {
+          id: journal.id,
+          content: journal.content,
+          emotion: journal.emotion,
+          created_at: journal.created_at
+        }
+      };
+    }
+
+    // Build hourly timeline from messages
+    const timeline = buildHourlyTimeline(dailySummary.messages);
+
     return {
       date,
-      emotions: emotions || [],
-      journal: journal || null,
-      timeline: buildHourlyTimeline(emotions || [])
+      moodScore: fusedData.moodScore,
+      dominantEmotion: fusedData.dominantEmotion,
+      emotionEmoji: fusedData.emotionEmoji,
+      emotionCounts: fusedData.emotionCounts,
+      contextSummary: fusedData.contextSummary,
+      messages: dailySummary.messages,
+      journal: fusedData.journal || null,
+      timeline,
+      timeSegments: fusedData.timeSegments || []
     };
   } catch (error) {
-    console.error('Error fetching emotion timeline:', error);
+    logger.error('Error fetching emotion timeline:', error);
     throw error;
   }
 }
@@ -114,7 +171,7 @@ async function getUserStats(userId) {
   try {
     // Get total tracked days
     const { data: journals, error: journalError } = await supabase
-      .from('daily_journals')
+      .from('journal_entries')
       .select('date')
       .eq('user_id', userId);
 
@@ -129,17 +186,19 @@ async function getUserStats(userId) {
       .limit(1)
       .single();
 
-    // Get emotion distribution
-    const { data: emotions, error: emotionError } = await supabase
-      .from('emotions')
+    // Get emotion distribution from messages (canonical source)
+    const { data: messages, error: emotionError } = await supabase
+      .from('messages')
       .select('emotion')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('role', 'user')
+      .not('emotion', 'is', null);
 
     if (emotionError) throw emotionError;
 
     // Count emotion occurrences
-    const emotionCounts = (emotions || []).reduce((acc, e) => {
-      acc[e.emotion] = (acc[e.emotion] || 0) + 1;
+    const emotionCounts = (messages || []).reduce((acc, m) => {
+      acc[m.emotion] = (acc[m.emotion] || 0) + 1;
       return acc;
     }, {});
 
@@ -162,70 +221,65 @@ async function getUserStats(userId) {
 
 /**
  * Get key moments for a date range
+ * UPDATED: Uses messages table directly as source of truth
  * @param {string} userId - User ID
  * @param {string} startDate - Start date
  * @param {string} endDate - End date
- * @returns {Promise<Array>} Key emotional moments
+ * @returns {Promise<Array>} Key emotional moments with context
  */
 async function getKeyMoments(userId, startDate, endDate) {
   try {
-    // Get high-confidence emotions within date range
-    const { data: emotions, error } = await supabase
-      .from('emotions')
+    // Get messages with high-confidence emotions
+    const { data: messages, error } = await supabase
+      .from('messages')
       .select('*')
       .eq('user_id', userId)
+      .eq('role', 'user')
       .gte('created_at', `${startDate}T00:00:00Z`)
       .lte('created_at', `${endDate}T23:59:59Z`)
-      .order('confidence', { ascending: false })
-      .limit(20);
+      .order('emotion_confidence', { ascending: false })
+      .limit(30);
 
     if (error) throw error;
 
-    if (!emotions || emotions.length === 0) {
+    if (!messages || messages.length === 0) {
       return [];
     }
 
-    // Get associated messages for context
-    const moments = [];
-    for (const emotion of emotions.slice(0, 10)) {
-      // Find message from same session around the same time
-      const { data: messages } = await supabase
-        .from('messages')
-        .select('content')
-        .eq('session_id', emotion.session_id)
-        .eq('role', 'user')
-        .eq('emotion', emotion.emotion)
-        .gte('created_at', new Date(new Date(emotion.created_at).getTime() - 60000).toISOString())
-        .lte('created_at', new Date(new Date(emotion.created_at).getTime() + 60000).toISOString())
-        .limit(1);
+    // Build moments from messages
+    const moments = messages.slice(0, 15).map(msg => {
+      const context = msg.content.length > 100 
+        ? msg.content.substring(0, 100) + '...' 
+        : msg.content;
 
-      const context = messages?.[0]?.content?.substring(0, 100) || 'No context available';
-
-      moments.push({
-        emotion: emotion.emotion,
-        confidence: emotion.confidence,
-        timestamp: emotion.created_at,
-        context: context
-      });
-    }
+      return {
+        emotion: msg.emotion,
+        confidence: msg.emotion_confidence,
+        timestamp: msg.created_at,
+        context
+      };
+    }).filter(m => m.emotion); // Only include messages with emotions
 
     return moments;
   } catch (error) {
-    console.error('Error fetching key moments:', error);
+    logger.error('Error fetching key moments:', error);
     return [];
   }
 }
 
 /**
- * Build hourly timeline from emotions array
- * @param {Array} emotions - Array of emotion records
+ * Build hourly timeline from messages array
+ * UPDATED: Works with messages that have emotion field
+ * @param {Array} messages - Array of message records with emotions
  * @returns {Array} Hourly breakdown
  */
-function buildHourlyTimeline(emotions) {
+function buildHourlyTimeline(messages) {
   const hourlyData = {};
 
-  emotions.forEach(e => {
-    const hour = new Date(e.created_at).getHours();
+  messages.forEach(msg => {
+    if (!msg.emotion) return; // Skip messages without emotions
+    
+    const hour = new Date(msg.created_at).getHours();
     if (!hourlyData[hour]) {
       hourlyData[hour] = {
         hour,
@@ -234,7 +288,7 @@ function buildHourlyTimeline(emotions) {
         count: 0
       };
     }
-    hourlyData[hour].emotions.push(e.emotion);
+    hourlyData[hour].emotions.push(msg.emotion);
     hourlyData[hour].count++;
   });
 
@@ -245,9 +299,11 @@ function buildHourlyTimeline(emotions) {
       return acc;
     }, {});
     
-    hourlyData[hour].dominant = Object.keys(emotionCounts).reduce((a, b) => 
-      emotionCounts[a] > emotionCounts[b] ? a : b
-    );
+    if (Object.keys(emotionCounts).length > 0) {
+      hourlyData[hour].dominant = Object.keys(emotionCounts).reduce((a, b) => 
+        emotionCounts[a] > emotionCounts[b] ? a : b
+      );
+    }
   });
 
   return Object.values(hourlyData).sort((a, b) => a.hour - b.hour);
@@ -263,7 +319,7 @@ function buildHourlyTimeline(emotions) {
 async function upsertDailyJournal(userId, date, data) {
   try {
     const { data: journal, error } = await supabase
-      .from('daily_journals')
+      .from('journal_entries')
       .upsert({
         user_id: userId,
         date,

@@ -12,14 +12,6 @@ export const emotionColors = {
     glow: 'shadow-yellow-500/20',
     text: 'text-yellow-600',
   },
-  happy: {
-    primary: '#F59E0B',
-    gradient: 'from-yellow-400 via-amber-500 to-orange-500',
-    bg: 'bg-gradient-to-br from-yellow-400/10 via-amber-500/10 to-orange-500/10',
-    border: 'border-yellow-500/30',
-    glow: 'shadow-yellow-500/20',
-    text: 'text-yellow-600',
-  },
   sadness: {
     primary: '#3B82F6',
     gradient: 'from-blue-400 via-blue-500 to-cyan-600',
@@ -28,23 +20,7 @@ export const emotionColors = {
     glow: 'shadow-blue-500/20',
     text: 'text-blue-600',
   },
-  sad: {
-    primary: '#3B82F6',
-    gradient: 'from-blue-400 via-blue-500 to-cyan-600',
-    bg: 'bg-gradient-to-br from-blue-400/10 via-blue-500/10 to-cyan-600/10',
-    border: 'border-blue-500/30',
-    glow: 'shadow-blue-500/20',
-    text: 'text-blue-600',
-  },
   anger: {
-    primary: '#EF4444',
-    gradient: 'from-red-400 via-red-500 to-rose-600',
-    bg: 'bg-gradient-to-br from-red-400/10 via-red-500/10 to-rose-600/10',
-    border: 'border-red-500/30',
-    glow: 'shadow-red-500/20',
-    text: 'text-red-600',
-  },
-  angry: {
     primary: '#EF4444',
     gradient: 'from-red-400 via-red-500 to-rose-600',
     bg: 'bg-gradient-to-br from-red-400/10 via-red-500/10 to-rose-600/10',
@@ -87,24 +63,27 @@ export const emotionColors = {
 };
 
 export const emotionEmojis: Record<string, string> = {
-  joy: '😊',
-  happy: '😊',
-  sadness: '😢',
-  sad: '😢',
-  anger: '😠',
-  angry: '😠',
-  fear: '😰',
-  surprise: '😲',
+  anger: '🤬',
+  disgust: '🤢', 
+  fear: '😨',
+  joy: '😀',
   neutral: '😐',
-  disgust: '🤢',
+  sadness: '😭',
+  surprise: '😲',
 };
 
-export const getEmotionConfig = (emotion: string) => {
+export const getEmotionConfig = (emotion: string | null | undefined) => {
+  if (!emotion) {
+    return emotionColors.neutral;
+  }
   const lowerEmotion = emotion.toLowerCase();
   return emotionColors[lowerEmotion as keyof typeof emotionColors] || emotionColors.neutral;
 };
 
-export const getEmotionEmoji = (emotion: string) => {
+export const getEmotionEmoji = (emotion: string | null | undefined) => {
+  if (!emotion) {
+    return '😐';
+  }
   const lowerEmotion = emotion.toLowerCase();
   return emotionEmojis[lowerEmotion] || '😐';
 };

@@ -33,10 +33,11 @@ const WaveformAnimation = React.memo(() => {
           className="w-1 bg-blue-500 rounded-full"
           initial={{ height: 4 }}
           animate={{ 
-            height: [4, 16, 8, 20, 6, 12],
+            height: 20,
             transition: { 
               duration: 1.2,
               repeat: Infinity,
+              repeatType: "reverse",
               delay: i * 0.1,
               ease: "easeInOut"
             }
@@ -90,8 +91,8 @@ const RespondingIndicator = React.memo(() => {
             key={i}
             className="w-2 h-2 bg-current rounded-full"
             animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.6, 1, 0.6]
+              scale: 1.2,
+              opacity: 1,
             }}
             transition={{
               duration: 1,
@@ -414,7 +415,7 @@ export function EnhancedVoiceControls({
             ) : isRecording ? (
               <motion.div
                 className="flex items-center justify-center"
-                animate={{ scale: [1, 1.2, 1] }}
+                animate={{ scale: 1.2 }}
                 transition={{ duration: 1, repeat: Infinity }}
               >
                 <MicOff className="h-8 w-8" />
@@ -432,8 +433,8 @@ export function EnhancedVoiceControls({
               className="absolute inset-0 rounded-full border-4 border-red-400"
               initial={{ scale: 1, opacity: 1 }}
               animate={{ 
-                scale: [1, 1.3, 1],
-                opacity: [1, 0.3, 1]
+                scale: 1.3,
+                opacity: 0.3,
               }}
               transition={{ 
                 duration: 2,
@@ -445,8 +446,8 @@ export function EnhancedVoiceControls({
               className="absolute inset-0 rounded-full border-2 border-red-300"
               initial={{ scale: 1, opacity: 0.8 }}
               animate={{ 
-                scale: [1, 1.5, 1],
-                opacity: [0.8, 0, 0.8]
+                scale: 1.5,
+                opacity: 0,
               }}
               transition={{ 
                 duration: 2,

@@ -34,11 +34,16 @@ export function AnimatedIcon({
       animate={{
         boxShadow: [
           `0 0 20px ${glowColor}`,
-          `0 0 30px ${glowColor.replace('0.3', '0.5')}`,
-          `0 0 20px ${glowColor}`,
+          `0 0 40px ${glowColor.replace('0.3', '0.5')}`,
         ],
       }}
-      transition={{ duration: 2, repeat: Infinity, delay }}
+      transition={{ 
+        duration: 2, 
+        repeat: Infinity, 
+        repeatType: "reverse",
+        ease: "easeInOut",
+        delay 
+      }}
       whileHover={{ scale: 1.1, rotate: 5 }}
     >
       <div className={sizeClass.split(' ').slice(1).join(' ') + ' text-white flex items-center justify-center'}>

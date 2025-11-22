@@ -6,6 +6,7 @@ import type { UIEvent } from 'react';
 import axios from 'axios';
 import { MessageSquare, Mic, MicOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useChat } from '@/contexts/ChatContext';
 import { Button } from '@/components/ui/button';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { toast } from '@/hooks/use-toast';
@@ -14,6 +15,7 @@ import { ChatMessage as ChatMessageType } from '@/lib/supabase';
 import { PerformanceMonitor } from '@/lib/performance';
 import { useStore } from '@/store/useStore';
 import { api } from '@/lib/api';
+import { useSearchParams } from 'next/navigation';
 
 const ChatLayout = lazy(() => import('@/components/chat/ChatLayout').then((m) => ({ default: m.ChatLayout })));
 const ChatSidebar = lazy(() => import('@/components/chat/ChatSidebar').then((m) => ({ default: m.ChatSidebar })));
@@ -51,13 +53,14 @@ interface VoiceResponsePayload {
 
 export default function ChatPage() {
   const { user } = useAuth();
-  const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const { messages, currentSessionId, isLoading, sendMessage: sendChatMessage, loadExistingSession, startNewSession } = useChat();
+  const [localMessages, setLocalMessages] = useState<ExtendedChatMessage[]>([]);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [messageText, setMessageText] = useState('');
   const [chatMode, setChatMode] = useState<'text' | 'voice'>('text');
   const [editingState, setEditingState] = useState<EditingState | null>(null);
+  
+  const searchParams = useSearchParams();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -70,20 +73,40 @@ export default function ChatPage() {
 
   useEffect(() => {
     PerformanceMonitor.mark('chat-page-mount');
+    
+    // Check for sessionId URL parameter and load that session
+    const sessionId = searchParams.get('sessionId');
+    if (sessionId && user?.id) {
+      console.log('📱 Loading session from URL parameter:', sessionId);
+      loadExistingSession(sessionId);
+    }
+    
     return () => {
       PerformanceMonitor.measure('chat-page-lifecycle', 'chat-page-mount');
     };
-  }, []);
+  }, [user?.id, searchParams, loadExistingSession]);
+
+  // Sync messages from ChatContext to local extended messages
+  useEffect(() => {
+    const extendedMessages: ExtendedChatMessage[] = messages.map(msg => ({
+      ...msg,
+      isLoading: false,
+      hasContext: false,
+      contextLength: 0,
+      editedFrom: null,
+    }));
+    setLocalMessages(extendedMessages);
+  }, [messages]);
 
   const sessionOverrides = useMemo(() => currentSessionId ? chatOverrides[currentSessionId] : undefined, [chatOverrides, currentSessionId]);
 
   const displayedMessages = useMemo(() => {
     if (!sessionOverrides) {
-      return messages;
+      return localMessages;
     }
 
     const hidden = new Set(sessionOverrides.hiddenMessages);
-    return messages
+    return localMessages
       .filter((message) => !hidden.has(message.id))
       .map((message) => {
         const edited = sessionOverrides.editedMessages[message.id];
@@ -91,7 +114,7 @@ export default function ChatPage() {
           ? { ...message, message: edited, editedFrom: message.editedFrom ?? message.id }
           : message;
       });
-  }, [messages, sessionOverrides]);
+  }, [localMessages, sessionOverrides]);
 
   const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
     if (!messagesEndRef.current) {
@@ -129,126 +152,30 @@ export default function ChatPage() {
     userAtBottomRef.current = true;
 
     const trimmed = input.trim();
-    const editing = editingState;
-
-    PerformanceMonitor.mark('message-send-start');
-    setIsLoading(true);
-
-    const tempMessage: ExtendedChatMessage = {
-      id: `temp-${Date.now()}`,
-      user_id: user.id,
-      session_id: currentSessionId || '',
-      role: 'user',
-      content: trimmed,
-      message: trimmed,
-      created_at: new Date().toISOString(),
-      editedFrom: editing?.messageId ?? null,
-    };
-
-    setMessages((prev) => {
-      const base = editing
-        ? prev.filter((m) => m.id !== editing.messageId && m.id !== editing.assistantMessageId)
-        : prev;
-      return [...base, tempMessage];
-    });
-
     setMessageText('');
     setEditingState(null);
 
     try {
-      const { data } = await api.post('/api/chat/message', {
-        message: trimmed,
-        sessionId: currentSessionId,
-        userId: user.id,
-      });
-
-      if (!data?.success) {
-        throw new Error(data?.error || 'Failed to send message');
-      }
-
-      const payload = data.data;
-      if (!payload) {
-        throw new Error('Unexpected response from server');
-      }
-      const newSessionId = payload.sessionId as string;
-
-      const realUserMessage: ExtendedChatMessage = {
-        id: payload.userMessage.id,
-        user_id: user.id,
-        session_id: newSessionId,
-        role: 'user',
-        content: payload.userMessage.content || payload.userMessage.message,
-        message: payload.userMessage.message,
-        emotion: payload.userMessage.emotion,
-        emotion_detected: payload.userMessage.emotion,
-        emotion_confidence: payload.userMessage.emotionConfidence ?? payload.userMessage.confidence,
-        confidence_score: payload.userMessage.confidence,
-        metadata: payload.userMessage.metadata,
-        created_at: payload.userMessage.timestamp,
-        editedFrom: editing?.messageId ?? null,
-      };
-
-      const aiMessage: ExtendedChatMessage = {
-        id: payload.aiResponse.id,
-        user_id: user.id,
-        session_id: newSessionId,
-        role: 'assistant',
-        content: payload.aiResponse.content || payload.aiResponse.message,
-        message: payload.aiResponse.message,
-        emotion: payload.emotion?.detected,
-        emotion_detected: payload.emotion?.detected,
-        emotion_confidence: payload.emotion?.confidence,
-        confidence_score: payload.emotion?.confidence,
-        metadata: payload.aiResponse.metadata,
-        created_at: payload.aiResponse.timestamp,
-        hasContext: payload.hasContext,
-        contextLength: payload.contextLength,
-      };
-
-      if (!currentSessionId && newSessionId) {
-        setSidebarRefreshTrigger((prev) => prev + 1);
-      }
-
-      if (editing && currentSessionId) {
-        hideChatMessage(currentSessionId, editing.messageId);
-        if (editing.assistantMessageId) {
-          hideChatMessage(currentSessionId, editing.assistantMessageId);
-        }
-        setEditedChatMessage(newSessionId, realUserMessage.id, trimmed);
-      }
-
-      setMessages((prev) => {
-        const withoutTemp = prev.filter((m) => !m.id.startsWith('temp-'));
-        const base = editing
-          ? withoutTemp.filter((m) => m.id !== editing.messageId && m.id !== editing.assistantMessageId)
-          : withoutTemp;
-        return [...base, realUserMessage, aiMessage];
-      });
-
-      setCurrentSessionId(newSessionId);
-
-        PerformanceMonitor.measure('message-send-complete', 'message-send-start');
+      // Use ChatContext's sendMessage function which handles everything
+      await sendChatMessage(trimmed);
+      
+      // Refresh sidebar to show updated session
+      setSidebarRefreshTrigger((prev) => prev + 1);
+      
     } catch (error) {
-      console.error('Failed to send message:', error);
-      const description = axios.isAxiosError(error)
-        ? error.code === 'ERR_NETWORK'
-          ? 'Unable to reach the server. Please ensure the backend is running at NEXT_PUBLIC_API_URL.'
-          : error.response?.data?.error || error.message
-        : 'Failed to send message. Please try again.';
-      toast({ title: 'Error', description, variant: 'destructive' });
-      setMessages((prev) => prev.filter((m) => !m.id.startsWith('temp-')));
-    } finally {
-      setIsLoading(false);
+      console.error('Error sending message:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send message. Please try again.',
+        variant: 'destructive',
+      });
     }
-  }, [isLoading, user?.id, editingState, currentSessionId, hideChatMessage, setEditedChatMessage]);
+  }, [isLoading, user?.id, sendChatMessage]);
 
   const handleSessionSelect = useCallback(async (sessionId: string) => {
     if (!user?.id) return;
     try {
-      PerformanceMonitor.mark('session-load-start');
-      const data = await getChatMessages(sessionId, user.id);
-      setMessages(data.messages || []);
-      setCurrentSessionId(sessionId);
+      await loadExistingSession(sessionId);
       setMessageText('');
       setEditingState(null);
       pendingScrollRef.current = false;
@@ -256,31 +183,34 @@ export default function ChatPage() {
       requestAnimationFrame(() => {
         scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'auto' });
       });
-      PerformanceMonitor.measure('session-load-complete', 'session-load-start');
     } catch (error) {
-      console.error('Failed to load session messages:', error);
+      console.error('Failed to load session:', error);
       toast({ title: 'Error', description: 'Failed to load chat history.', variant: 'destructive' });
     }
-  }, [user?.id]);
+  }, [user?.id, loadExistingSession]);
 
   const handleNewSession = useCallback(() => {
-    setMessages([]);
-    setCurrentSessionId(null);
+    // Clear local state
     setMessageText('');
     setEditingState(null);
     pendingScrollRef.current = false;
     userAtBottomRef.current = true;
-  }, []);
+    
+    // Call ChatContext's startNewSession to create a new session and clear messages
+    startNewSession();
+    
+    console.log('🆕 Started new chat session');
+  }, [startNewSession]);
 
 
 
   const handleEditRequest = useCallback((messageId: string) => {
-    const targetIndex = messages.findIndex((msg) => msg.id === messageId);
+    const targetIndex = localMessages.findIndex((msg) => msg.id === messageId);
     if (targetIndex === -1) return;
-    const target = messages[targetIndex];
+    const target = localMessages[targetIndex];
     if (target.role !== 'user') return;
 
-    const followingAssistant = messages.slice(targetIndex + 1).find((msg) => msg.role === 'assistant');
+    const followingAssistant = localMessages.slice(targetIndex + 1).find((msg) => msg.role === 'assistant');
 
     setEditingState({
       messageId,
@@ -289,7 +219,7 @@ export default function ChatPage() {
     });
     setMessageText((target.content || target.message) ?? '');
     setChatMode('text');
-  }, [messages]);
+  }, [localMessages]);
 
   const handleSubmit = useCallback(() => {
     if (!messageText.trim()) return;

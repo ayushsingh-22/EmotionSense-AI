@@ -202,10 +202,12 @@ function LandingPage() {
                         boxShadow: [
                           `0 0 20px ${step.glow}`,
                           `0 0 40px ${step.glow.replace('0.3', '0.5')}`,
-                          `0 0 20px ${step.glow}`,
                         ],
                       }}
-                      style={{ animationDelay: `${i * 0.5}s` }}
+                      style={{ 
+                        transition: `box-shadow 2s ease-in-out infinite alternate`,
+                        animationDelay: `${i * 0.5}s` 
+                      }}
                     >
                       {step.num}
                     </motion.div>

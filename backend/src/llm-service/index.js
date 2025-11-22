@@ -266,9 +266,9 @@ const buildScopeBoundaryMessage = (category) => {
  */
 export const createEmpatheticPrompt = (emotion, context, transcript, chatHistory = []) => {
   const emotionPrompts = {
-    happy: "The user might be expressing some positivity, but FIRST check the conversation history to understand the actual situation. They may be asking HOW to be happy, or seeking hope despite difficulties.",
-    sad: "The user is feeling sad or down. Respond with empathy, understanding, and gentle support. Validate their feelings.",
-    angry: "The user is expressing anger or frustration. Respond with calm understanding and help them process their feelings.",
+    joy: "The user might be expressing some positivity, but FIRST check the conversation history to understand the actual situation. They may be asking HOW to be happy, or seeking hope despite difficulties.",
+    sadness: "The user is feeling sad or down. Respond with empathy, understanding, and gentle support. Validate their feelings.",
+    anger: "The user is expressing anger or frustration. Respond with calm understanding and help them process their feelings.",
     fear: "The user is experiencing fear or anxiety. Respond with reassurance, comfort, and practical support.",
     surprise: "The user is surprised. Respond with curiosity and help them process this unexpected situation.",
     disgust: "The user is expressing disgust or discomfort. Respond with understanding and validation.",
@@ -651,9 +651,9 @@ export const generateWithLLaMA = async (prompt) => {
  */
 export const generateFallbackResponse = (emotion) => {
   const fallbackResponses = {
-    happy: "That's wonderful to hear! I'm so glad you're feeling good. Keep embracing those positive moments - your family and loved ones would be happy to see your joy!",
-    sad: "I hear you, and I want you to know that it's okay to feel this way. I'm here for you, and remember - you have your family and community around you. Things will get better with time and support.",
-    angry: "I understand you're feeling frustrated right now. Take a deep breath - your feelings are valid. It might help to talk with someone you trust or take some time for yourself. Let's work through this together.",
+    joy: "That's wonderful to hear! I'm so glad you're feeling good. Keep embracing those positive moments - your family and loved ones would be happy to see your joy!",
+    sadness: "I hear you, and I want you to know that it's okay to feel this way. I'm here for you, and remember - you have your family and community around you. Things will get better with time and support.",
+    anger: "I understand you're feeling frustrated right now. Take a deep breath - your feelings are valid. It might help to talk with someone you trust or take some time for yourself. Let's work through this together.",
     fear: "It's completely normal to feel anxious sometimes. Remember that you're stronger than you think, and you're not alone - your family, friends, and community are there to support you. I'm here too.",
     surprise: "That sounds unexpected! Life can throw curveballs sometimes. It might help to talk with someone you trust about what you're feeling. How can I help you process this?",
     disgust: "I can sense your discomfort. Your reaction is valid, and it's important to trust your feelings. Talk to someone you trust about this when you're ready.",
@@ -758,3 +758,226 @@ Provide a helpful, empathetic response (2-3 sentences):`;
     }
   }
 };
+
+/**
+ * Generate daily journal entry based on emotional events
+ * @param {Object} journalData - Structured journal data
+ * @returns {Promise<string>} Generated journal entry
+ */
+export const generateDailyJournal = async (journalData) => {
+  console.log(`📔 Generating daily journal entry...`);
+
+  const {
+    date,
+    emotionSummary,
+    timeProgression,
+    keyMoments,
+    topics,
+    conversationSamples,
+    messageCount
+  } = journalData;
+
+  // Build journal prompt
+  let prompt = `You are an empathetic journaling assistant. Create a gentle, reflective journal entry for the user's day based on their emotional experiences.
+
+EMOTIONAL SUMMARY:
+- Dominant emotion: ${emotionSummary.dominant}
+- Mood score: ${emotionSummary.moodScore}/100
+- Emotions experienced: ${Object.keys(emotionSummary.counts).join(', ')}
+- Total emotional moments: ${Object.values(emotionSummary.counts).reduce((a, b) => a + b, 0)}
+
+TIME PROGRESSION:`;
+
+  if (timeProgression && timeProgression.segments && timeProgression.segments.length > 0) {
+    timeProgression.segments.forEach(seg => {
+      // Safety check for undefined values
+      const period = seg.period || seg.timeLabel || 'Unknown time';
+      const emotion = seg.emotion || seg.primaryEmotion || 'neutral';
+      const count = seg.count || seg.messageCount || 0;
+      
+      const periodLabel = typeof period === 'string' && period.length > 0 
+        ? period.charAt(0).toUpperCase() + period.slice(1)
+        : period;
+      
+      prompt += `\n- ${periodLabel}: ${emotion} (${count} moments)`;
+    });
+  }
+
+  if (timeProgression && timeProgression.trend) {
+    prompt += `\n- Overall trend: ${timeProgression.trend}`;
+  }
+
+  if (topics && topics.length > 0) {
+    prompt += `\n\nKEY TOPICS DISCUSSED:`;
+    topics.slice(0, 3).forEach(topic => {
+      const topicName = topic.name || topic.topic || 'Unknown topic';
+      const topicLabel = typeof topicName === 'string' && topicName.length > 0
+        ? topicName.charAt(0).toUpperCase() + topicName.slice(1)
+        : topicName;
+      prompt += `\n- ${topicLabel}`;
+    });
+  }
+
+  if (keyMoments.improvements && keyMoments.improvements.length > 0) {
+    prompt += `\n\nPOSITIVE MOMENTS:`;
+    keyMoments.improvements.forEach(improvement => {
+      prompt += `\n- ${improvement}`;
+    });
+  }
+
+  if (conversationSamples && conversationSamples.length > 0) {
+    prompt += `\n\nSAMPLE THOUGHTS (for context):`;
+    conversationSamples.slice(0, 2).forEach((sample, idx) => {
+      // Support both string and object formats
+      const content = typeof sample === 'string' ? sample : (sample.content || sample.message || '');
+      const truncated = content && content.length > 100 ? content.substring(0, 100) + '...' : content;
+      if (truncated) {
+        prompt += `\n- "${truncated}"`;
+      }
+    });
+  }
+
+  prompt += `\n\nIMPORTANT: You MUST respond with ONLY the formatted journal entry. Do NOT include any conversational text before or after. Start directly with the 🌙 emoji.
+
+======================== REQUIRED FORMAT (STRICT) ========================
+🌙 Daily Reflection — ${date}
+
+[First paragraph: 2-3 sentences. Start with "Today began with..." or similar. Describe morning emotions using second person "You felt...". Be specific about the dominant morning emotion.]
+
+[Second paragraph: 2-3 sentences. Describe afternoon progression. Mention specific topics if relevant (work, relationships, etc). Describe how emotions evolved.]
+
+[Third paragraph: 2-3 sentences. Describe evening mood. Highlight any positive shifts or relief. End on a gentle, hopeful note.]
+
+✨ What helped today:
+• [First specific helpful factor - be concrete]
+• [Second helpful factor - relate to their actions or moments]
+• [Third helpful factor - something they did well]
+
+💡 Gentle reminder:
+[One or two compassionate sentences acknowledging their effort. Avoid clichés. Be warm and personal.]
+
+Try this tomorrow:
+[One single, specific, actionable suggestion. Make it simple and achievable in 3-5 minutes.]
+======================== END FORMAT ========================
+
+CRITICAL RULES - FOLLOW EXACTLY:
+1. START your response with "🌙 Daily Reflection" - NO OTHER TEXT BEFORE THIS
+2. Use EXACTLY these emojis: 🌙 ✨ 💡 (copy them exactly)
+3. Use EXACTLY this bullet symbol: • (not -, *, or any other character)
+4. Write in second person ONLY ("You felt", "Your mood", not "I" or "The user")
+5. Keep each paragraph 2-3 sentences
+6. Include ALL sections: reflection paragraphs, What helped, Gentle reminder, Try this tomorrow
+7. DO NOT add any conversational framing like "Okay, here we go..." or "Let me create..."
+8. DO NOT add extra sections or headings beyond what's shown
+9. Total length: 180-250 words
+10. Keep tone warm, gentle, non-judgmental
+
+CORRECT EXAMPLE:
+🌙 Daily Reflection — Nov 15, 2025
+
+Today began with a sense of heaviness. You felt lonely in the morning, and a few anxious thoughts lingered about work deadlines.
+
+During the afternoon, talking about your project increased your stress levels. You noticed tension building as you tried to meet expectations.
+
+By evening, you shifted into a lighter mood after connecting with a friend. Your energy improved, and your tone became more hopeful.
+
+✨ What helped today:
+• Social connection with someone who listens
+• A moment of rest after completing work
+• Speaking honestly about your feelings
+
+💡 Gentle reminder:
+Don't ignore yourself on days when the world feels heavy. You made progress today.
+
+Try this tomorrow:
+Take three deep breaths before starting your morning routine.
+
+GENERATE THE JOURNAL ENTRY NOW (start with 🌙, no other text before it):`;
+
+  // Try Gemini -> LLaMA -> Fallback
+  try {
+    const response = await generateWithGemini(prompt);
+    // Extract text from response object
+    const journalEntry = typeof response === 'object' && response.text ? response.text : response;
+    console.log(`✅ Journal entry generated with Gemini`);
+    console.log(`📝 Journal preview: "${journalEntry.substring(0, 100)}..."`);
+    return journalEntry;
+  } catch (geminiError) {
+    console.warn(`⚠️ Gemini failed for journal generation: ${geminiError.message}`);
+    
+    if (config.llama.enabled) {
+      console.log('🔄 Attempting LLaMA fallback for journal...');
+      try {
+        const response = await generateWithLLaMA(prompt);
+        // Extract text from response object
+        const journalEntry = typeof response === 'object' && response.text ? response.text : response;
+        console.log(`✅ Journal entry generated with LLaMA`);
+        return journalEntry;
+      } catch (llamaError) {
+        console.warn(`⚠️ LLaMA fallback failed: ${llamaError.message}`);
+      }
+    }
+
+    // Static fallback
+    console.log('📝 Using static fallback for journal entry...');
+    return generateFallbackJournal(emotionSummary, timeProgression, topics, date);
+  }
+};
+
+/**
+ * Generate fallback journal entry when LLM fails
+ * @private
+ */
+function generateFallbackJournal(emotionSummary, timeProgression, topics, date = null) {
+  const emotion = emotionSummary.dominant || 'neutral';
+  const moodScore = emotionSummary.moodScore || 50;
+  const journalDate = date || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  
+  let journal = `🌙 Daily Reflection — ${journalDate}\n\n`;
+  
+  // First paragraph - Morning
+  if (moodScore < 40) {
+    journal += `Today began with some emotional heaviness. You felt ${emotion} in the morning, carrying weight through your early hours. There were moments of struggle as you started your day.\n\n`;
+  } else if (moodScore > 70) {
+    journal += `Today started on a positive note. You felt ${emotion} in the morning, and that energy set a good foundation. Your mood was stable and hopeful.\n\n`;
+  } else {
+    journal += `Today was a balanced day emotionally. You felt ${emotion} at times, navigating through various feelings. The morning brought mixed emotions.\n\n`;
+  }
+
+  // Second paragraph - Afternoon
+  if (topics && topics.length > 0) {
+    const topTopic = topics[0].name;
+    journal += `Through the afternoon, ${topTopic} was on your mind. You processed these thoughts while managing your emotional state. `;
+  } else {
+    journal += `During the afternoon, you moved through your tasks and responsibilities. You stayed present with your feelings. `;
+  }
+  
+  if (timeProgression.trend === 'improved') {
+    journal += `Your stress levels began to ease as the hours passed.\n\n`;
+  } else {
+    journal += `You maintained your pace through the day.\n\n`;
+  }
+
+  // Third paragraph - Evening
+  if (timeProgression.trend === 'improved') {
+    journal += `By evening, your mood improved noticeably. You found moments of relief and lighter energy. The day ended on a more hopeful note than it began.\n\n`;
+  } else {
+    journal += `As evening arrived, you allowed yourself to rest. You acknowledged the day's experiences with gentleness. You made it through.\n\n`;
+  }
+
+  // What helped today
+  journal += `✨ What helped today:\n`;
+  journal += `• Taking time to acknowledge your feelings\n`;
+  journal += `• Moving through the day step by step\n`;
+  journal += `• Being present with yourself\n\n`;
+  
+  // Gentle reminder
+  journal += `💡 Gentle reminder:\n`;
+  journal += `You showed up today, and that matters. Every step counts.\n\n`;
+  
+  // Tomorrow suggestion
+  journal += `Try this tomorrow:\n`;
+  journal += `Take three deep breaths before starting your morning routine.`;
+  
+  return journal;
+}

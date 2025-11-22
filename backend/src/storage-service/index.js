@@ -12,6 +12,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@supabase/supabase-js';
 import config from '../config/index.js';
+import { saveActivity } from './masterActivityService.js';
 
 /**
  * Initialize Supabase client (if configured)
@@ -289,6 +290,7 @@ export const createChatSession = async (userId, sessionTitle = 'New Chat') => {
 
 /**
  * Save a chat message to a session
+ * UPDATED: Now also writes to master_user_activity for unified data architecture
  */
 export const saveChatMessage = async (userId, sessionId, role, message, emotionData = null) => {
   try {
@@ -351,6 +353,32 @@ export const saveChatMessage = async (userId, sessionId, role, message, emotionD
 
     const normalized = normalizeMessageRow(data);
     console.log(`✅ Saved chat message: ${normalized.id}`);
+
+    // CRITICAL: Also save to master_user_activity for unified data architecture
+    try {
+      await saveActivity({
+        userId,
+        sessionId,
+        messageId: data.id,
+        content: message,
+        role,
+        source: 'chat',
+        primaryEmotion: emotionData?.emotion || 'neutral',
+        emotionConfidence: emotionData?.confidence || 0.5,
+        emotionScores: emotionData?.scores || {},
+        voiceTranscript: emotionData?.transcript || null,
+        meta: {
+          audio_url: messageData.audio_url,
+          metadata: messageData.metadata
+        }
+      });
+
+      console.log(`✅ Also saved to master_user_activity`);
+    } catch (activityError) {
+      console.error('⚠️ Failed to save to master_user_activity (non-critical):', activityError.message);
+      // Don't fail the entire operation if master activity save fails
+    }
+
     return normalized;
   } catch (error) {
     console.error('❌ Error saving chat message:', error.message);

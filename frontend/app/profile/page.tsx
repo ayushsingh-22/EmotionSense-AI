@@ -87,9 +87,9 @@ export default function ProfilePage() {
     try {
       setIsLoading(true);
 
-      // Fetch emotion sessions
+      // Fetch chat sessions (emotion data is stored in messages, sessions track conversations)
       const { data: sessions, error } = await supabase
-        .from('emotion_sessions')
+        .from('chat_sessions')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });

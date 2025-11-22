@@ -40,11 +40,15 @@ export function GlassPanel({
                   animate={{
                     boxShadow: [
                       '0 0 20px rgba(168, 85, 247, 0.3)',
-                      '0 0 30px rgba(168, 85, 247, 0.5)',
-                      '0 0 20px rgba(168, 85, 247, 0.3)',
+                      '0 0 40px rgba(168, 85, 247, 0.5)',
                     ],
                   }}
-                  transition={{ duration: 2, repeat: Infinity }}
+                  transition={{ 
+                    duration: 2, 
+                    repeat: Infinity, 
+                    repeatType: "reverse",
+                    ease: "easeInOut" 
+                  }}
                 >
                   {icon}
                 </motion.div>

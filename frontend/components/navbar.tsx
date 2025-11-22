@@ -20,6 +20,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: Activity },
   { name: 'Chat', href: '/chat' },
   { name: 'Insights', href: '/insights' },
+  { name: 'Journal', href: '/journal' },
   { name: 'History', href: '/history' },
   { name: 'Settings', href: '/settings' },
 ];

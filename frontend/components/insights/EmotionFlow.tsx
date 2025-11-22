@@ -65,7 +65,7 @@ export const EmotionFlow = React.memo(({ timeSegments }: EmotionFlowProps) => {
                   <motion.div
                     className="text-3xl mb-1"
                     animate={{
-                      scale: [1, 1.1, 1],
+                      scale: 1.1,
                     }}
                     transition={{
                       duration: 2,

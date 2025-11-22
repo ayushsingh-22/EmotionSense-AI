@@ -60,13 +60,14 @@ const HighlightChip = React.memo(({ highlight, index }: { highlight: string | Ke
 
 HighlightChip.displayName = 'HighlightChip';
 
-const CollapsibleWeekCard = React.memo(({ insight, index }: CollapsibleWeekCardProps) => {
+const CollapsibleWeekCard = React.memo(React.forwardRef<HTMLDivElement, CollapsibleWeekCardProps>(({ insight, index }, ref) => {
   const [isOpen, setIsOpen] = useState(index === 0);
   const config = getEmotionConfig(insight.dominant_emotion);
   const emoji = getEmotionEmoji(insight.dominant_emotion);
 
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1, duration: 0.5 }}
@@ -102,12 +103,13 @@ const CollapsibleWeekCard = React.memo(({ insight, index }: CollapsibleWeekCardP
               <motion.div
                 className="bg-white/20 backdrop-blur-sm rounded-2xl p-3 border-2 border-white/30"
                 animate={{
-                  rotate: isOpen ? 0 : [0, -10, 10, 0],
+                  rotate: isOpen ? 0 : 10,
                 }}
                 transition={{
                   duration: 2,
                   repeat: isOpen ? 0 : Infinity,
                   repeatDelay: 3,
+                  repeatType: "reverse",
                 }}
               >
                 <span className="text-4xl">{emoji}</span>
@@ -171,6 +173,147 @@ const CollapsibleWeekCard = React.memo(({ insight, index }: CollapsibleWeekCardP
                   <WeeklyArcChart dailyArc={insight.daily_arc} />
                 )}
 
+                {/* Weekly Statistics */}
+                {insight.total_activities > 0 && (
+                  <motion.div
+                    className="grid grid-cols-2 md:grid-cols-4 gap-4"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    {/* Peak Mood Day */}
+                    <div className="bg-gradient-to-br from-green-100 to-green-50 border border-green-200 rounded-2xl p-4 text-center">
+                      <div className="text-2xl text-green-600 font-bold">
+                        {insight.peak_mood_day?.mood_score !== null ? insight.peak_mood_day.mood_score : 'N/A'}
+                      </div>
+                      <div className="text-xs text-green-700 font-medium">Peak Mood</div>
+                      {insight.peak_mood_day?.date && insight.peak_mood_day.has_data && (
+                        <div className="text-xs text-green-600 mt-1">
+                          {format(parseISO(insight.peak_mood_day.date), 'MMM d')}
+                        </div>
+                      )}
+                      {!insight.peak_mood_day?.has_data && (
+                        <div className="text-xs text-green-500 mt-1">
+                          No data
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Low Mood Day */}
+                    <div className="bg-gradient-to-br from-orange-100 to-orange-50 border border-orange-200 rounded-2xl p-4 text-center">
+                      <div className="text-2xl text-orange-600 font-bold">
+                        {insight.low_mood_day?.mood_score !== null ? insight.low_mood_day.mood_score : 'N/A'}
+                      </div>
+                      <div className="text-xs text-orange-700 font-medium">Lowest Mood</div>
+                      {insight.low_mood_day?.date && insight.low_mood_day.has_data && (
+                        <div className="text-xs text-orange-600 mt-1">
+                          {format(parseISO(insight.low_mood_day.date), 'MMM d')}
+                        </div>
+                      )}
+                      {!insight.low_mood_day?.has_data && (
+                        <div className="text-xs text-orange-500 mt-1">
+                          No data
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Active Days */}
+                    <div className="bg-gradient-to-br from-blue-100 to-blue-50 border border-blue-200 rounded-2xl p-4 text-center">
+                      <div className="text-2xl text-blue-600 font-bold">
+                        {insight.active_days || 0}
+                      </div>
+                      <div className="text-xs text-blue-700 font-medium">Active Days</div>
+                      <div className="text-xs text-blue-600 mt-1">
+                        of 7 days
+                      </div>
+                    </div>
+
+                    {/* Mood Stability */}
+                    <div className="bg-gradient-to-br from-purple-100 to-purple-50 border border-purple-200 rounded-2xl p-4 text-center">
+                      <div className="text-2xl text-purple-600 font-bold">
+                        {insight.mood_variance < 10 ? 'High' : insight.mood_variance < 20 ? 'Medium' : 'Low'}
+                      </div>
+                      <div className="text-xs text-purple-700 font-medium">Stability</div>
+                      <div className="text-xs text-purple-600 mt-1">
+                        σ={insight.mood_variance || 0}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Activity Summary */}
+                {insight.total_activities > 0 && (
+                  <motion.div
+                    className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 rounded-2xl p-5 border border-indigo-200"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    <h4 className="text-sm font-semibold text-indigo-700 mb-3 flex items-center gap-2">
+                      📊 Weekly Activity Summary
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div className="bg-white/80 rounded-xl p-3 border border-indigo-100">
+                        <div className="font-semibold text-indigo-600">{insight.total_messages || 0}</div>
+                        <div className="text-xs text-indigo-500">Chat Messages</div>
+                      </div>
+                      <div className="bg-white/80 rounded-xl p-3 border border-indigo-100">
+                        <div className="font-semibold text-indigo-600">{insight.total_activities || 0}</div>
+                        <div className="text-xs text-indigo-500">Total Activities</div>
+                      </div>
+                      <div className="bg-white/80 rounded-xl p-3 border border-indigo-100">
+                        <div className="font-semibold text-indigo-600">
+                          {Object.keys(insight.emotion_summary || {}).length}
+                        </div>
+                        <div className="text-xs text-indigo-500">Unique Emotions</div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Emotion Distribution */}
+                {insight.emotion_summary && Object.keys(insight.emotion_summary).length > 0 && (
+                  <motion.div
+                    className="space-y-3"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                  >
+                    <h4 className="text-sm font-semibold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                      Emotion Distribution
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {Object.entries(insight.emotion_summary)
+                        .sort(([,a], [,b]) => (b as number) - (a as number))
+                        .slice(0, 6)
+                        .map(([emotion, count]) => {
+                          const total = Object.values(insight.emotion_summary).reduce((sum: number, c: any) => sum + c, 0);
+                          const percentage = Math.round(((count as number) / total) * 100);
+                          
+                          return (
+                            <div key={emotion} className="bg-gradient-to-br from-secondary/20 to-secondary/10 rounded-xl p-3 border border-secondary/30">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium capitalize">{emotion}</span>
+                                <span className="text-xs text-muted-foreground">{percentage}%</span>
+                              </div>
+                              <div className="w-full bg-secondary/30 rounded-full h-2">
+                                <motion.div
+                                  className="bg-gradient-to-r from-primary to-primary/80 h-2 rounded-full"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${percentage}%` }}
+                                  transition={{ duration: 0.8, delay: 0.6 }}
+                                />
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {count} occurrences
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </motion.div>
+                )}
+
                 {/* Key Highlights */}
                 {insight.key_highlights && insight.key_highlights.length > 0 && (
                   <div className="space-y-3">
@@ -191,7 +334,9 @@ const CollapsibleWeekCard = React.memo(({ insight, index }: CollapsibleWeekCardP
       </Card>
     </motion.div>
   );
-});
+}));
+
+CollapsibleWeekCard.displayName = 'CollapsibleWeekCard';
 
 CollapsibleWeekCard.displayName = 'CollapsibleWeekCard';
 
@@ -224,11 +369,11 @@ export const WeeklyView = React.memo(({ insights, isLoading }: WeeklyViewProps) 
         <Card className="overflow-hidden border-2 border-dashed">
           <CardContent className="p-12 text-center">
             <motion.div
-              animate={{ 
-                rotate: [0, 10, -10, 0],
-                scale: [1, 1.1, 1]
+              animate={{
+                rotate: 10,
+                scale: [1, 1.1],
               }}
-              transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+              transition={{ duration: 2, repeat: Infinity, repeatType: "reverse", repeatDelay: 1 }}
             >
               <Sparkles className="h-16 w-16 mx-auto mb-4 text-primary" />
             </motion.div>
