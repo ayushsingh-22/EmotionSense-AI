@@ -1,5 +1,5 @@
 // Emotion types and interfaces
-export type EmotionType = 'angry' | 'disgust' | 'fear' | 'happy' | 'neutral' | 'sad' | 'surprise';
+export type EmotionType = 'anger' | 'disgust' | 'fear' | 'joy' | 'neutral' | 'sadness' | 'surprise';
 
 export interface EmotionResult {
   emotion: EmotionType;
@@ -105,12 +105,12 @@ export interface UserPreferences {
 
 // Emotion configuration
 export const EMOTION_CONFIG: Record<EmotionType, { color: string; emoji: string; bgColor: string }> = {
-  angry: { color: '#E74C3C', emoji: '😠', bgColor: 'bg-red-500' },
+  anger: { color: '#E74C3C', emoji: '🤬', bgColor: 'bg-red-500' },
   disgust: { color: '#16A085', emoji: '🤢', bgColor: 'bg-teal-600' },
   fear: { color: '#9B59B6', emoji: '😨', bgColor: 'bg-purple-500' },
-  happy: { color: '#F39C12', emoji: '😊', bgColor: 'bg-orange-500' },
+  joy: { color: '#F39C12', emoji: '😀', bgColor: 'bg-orange-500' },
   neutral: { color: '#95A5A6', emoji: '😐', bgColor: 'bg-gray-500' },
-  sad: { color: '#3498DB', emoji: '😢', bgColor: 'bg-blue-500' },
+  sadness: { color: '#3498DB', emoji: '😭', bgColor: 'bg-blue-500' },
   surprise: { color: '#E67E22', emoji: '😲', bgColor: 'bg-orange-600' },
 };
 

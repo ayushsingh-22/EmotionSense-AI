@@ -17,32 +17,47 @@ import config from '../config/index.js';
  */
 export const normalizeEmotionLabel = (emotion) => {
   const emotionMap = {
-    // Standard emotions
-    'happy': 'happy',
-    'joy': 'happy',
-    'excited': 'happy',
-    
-    'sad': 'sad',
-    'sadness': 'sad',
-    'depressed': 'sad',
-    
-    'angry': 'angry',
-    'anger': 'angry',
-    'frustrated': 'angry',
-    
+    // Standard emotions (exact matches)
+    'anger': 'anger',
+    'disgust': 'disgust',
     'fear': 'fear',
+    'joy': 'joy',
+    'neutral': 'neutral',
+    'sadness': 'sadness',
+    'surprise': 'surprise',
+    
+    // Legacy mappings
+    'angry': 'anger',
+    'happy': 'joy',
+    'sad': 'sadness',
+    
+    // Common variations
+    'happiness': 'joy',
+    'excited': 'joy',
+    'joyful': 'joy',
+    
+    'depressed': 'sadness',
+    'melancholy': 'sadness',
+    
+    'frustrated': 'anger',
+    'mad': 'anger',
+    'furious': 'anger',
+    
     'fearful': 'fear',
     'anxious': 'fear',
     'anxiety': 'fear',
+    'scared': 'fear',
+    'afraid': 'fear',
     
-    'surprise': 'surprise',
     'surprised': 'surprise',
+    'shocked': 'surprise',
+    'amazed': 'surprise',
     
-    'disgust': 'disgust',
     'disgusted': 'disgust',
+    'revolted': 'disgust',
     
-    'neutral': 'neutral',
-    'calm': 'neutral'
+    'calm': 'neutral',
+    'peaceful': 'neutral'
   };
   
   return emotionMap[emotion.toLowerCase()] || emotion.toLowerCase();

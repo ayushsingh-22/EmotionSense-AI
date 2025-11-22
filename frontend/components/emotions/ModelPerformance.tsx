@@ -1,7 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui/card';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import type { AnalysisHistory, TextAnalysisResult } from '@/types';
 
 interface ModelPerformanceProps {
@@ -29,8 +29,8 @@ export function ModelPerformance({ history }: ModelPerformanceProps) {
   });
 
   const data = [
-    { name: 'Agreement', value: agreements, color: '#10B981' },
-    { name: 'Disagreement', value: disagreements, color: '#F59E0B' },
+    { name: 'Agreement', value: agreements },
+    { name: 'Disagreement', value: disagreements },
   ];
 
   const total = agreements + disagreements;
@@ -46,23 +46,21 @@ export function ModelPerformance({ history }: ModelPerformanceProps) {
             <p className="text-sm text-muted-foreground">Agreement Rate</p>
           </div>
           <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
+            <LineChart data={data} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="name" />
+              <YAxis />
               <Tooltip />
               <Legend />
-            </PieChart>
+              <Line 
+                type="monotone" 
+                dataKey="value" 
+                stroke="hsl(var(--primary))" 
+                strokeWidth={3}
+                dot={{ r: 6, fill: 'hsl(var(--primary))', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 8, strokeWidth: 3 }}
+              />
+            </LineChart>
           </ResponsiveContainer>
           <div className="mt-4 space-y-2 text-sm">
             <div className="flex justify-between">

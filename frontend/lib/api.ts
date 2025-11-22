@@ -13,7 +13,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000, // Reduced timeout for faster failure
+  timeout: 30000, // Increased to 30 seconds for insights with LLM generation
 });
 
 // Request interceptor for performance monitoring
@@ -387,6 +387,141 @@ export const deleteEmergencyContact = async (userId: string): Promise<boolean> =
     return response.data.success;
   } catch (error) {
     console.error('Error deleting emergency contact:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
+// JOURNAL API FUNCTIONS
+// ============================================================================
+
+export interface JournalEntry {
+  id?: string;
+  user_id?: string;
+  date: string;
+  content: string; // Main formatted journal text (full Daily Emotion Journal)
+  overview?: string; // Section 1
+  key_moments?: string[]; // Section 2 bullets
+  analysis?: string; // Section 3
+  closing?: string; // Section 4
+  emotion?: string; // Primary emotion for the day
+  emotion_emoji?: string; // Emoji representation
+  emotion_summary?: {
+    dominant_emotion: string;
+    mood_score: number; // 0-100 scale
+    emotion_counts: Record<string, number>;
+    time_segments?: any;
+    context_summary?: string;
+    message_count?: number;
+  };
+  source?: 'auto' | 'manual';
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Get today's journal entry
+ */
+export const getJournalToday = async (userId: string): Promise<JournalEntry | null> => {
+  try {
+    const response = await api.get<{ success: boolean; data: JournalEntry | null }>(
+      '/api/journal/today',
+      { params: { userId } }
+    );
+    return response.data.data;
+  } catch (error) {
+    console.error('Error fetching today\'s journal:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get list of journal entries
+ */
+export const getJournalList = async (
+  userId: string,
+  limit: number = 30
+): Promise<JournalEntry[]> => {
+  try {
+    const response = await api.get<{ success: boolean; data: { journals: JournalEntry[] } }>(
+      '/api/journal/list',
+      { params: { userId, limit } }
+    );
+    return response.data.data.journals;
+  } catch (error) {
+    console.error('Error fetching journal list:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get journal entry for a specific date
+ */
+export const getJournalByDate = async (
+  userId: string,
+  date: string
+): Promise<JournalEntry | null> => {
+  try {
+    const response = await api.get<{ success: boolean; data: JournalEntry | null }>(
+      `/api/journal/${date}`,
+      { params: { userId } }
+    );
+    return response.data.data;
+  } catch (error) {
+    console.error('Error fetching journal by date:', error);
+    throw error;
+  }
+};
+
+/**
+ * Generate journal entry (manual trigger)
+ */
+export const generateJournal = async (
+  userId: string,
+  date?: string,
+  force?: boolean
+): Promise<JournalEntry | null> => {
+  try {
+    const response = await api.post<{ 
+      success: boolean; 
+      data?: JournalEntry;
+      skipped?: boolean;
+      reason?: string;
+      message?: string;
+    }>(
+      '/api/journal/generate',
+      { userId, date, force }
+    );
+    
+    if (response.data.skipped) {
+      console.log(`Journal generation skipped: ${response.data.reason}`);
+      return null;
+    }
+    
+    return response.data.data || null;
+  } catch (error) {
+    console.error('Error generating journal:', error);
+    throw error;
+  }
+};
+
+/**
+ * Refresh today's journal by recalculating from today's chat messages
+ */
+export const refreshTodayJournal = async (userId: string): Promise<JournalEntry> => {
+  try {
+    const response = await api.post<{ success: boolean; data?: JournalEntry; error?: string; messageCount?: number }>(
+      '/api/journal/refresh',
+      { userId }
+    );
+    
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Failed to refresh journal');
+    }
+    
+    return response.data.data;
+  } catch (error) {
+    console.error('Error refreshing journal:', error);
     throw error;
   }
 };

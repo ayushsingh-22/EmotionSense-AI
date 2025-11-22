@@ -86,7 +86,7 @@ export const EmotionDistribution = React.memo(({ emotionCounts }: EmotionDistrib
                   <motion.div 
                     className="text-2xl mb-1"
                     animate={{
-                      rotate: [0, 10, -10, 0],
+                      rotate: 10,
                     }}
                     transition={{
                       duration: 3,

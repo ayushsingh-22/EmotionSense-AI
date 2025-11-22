@@ -16,8 +16,6 @@ import {
   saveAnalysisResult, 
   createChatSession, 
   saveChatMessage, 
-  getUserChatSessions, 
-  getChatMessages, 
   getRecentChatMessages, 
   updateChatSessionTitle, 
   deleteChatSession,
@@ -25,6 +23,10 @@ import {
   logSafetyAlert,
   getUserProfile
 } from '../storage-service/index.js';
+import { 
+  getUserChatSessionsUnified, 
+  getChatMessagesUnified 
+} from '../storage-service/unifiedChatService.js';
 import { 
   translateToEnglishIfNeeded, 
   translateBackToUserLanguage,
@@ -429,7 +431,7 @@ router.post('/message', asyncHandler(async (req, res) => {
 
 /**
  * GET /api/chat/sessions
- * Get all chat sessions for a user
+ * Get all chat sessions for a user from master_user_activity (UNIFIED)
  */
 router.get('/sessions', asyncHandler(async (req, res) => {
   const { userId } = req.query;
@@ -442,18 +444,18 @@ router.get('/sessions', asyncHandler(async (req, res) => {
   }
 
   try {
-    const sessions = await getUserChatSessions(userId);
+    const sessionData = await getUserChatSessionsUnified(userId);
     
     res.json({
       success: true,
       data: {
-        sessions: sessions,
-        count: sessions.length
+        sessions: sessionData.sessions,
+        count: sessionData.total
       }
     });
 
   } catch (error) {
-    console.error('❌ Error fetching chat sessions:', error);
+    console.error('❌ Error fetching unified chat sessions:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch chat sessions',
@@ -478,14 +480,15 @@ router.get('/sessions/:sessionId/messages', asyncHandler(async (req, res) => {
   }
 
   try {
-    const messages = await getChatMessages(userId, sessionId);
+    const messageData = await getChatMessagesUnified(sessionId, userId);
     
     res.json({
       success: true,
       data: {
         sessionId: sessionId,
-        messages: messages,
-        count: messages.length
+        messages: messageData.messages,
+        count: messageData.total,
+        metadata: messageData.sessionMetadata
       }
     });
 

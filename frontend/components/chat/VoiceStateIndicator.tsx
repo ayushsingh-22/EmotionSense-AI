@@ -74,8 +74,8 @@ export const VoiceStateIndicator: React.FC<VoiceStateIndicatorProps> = ({ state,
         <motion.div
           className="w-2 h-2 rounded-full bg-current"
           animate={{
-            scale: [1, 1.2, 1],
-            opacity: [0.6, 1, 0.6]
+            scale: 1.2,
+            opacity: 1,
           }}
           transition={{
             duration: 1,

@@ -40,6 +40,8 @@ export const ChatMessage = memo(function ChatMessage({
   onRegenerate,
   isEdited = false,
   isHighlighted = false,
+  emotion,
+  confidence,
 }: ChatMessageProps) {
   const isUser = role === 'user';
 
@@ -102,24 +104,67 @@ export const ChatMessage = memo(function ChatMessage({
           <div className="flex items-center gap-3 text-muted-foreground py-2">
             <motion.span 
               className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-primary to-purple-600" 
-              animate={{ opacity: [0.3, 1, 0.3] }}
-              transition={{ duration: 1, repeat: Infinity, delay: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 1, repeat: Infinity, repeatType: "reverse", delay: 0 }}
             />
             <motion.span 
               className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-primary to-purple-600" 
-              animate={{ opacity: [0.3, 1, 0.3] }}
-              transition={{ duration: 1, repeat: Infinity, delay: 0.2 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, repeat: Infinity, repeatType: "reverse", delay: 0.2 }}
             />
             <motion.span 
               className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-primary to-purple-600" 
-              animate={{ opacity: [0.3, 1, 0.3] }}
-              transition={{ duration: 1, repeat: Infinity, delay: 0.4 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, repeat: Infinity, repeatType: "reverse", delay: 0.4 }}
             />
           </div>
         ) : (
-          <p className="whitespace-pre-wrap break-words text-base text-foreground/95 leading-relaxed">
-            {message}
-          </p>
+          <>
+            <p className="whitespace-pre-wrap break-words text-base text-foreground/95 leading-relaxed">
+              {message}
+            </p>
+            
+            {/* Emotion detected badge - only for user messages */}
+            {isUser && emotion && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="mt-3 pt-3 border-t border-border/30"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-medium">Emotion Detected:</span>
+                  <div className={cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold",
+                    emotion.toLowerCase() === 'joy' && "bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 border border-amber-300/50",
+                    emotion.toLowerCase() === 'sadness' && "bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border border-blue-300/50",
+                    emotion.toLowerCase() === 'anger' && "bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border border-red-300/50",
+                    emotion.toLowerCase() === 'fear' && "bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 border border-purple-300/50",
+                    emotion.toLowerCase() === 'surprise' && "bg-gradient-to-r from-pink-100 to-fuchsia-100 text-pink-700 border border-pink-300/50",
+                    emotion.toLowerCase() === 'disgust' && "bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-300/50",
+                    emotion.toLowerCase() === 'neutral' && "bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700 border border-gray-300/50",
+                    !['joy', 'sadness', 'anger', 'fear', 'surprise', 'disgust', 'neutral'].includes(emotion.toLowerCase()) && "bg-muted text-muted-foreground border border-border"
+                  )}>
+                    <span className="text-sm">
+                      {emotion.toLowerCase() === 'joy' && '😀'}
+                      {emotion.toLowerCase() === 'sadness' && '😭'}
+                      {emotion.toLowerCase() === 'anger' && '🤬'}
+                      {emotion.toLowerCase() === 'fear' && '😨'}
+                      {emotion.toLowerCase() === 'surprise' && '😲'}
+                      {emotion.toLowerCase() === 'disgust' && '🤢'}
+                      {emotion.toLowerCase() === 'neutral' && '😐'}
+                    </span>
+                    <span className="capitalize">{emotion}</span>
+                    {confidence !== null && confidence !== undefined && (
+                      <span className="opacity-70">
+                        ({Math.round(confidence * 100)}%)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </>
         )}
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
@@ -179,7 +224,7 @@ export const ChatMessage = memo(function ChatMessage({
               '0 0 20px rgba(59, 130, 246, 0.3)',
             ],
           }}
-          transition={{ duration: 2, repeat: Infinity, delay: 1 }}
+          transition={{ duration: 2, repeat: Infinity, delay: 1, type: 'tween', ease: 'easeInOut' }}
         >
           <User className="h-5 w-5" />
         </motion.div>

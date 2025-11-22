@@ -237,7 +237,7 @@ export const SimpleVoiceRecorder: React.FC<SimpleVoiceRecorderProps> = ({
                   key={i}
                   className="w-1 bg-current rounded-full"
                   animate={{
-                    height: [8, 20, 12, 16, 8],
+                    height: 20,
                   }}
                   transition={{
                     duration: 1.2,
@@ -276,8 +276,8 @@ export const SimpleVoiceRecorder: React.FC<SimpleVoiceRecorderProps> = ({
             className="flex items-center gap-2 text-green-600 dark:text-green-400"
           >
             <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
+              animate={{ scale: 1.2 }}
+              transition={{ duration: 1, repeat: Infinity, repeatType: "reverse" }}
               className="w-2 h-2 bg-current rounded-full"
             />
             <span className="text-sm font-medium">AI responding...</span>
@@ -310,8 +310,8 @@ export const SimpleVoiceRecorder: React.FC<SimpleVoiceRecorderProps> = ({
             <motion.div
               className="absolute inset-0 rounded-full border-4 border-red-400"
               animate={{
-                scale: [1, 1.3, 1],
-                opacity: [1, 0.3, 1]
+                scale: 1.3,
+                opacity: 0.3,
               }}
               transition={{
                 duration: 2,
@@ -322,8 +322,8 @@ export const SimpleVoiceRecorder: React.FC<SimpleVoiceRecorderProps> = ({
             <motion.div
               className="absolute inset-0 rounded-full border-2 border-red-300"
               animate={{
-                scale: [1, 1.5, 1],
-                opacity: [0.8, 0, 0.8]
+                scale: 1.5,
+                opacity: 0,
               }}
               transition={{
                 duration: 2,

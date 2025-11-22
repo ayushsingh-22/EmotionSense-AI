@@ -86,7 +86,8 @@ function generateWeeklyReflection(weekData, dominantEmotion, avgMoodScore) {
     anger: ['frustrating situations', 'tense moments', 'irritating events'],
     fear: ['anxious periods', 'worrying times', 'uncertain moments'],
     neutral: ['balanced state', 'steady rhythm', 'calm progression'],
-    surprise: ['unexpected turns', 'surprising developments', 'new discoveries']
+    surprise: ['unexpected turns', 'surprising developments', 'new discoveries'],
+    disgust: ['uncomfortable situations', 'difficult experiences', 'challenging moments']
   };
 
   const trend = emotionTrends[dominantEmotion] || ['various experiences'];

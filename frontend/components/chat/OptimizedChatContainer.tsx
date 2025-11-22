@@ -114,8 +114,8 @@ export function OptimizedChatContainer({
                       key={i}
                       className="w-2 h-2 bg-primary rounded-full"
                       animate={{
-                        scale: [1, 1.2, 1],
-                        opacity: [0.6, 1, 0.6]
+                        scale: 1.2,
+                        opacity: 1,
                       }}
                       transition={{
                         duration: 1,

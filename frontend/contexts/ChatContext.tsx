@@ -16,6 +16,7 @@ interface ChatContextType {
   regenerateLastResponse: () => Promise<void>;
   startNewSession: () => void;
   loadChatHistory: (sessionId?: string) => Promise<void>;
+  loadExistingSession: (sessionId: string) => Promise<void>;
   playAudio: (text: string) => Promise<void>;
   isPlayingAudio: boolean;
 }
@@ -31,16 +32,44 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Generate new session ID
-  const generateSessionId = () => {
-    return `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  // Start new chat session (request from backend)
+  const startNewSession = async () => {
+    if (!user?.id) {
+      toast({
+        title: 'Error',
+        description: 'User not authenticated',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      const { id: newSessionId } = await (await import('@/lib/api')).createChatSession(user.id);
+      setCurrentSessionId(newSessionId);
+      setMessages([]);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to create new chat session',
+        variant: 'destructive',
+      });
+    }
   };
 
-  // Start new chat session
-  const startNewSession = () => {
-    const newSessionId = generateSessionId();
-    setCurrentSessionId(newSessionId);
-    setMessages([]);
+  // Load an existing chat session
+  const loadExistingSession = async (sessionId: string) => {
+    if (!user?.id) {
+      console.log('❌ User not authenticated, cannot load session');
+      return;
+    }
+
+    if (sessionId === currentSessionId) {
+      console.log('📝 Session already loaded:', sessionId);
+      return;
+    }
+
+    console.log('📝 Loading existing session:', sessionId);
+    setCurrentSessionId(sessionId);
+    await loadChatHistory(sessionId);
   };
 
   // Send message (SIMPLIFIED - backend handles all data persistence)
@@ -50,7 +79,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     // Create session if none exists
     let sessionId = currentSessionId;
     if (!sessionId) {
-      sessionId = generateSessionId();
+      // Request new session from backend
+      const { id: newSessionId } = await (await import('@/lib/api')).createChatSession(user.id);
+      sessionId = newSessionId;
       setCurrentSessionId(sessionId);
     }
 
@@ -174,12 +205,35 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Load chat history (DISABLED - backend manages persistence)
-  const loadChatHistory = async () => {
-    console.log('📝 Chat history loading disabled - using session-based chat');
-    // Note: Chat history is currently session-based only
-    // Backend handles all persistence to Supabase emotion_analysis table
-    return;
+  // Load chat history for a specific session
+  const loadChatHistory = async (sessionId?: string) => {
+    if (!user?.id || !sessionId) {
+      console.log('📝 No sessionId provided or user not authenticated');
+      return;
+    }
+
+    try {
+      console.log('📝 Loading chat history for session:', sessionId);
+      setIsLoading(true);
+      
+      // Import getChatMessages here to avoid circular dependency
+      const { getChatMessages } = await import('@/lib/api');
+      const data = await getChatMessages(sessionId, user.id);
+      
+      setCurrentSessionId(sessionId);
+      setMessages(data.messages || []);
+      
+      console.log('✅ Chat history loaded successfully:', data.messages?.length, 'messages');
+    } catch (error) {
+      console.error('❌ Error loading chat history:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load chat history.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Play audio using TTS (with browser fallback)
@@ -327,6 +381,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     regenerateLastResponse,
     startNewSession,
     loadChatHistory,
+    loadExistingSession,
     playAudio,
     isPlayingAudio,
   };

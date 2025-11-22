@@ -1,52 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Calendar, TrendingUp, Clock, Sparkles } from 'lucide-react';
+import { Activity, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   getDailyInsights, 
-  getWeeklyInsights, 
-  getUserStats,
-  getKeyMoments,
+  getWeeklyInsights,
   type DailyInsight,
-  type WeeklyInsight,
-  type UserStats,
-  type KeyMoment
+  type WeeklyInsight
 } from '@/lib/insightsApi';
+import { WeeklyMoodJourney } from '@/components/insights/WeeklyMoodJourney';
+import { TodayEmotionalFlow } from '@/components/insights/TodayEmotionalFlow';
+import { MinimalistWeeklyChart } from '@/components/insights/MinimalistWeeklyChart';
 import { format, parseISO } from 'date-fns';
-import { DailyView } from '@/components/insights/DailyView';
-import { WeeklyView } from '@/components/insights/WeeklyView';
-import { TimelineView } from '@/components/insights/TimelineView';
-import { StatsCardSkeleton } from '@/components/insights/InsightsLoading';
 
 export default function InsightsPage() {
   const { user } = useAuth();
   const [dailyInsights, setDailyInsights] = useState<DailyInsight[]>([]);
   const [weeklyInsights, setWeeklyInsights] = useState<WeeklyInsight[]>([]);
-  const [stats, setStats] = useState<UserStats | null>(null);
-  const [moments, setMoments] = useState<KeyMoment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTab, setSelectedTab] = useState('daily');
 
   const loadData = async () => {
     if (!user?.id) return;
     
     setIsLoading(true);
     try {
-      const [daily, weekly, userStats, keyMoments] = await Promise.all([
+      const [daily, weekly] = await Promise.all([
         getDailyInsights(user.id),
-        getWeeklyInsights(user.id, 4),
-        getUserStats(user.id),
-        getKeyMoments(user.id)
+        getWeeklyInsights(user.id, 4)
       ]);
 
       setDailyInsights(daily);
       setWeeklyInsights(weekly);
-      setStats(userStats);
-      setMoments(keyMoments);
     } catch (error) {
       console.error('Error loading insights:', error);
     } finally {
@@ -63,10 +50,10 @@ export default function InsightsPage() {
 
   if (!user) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
         <Card>
           <CardContent className="p-6">
-            <p className="text-muted-foreground">Please sign in to view your emotion insights.</p>
+            <p className="text-sm text-muted-foreground">Please sign in to view your insights.</p>
           </CardContent>
         </Card>
       </div>
@@ -74,169 +61,120 @@ export default function InsightsPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Animated Header Section */}
-      <motion.div 
-        className="flex flex-col gap-2"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
-          Emotion Insights
-        </h1>
-        <p className="text-muted-foreground text-lg">
-          Track your emotional journey and discover patterns ✨
+    <div className="container mx-auto px-4 py-8 max-w-5xl space-y-8">
+      {/* Clean Header */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Insights</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Your emotional journey at a glance
         </p>
-      </motion.div>
+      </div>
 
-      {/* Premium Stats Overview Cards */}
-      {isLoading ? (
-        <StatsCardSkeleton />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            whileHover={{ scale: 1.02, y: -4 }}
-          >
-            <Card className="overflow-hidden border-2 border-border/50 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-yellow-500/10 via-background to-background backdrop-blur-sm">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  <motion.div 
-                    className="p-4 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 shadow-lg"
-                    animate={{
-                      boxShadow: [
-                        '0 0 20px rgba(251, 191, 36, 0.3)',
-                        '0 0 30px rgba(251, 191, 36, 0.5)',
-                        '0 0 20px rgba(251, 191, 36, 0.3)',
-                      ],
-                    }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  >
-                    <Calendar className="h-7 w-7 text-white" />
-                  </motion.div>
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">Tracked Days</p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">
-                      {stats?.trackedDays || 0}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            whileHover={{ scale: 1.02, y: -4 }}
-          >
-            <Card className="overflow-hidden border-2 border-border/50 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-blue-500/10 via-background to-background backdrop-blur-sm">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  <motion.div 
-                    className="p-4 rounded-2xl bg-gradient-to-br from-blue-400 to-cyan-500 shadow-lg"
-                    animate={{
-                      boxShadow: [
-                        '0 0 20px rgba(59, 130, 246, 0.3)',
-                        '0 0 30px rgba(59, 130, 246, 0.5)',
-                        '0 0 20px rgba(59, 130, 246, 0.3)',
-                      ],
-                    }}
-                    transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
-                  >
-                    <TrendingUp className="h-7 w-7 text-white" />
-                  </motion.div>
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">Total Emotions</p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                      {stats?.totalEmotions || 0}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            whileHover={{ scale: 1.02, y: -4 }}
-          >
-            <Card className="overflow-hidden border-2 border-border/50 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-purple-500/10 via-background to-background backdrop-blur-sm">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  <motion.div 
-                    className="p-4 rounded-2xl bg-gradient-to-br from-purple-400 to-pink-500 shadow-lg"
-                    animate={{
-                      boxShadow: [
-                        '0 0 20px rgba(168, 85, 247, 0.3)',
-                        '0 0 30px rgba(168, 85, 247, 0.5)',
-                        '0 0 20px rgba(168, 85, 247, 0.3)',
-                      ],
-                    }}
-                    transition={{ duration: 2, repeat: Infinity, delay: 1 }}
-                  >
-                    <Clock className="h-7 w-7 text-white" />
-                  </motion.div>
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">Tracking Since</p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                      {stats?.firstChatDate 
-                        ? format(parseISO(stats.firstChatDate), 'MMM d')
-                        : '—'
-                      }
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center space-y-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="text-sm text-muted-foreground">Loading insights...</p>
+          </div>
         </div>
       )}
 
-      {/* Enhanced Tabs with New Components */}
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 p-1 bg-muted/50 backdrop-blur-sm rounded-xl border border-border/50">
-          <TabsTrigger 
-            value="daily" 
-            className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground"
-          >
-            <Calendar className="h-4 w-4 mr-2" />
-            Daily View
-          </TabsTrigger>
-          <TabsTrigger 
-            value="weekly"
-            className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground"
-          >
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Weekly View
-          </TabsTrigger>
-          <TabsTrigger 
-            value="timeline"
-            className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-primary-foreground"
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            Timeline
-          </TabsTrigger>
-        </TabsList>
+      {/* Empty State */}
+      {!isLoading && dailyInsights.length === 0 && weeklyInsights.length === 0 && (
+        <Card className="border border-border">
+          <CardContent className="p-12 text-center">
+            <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+            <p className="text-sm text-muted-foreground">
+              No insights yet. Start chatting to track your emotions!
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
-        <TabsContent value="daily" className="mt-6">
-          <DailyView insights={dailyInsights} isLoading={isLoading} />
-        </TabsContent>
+      {/* Today's Emotional Flow - Premium Component */}
+      {!isLoading && dailyInsights.length > 0 && (
+        <TodayEmotionalFlow insight={dailyInsights[0]} />
+      )}
 
-        <TabsContent value="weekly" className="mt-6">
-          <WeeklyView insights={weeklyInsights} isLoading={isLoading} />
-        </TabsContent>
+      {/* Weekly Mood Journey - 30 Day Timeline */}
+      {!isLoading && weeklyInsights.length > 0 && (
+        <WeeklyMoodJourney weeklyInsights={weeklyInsights} />
+      )}
 
-        <TabsContent value="timeline" className="mt-6">
-          <TimelineView moments={moments} isLoading={isLoading} />
-        </TabsContent>
-      </Tabs>
+      {/* Weekly Trends - Collapsible Weekly Cards */}
+      {!isLoading && weeklyInsights.map((week, idx) => {
+        // State needs to be inside the component, so we'll use a separate component
+        return <CollapsibleWeekCard key={idx} week={week} index={idx} />;
+      })}
     </div>
+  );
+}
+
+// Collapsible Week Card Component
+function CollapsibleWeekCard({ week, index }: { week: WeeklyInsight; index: number }) {
+  const [isOpen, setIsOpen] = useState(index === 0); // First card open by default
+
+  return (
+    <Card className="border border-border overflow-hidden">
+      <div 
+        className="bg-gradient-to-r from-primary/10 via-primary/5 to-background p-6 cursor-pointer hover:from-primary/15 hover:via-primary/8 transition-colors"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold">
+              {index === 0 ? 'This Week' : `${index === 1 ? 'Last Week' : format(parseISO(week.week_start), 'MMM d')} - ${format(parseISO(week.week_end), 'MMM d')}`}
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {week.active_days} active days • {week.total_activities} activities
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Avg Mood</p>
+              <p className="text-4xl font-bold text-primary">{Math.round(week.avg_mood_score)}</p>
+            </div>
+            <motion.div
+              animate={{ rotate: isOpen ? 180 : 0 }}
+              transition={{ duration: 0.3 }}
+              className="ml-2"
+            >
+              <ChevronDown className="h-6 w-6 text-muted-foreground" />
+            </motion.div>
+          </div>
+        </div>
+      </div>
+      
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <CardContent className="p-6 space-y-6">
+              {/* Reflection Text */}
+              {week.reflection_text && (
+                <div className="bg-muted/30 rounded-lg p-4 border-l-4 border-primary">
+                  <p className="text-sm text-foreground/90 italic">
+                    &quot;{week.reflection_text}&quot;
+                  </p>
+                </div>
+              )}
+
+              {/* Weekly Chart */}
+              <MinimalistWeeklyChart 
+                dailyArc={week.daily_arc}
+                weekStart={week.week_start}
+                weekEnd={week.week_end}
+              />
+            </CardContent>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
   );
 }

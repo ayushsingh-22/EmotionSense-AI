@@ -232,7 +232,7 @@ export const combineTextEmotionResults = (bilstmResult, hfResult) => {
 
   // Normalize emotion labels to match BiLSTM format
   const emotionMap = { 
-    joy: 'happy', 
+    happy: 'joy', // Normalize happy to joy 
     sadness: 'sad', 
     anger: 'angry',
     surprise: 'neutral' // Map surprise to neutral since BiLSTM doesn't have it

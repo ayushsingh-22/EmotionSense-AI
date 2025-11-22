@@ -2,17 +2,19 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useChat } from '@/contexts/ChatContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { getChatSessions, getChatMessages } from '@/lib/api';
 import { ChatSession, ChatMessage } from '@/lib/supabase';
-import { Search, MessageCircle, Calendar, ChevronRight, Sparkles } from 'lucide-react';
+import { Search, MessageCircle, Calendar, ChevronRight, Sparkles, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChatMessage as ChatMessageComponent } from '@/components/chat/ChatMessage';
 import { motion } from 'framer-motion';
 import { GradientHeader } from '@/components/ui/GradientHeader';
@@ -32,6 +34,8 @@ export default function HistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   
   const { user } = useAuth();
+  const { loadExistingSession, startNewSession } = useChat();
+  const router = useRouter();
 
   const loadChatSessions = useCallback(async () => {
     if (!user?.id) return;
@@ -102,6 +106,22 @@ export default function HistoryPage() {
     }
   };
 
+  const openChatWithSession = async (sessionId: string) => {
+    if (!user?.id) return;
+    
+    try {
+      // Navigate to chat page with session parameter
+      router.push(`/chat?sessionId=${sessionId}`);
+    } catch (error) {
+      console.error('Failed to open chat session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to open chat session.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const formatTimestamp = (timestamp: string) => {
     return format(new Date(timestamp), 'MMM dd, yyyy HH:mm');
   };
@@ -136,14 +156,21 @@ export default function HistoryPage() {
           subtitle="Review your past conversations with MantrAI and track your emotional journey"
           icon={<Sparkles className="h-10 w-10 text-primary" />}
         />
-        <Link href="/chat">
+        <div
+          onClick={() => {
+            // Start new session and navigate to chat
+            startNewSession();
+            router.push('/chat');
+          }}
+          className="cursor-pointer"
+        >
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-2xl hover:shadow-purple-500/50 transition-all duration-300 rounded-2xl">
               <MessageCircle className="mr-2 h-5 w-5" />
               New Chat
             </Button>
           </motion.div>
-        </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -210,10 +237,24 @@ export default function HistoryPage() {
                               <h3 className="font-semibold text-sm line-clamp-1">
                                 {session.session_title}
                               </h3>
-                              <ChevronRight className={cn(
-                                "h-4 w-4 flex-shrink-0 transition-transform duration-300",
-                                selectedSession === session.id ? "text-blue-500 rotate-90" : "text-muted-foreground"
-                              )} />
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openChatWithSession(session.id);
+                                  }}
+                                  title="Open in chat"
+                                >
+                                  <ExternalLink className="h-3 w-3 text-blue-500" />
+                                </Button>
+                                <ChevronRight className={cn(
+                                  "h-4 w-4 transition-transform duration-300",
+                                  selectedSession === session.id ? "text-blue-500 rotate-90" : "text-muted-foreground"
+                                )} />
+                              </div>
                             </div>
                             <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                               {session.lastMessage}

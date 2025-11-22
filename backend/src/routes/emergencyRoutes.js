@@ -120,6 +120,15 @@ router.get('/:userId', asyncHandler(async (req, res) => {
       data: contact
     });
   } catch (error) {
+    // Handle missing emergency_contacts table
+    if (error.message?.includes('emergency_contacts') || error.code === 'PGRST205') {
+      console.warn('⚠️ emergency_contacts table not found - returning 404');
+      return res.status(404).json({
+        success: false,
+        error: 'No emergency contact found for this user'
+      });
+    }
+    
     console.error('Error fetching emergency contact:', error);
     return res.status(500).json({
       success: false,
@@ -232,6 +241,15 @@ router.get('/check/:userId', asyncHandler(async (req, res) => {
       hasEmergencyContact: hasContact
     });
   } catch (error) {
+    // Handle missing emergency_contacts table
+    if (error.message?.includes('emergency_contacts') || error.code === 'PGRST205') {
+      console.warn('⚠️ emergency_contacts table not found - returning false');
+      return res.status(200).json({
+        success: true,
+        hasEmergencyContact: false
+      });
+    }
+    
     console.error('Error checking emergency contact:', error);
     return res.status(500).json({
       success: false,
