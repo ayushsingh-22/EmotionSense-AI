@@ -8,7 +8,6 @@ import { Card } from '@/components/ui/card';
 import { Calendar, TrendingUp, Heart } from 'lucide-react';
 import { JournalEntry } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { EMOTION_CONFIG, type EmotionType } from '@/types';
 import { getEmotionConfig, getEmotionEmoji } from '@/components/insights/emotionConfig';
 
 interface JournalCardProps {
@@ -24,7 +23,6 @@ const getEmotionCardClass = (emotion: string) => {
 
 // Helper function to get emotion-based left border
 const getEmotionBorderClass = (emotion: string) => {
-  const config = getEmotionConfig(emotion);
   // Extract color from gradient for border
   const colorMap: Record<string, string> = {
     'anger': 'border-l-red-500',
@@ -59,7 +57,7 @@ export function JournalCard({ journal, onClick }: JournalCardProps) {
     }
   };
 
-  const getMoodGradient = (emotion: string, score?: number) => {
+  const getMoodGradient = (emotion: string) => {
     const config = getEmotionConfig(emotion);
     return config.gradient.replace('from-', 'from-').replace('via-', 'via-').replace('to-', 'to-');
   };
@@ -123,7 +121,7 @@ export function JournalCard({ journal, onClick }: JournalCardProps) {
             <div
               className={cn(
                 'h-full bg-gradient-to-r transition-all duration-500 rounded-full',
-                getMoodGradient(dominantEmotion, moodScore)
+                getMoodGradient(dominantEmotion)
               )}
               style={{ width: `${moodScore}%` }}
             />

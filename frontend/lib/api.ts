@@ -395,6 +395,12 @@ export const deleteEmergencyContact = async (userId: string): Promise<boolean> =
 // JOURNAL API FUNCTIONS
 // ============================================================================
 
+export interface TimeSegment {
+  period: string;
+  emotion: string;
+  count: number;
+}
+
 export interface JournalEntry {
   id?: string;
   user_id?: string;
@@ -410,7 +416,7 @@ export interface JournalEntry {
     dominant_emotion: string;
     mood_score: number; // 0-100 scale
     emotion_counts: Record<string, number>;
-    time_segments?: any;
+    time_segments?: TimeSegment[];
     context_summary?: string;
     message_count?: number;
   };

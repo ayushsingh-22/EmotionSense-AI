@@ -6,7 +6,7 @@
 import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { JournalEntry } from '@/lib/api';
+import { JournalEntry, TimeSegment } from '@/lib/api';
 import { Calendar, ArrowLeft, Heart, TrendingUp, Sparkles } from 'lucide-react';
 import { JournalEmotionSummary } from './JournalEmotionSummary';
 import { cn } from '@/lib/utils';
@@ -126,7 +126,7 @@ export function JournalDetail({ journal, onBack }: JournalDetailProps) {
             <ReactMarkdown 
               remarkPlugins={[remarkGfm, remarkBreaks]}
               components={{
-                p: ({node, ...props}) => <p style={{ lineHeight: '1.8' }} {...props} />
+                p: ({...props}) => <p style={{ lineHeight: '1.8' }} {...props} />
               }}
             >
               {journal.content}
@@ -143,7 +143,7 @@ export function JournalDetail({ journal, onBack }: JournalDetailProps) {
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {timeSegments.map((segment: any, index: number) => (
+              {timeSegments.map((segment: TimeSegment, index: number) => (
                 <Card key={index} className="p-4 bg-accent/30">
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground uppercase mb-2">
