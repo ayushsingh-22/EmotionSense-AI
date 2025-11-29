@@ -11,10 +11,11 @@
  */
 
 import axios from 'axios';
-import { spawn } from 'child_process';
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 import config from '../config/index.js';
+import { runBiLSTMInference } from './bilstmInference.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -152,75 +153,18 @@ export const detectEmotionFromText = async (text) => {
 };
 
 // BiLSTM ONNX model inference
+// BiLSTM ONNX model inference
 export const detectEmotionBiLSTM = async (text) => {
-  return new Promise((resolve) => {
-    try {
-      const modelPath = path.resolve('./src/models/emotion_bilstm_final.onnx');
-      const scriptPath = path.resolve('./src/text-service/bilstm_onnx_inference.py');
-      const emotionLabels = 'angry,disgust,fear,happy,neutral,sad';
-      console.log(`🧠 Running BiLSTM ONNX model for text emotion...`);
-
-      // Use full Python path to ensure correct environment
-      const pythonPath = process.platform === 'win32' 
-        ? 'C:\\Users\\ayush\\AppData\\Local\\Programs\\Python\\Python313\\python.exe'
-        : 'python3';
-      
-      const python = spawn(pythonPath, [scriptPath, modelPath, text, emotionLabels], {
-        cwd: path.resolve('./'),
-        env: { ...process.env }
-      });
-      let output = '';
-      let errorOutput = '';
-
-      python.stdout.on('data', (data) => (output += data.toString()));
-      python.stderr.on('data', (data) => (errorOutput += data.toString()));
-
-      python.on('close', (code) => {
-        try {
-          if (code === 0 && output) {
-            const result = JSON.parse(output.trim());
-            if (result.success) {
-              console.log(`✅ BiLSTM detected: ${result.emotion} (${(result.confidence * 100).toFixed(1)}%)`);
-              resolve({
-                emotion: result.emotion,
-                confidence: result.confidence,
-                scores: result.scores,
-                model: 'bilstm_onnx'
-              });
-              return;
-            }
-          }
-          console.warn(`⚠️ BiLSTM model failed or parsing error.`);
-          if (errorOutput) console.warn(`   Python stderr: ${errorOutput.substring(0, 300)}`);
-          resolve({
-            emotion: 'neutral',
-            confidence: 0.5,
-            scores: { neutral: 0.5 },
-            useFallback: true,
-            model: 'bilstm_onnx'
-          });
-        } catch (e) {
-          console.warn(`⚠️ BiLSTM parsing error: ${e.message}`);
-          resolve({
-            emotion: 'neutral',
-            confidence: 0.5,
-            scores: { neutral: 0.5 },
-            useFallback: true,
-            model: 'bilstm_onnx'
-          });
-        }
-      });
-    } catch (error) {
-      console.error('❌ BiLSTM Error:', error.message);
-      resolve({
-        emotion: 'neutral',
-        confidence: 0.5,
-        scores: { neutral: 0.5 },
-        useFallback: true,
-        model: 'bilstm_onnx'
-      });
-    }
-  });
+  console.log(`🧠 Running BiLSTM ONNX model for text emotion...`);
+  const result = await runBiLSTMInference(text);
+  
+  if (result.useFallback) {
+    console.warn(`⚠️ BiLSTM model failed: ${result.error || 'Unknown error'}`);
+  } else {
+    console.log(`✅ BiLSTM detected: ${result.emotion} (${(result.confidence * 100).toFixed(1)}%)`);
+  }
+  
+  return result;
 };
 
 /**
