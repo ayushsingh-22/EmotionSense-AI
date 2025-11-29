@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { EMOTION_CONFIG, type EmotionType } from '@/types';
 
 interface EmotionBarChartProps {
@@ -36,15 +36,23 @@ export function EmotionBarChart({ emotionScores }: EmotionBarChartProps) {
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">Emotion Distribution</h3>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={data} layout="vertical" margin={{ left: 60, right: 30 }}>
+          <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+            <defs>
+              <linearGradient id="emotionGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis type="number" domain={[0, 100]} />
-            <YAxis
-              type="category"
-              dataKey="emotion"
+            <XAxis 
+              dataKey="emotion" 
               tick={{ fontSize: 12 }}
               className="capitalize"
+              angle={-45}
+              textAnchor="end"
+              height={80}
             />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
             <Tooltip
               formatter={(value: number) => `${value}%`}
               contentStyle={{
@@ -53,12 +61,15 @@ export function EmotionBarChart({ emotionScores }: EmotionBarChartProps) {
                 borderRadius: '8px',
               }}
             />
-            <Bar dataKey="score" radius={[0, 8, 8, 0]}>
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Bar>
-          </BarChart>
+            <Line 
+              type="monotone"
+              dataKey="score" 
+              stroke="hsl(var(--primary))"
+              strokeWidth={3}
+              dot={{ r: 5, fill: 'hsl(var(--primary))', strokeWidth: 2, stroke: '#fff' }}
+              activeDot={{ r: 7, strokeWidth: 3 }}
+            />
+          </LineChart>
         </ResponsiveContainer>
       </Card>
     </motion.div>

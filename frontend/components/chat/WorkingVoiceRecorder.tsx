@@ -128,7 +128,7 @@ export const WorkingVoiceRecorder: React.FC<VoiceRecorderProps> = ({
       {status === "recording" && (
         <div className="flex items-center gap-2 text-red-600 text-sm font-medium">
           <motion.div
-            animate={{ scale: [1, 1.3, 1] }}
+            animate={{ scale: 1.3 }}
             transition={{ duration: 1, repeat: Infinity }}
             className="w-2.5 h-2.5 bg-red-500 rounded-full"
           />

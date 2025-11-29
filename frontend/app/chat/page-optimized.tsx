@@ -170,7 +170,7 @@ export default function ChatPage() {
 
         // Replace temporary message with real messages
         setMessages(prev => {
-          const filtered = prev.filter(m => !m.id.startsWith('temp-'));
+          const filtered = prev.filter(m => m.id && !m.id.startsWith('temp-'));
           return [...filtered, realUserMessage, aiMessage];
         });
         
@@ -217,7 +217,7 @@ export default function ChatPage() {
       console.error('Failed to send message:', error);
       
       // Remove temporary message on error
-      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
+      setMessages(prev => prev.filter(m => m.id && !m.id.startsWith('temp-')));
       
       toast({
         title: "Error",

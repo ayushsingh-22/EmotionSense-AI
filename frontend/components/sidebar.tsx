@@ -13,6 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  BookOpen,
+  CalendarDays,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -23,6 +25,8 @@ const sidebarLinks = [
   { name: 'Home', href: '/', icon: Home },
   { name: 'Insights', href: '/insights', icon: Sparkles },
   { name: 'Chat', href: '/chat', icon: MessageCircle },
+  { name: 'Journal', href: '/journal', icon: BookOpen },
+  { name: 'Journal Calendar', href: '/journal/calendar', icon: CalendarDays },
   { name: 'History', href: '/history', icon: History },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

@@ -96,7 +96,7 @@ const DetailPanel = React.memo(({ moment, onClose }: DetailPanelProps) => {
           <motion.div
             className="absolute inset-0 bg-white/10"
             animate={{
-              opacity: [0.1, 0.2, 0.1],
+              opacity: 0.2,
             }}
             transition={{
               duration: 3,
@@ -107,11 +107,12 @@ const DetailPanel = React.memo(({ moment, onClose }: DetailPanelProps) => {
             <motion.div
               className="text-6xl mb-3"
               animate={{
-                rotate: [0, 10, -10, 0],
+                rotate: 10,
               }}
               transition={{
                 duration: 2,
                 repeat: Infinity,
+                repeatType: "reverse",
                 repeatDelay: 2,
               }}
             >
@@ -291,10 +292,10 @@ export const TimelineView = React.memo(({ moments, isLoading }: TimelineViewProp
           <CardContent className="p-12 text-center">
             <motion.div
               animate={{ 
-                rotate: [0, 10, -10, 0],
-                scale: [1, 1.1, 1]
+                rotate: 10,
+                scale: 1.1
               }}
-              transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+              transition={{ duration: 2, repeat: Infinity, repeatType: "reverse", repeatDelay: 1 }}
             >
               <Sparkles className="h-16 w-16 mx-auto mb-4 text-primary" />
             </motion.div>

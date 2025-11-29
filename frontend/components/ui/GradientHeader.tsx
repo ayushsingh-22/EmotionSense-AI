@@ -21,8 +21,13 @@ export function GradientHeader({ title, subtitle, icon, className = '' }: Gradie
       <div className="flex items-center gap-3">
         {icon && (
           <motion.div
-            animate={{ rotate: [0, 5, -5, 0] }}
-            transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+            animate={{ rotate: 5 }}
+            transition={{ 
+              duration: 2, 
+              repeat: Infinity, 
+              repeatType: "reverse",
+              repeatDelay: 3 
+            }}
           >
             {icon}
           </motion.div>

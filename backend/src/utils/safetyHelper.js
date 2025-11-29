@@ -94,6 +94,6 @@ export const isNegativeEmotion = (emotion) => {
     return false;
   }
 
-  const negativeEmotions = ['sad', 'angry', 'fear', 'disgust', 'anxious', 'depressed', 'stressed'];
+  const negativeEmotions = ['sadness', 'anger', 'fear', 'disgust'];
   return negativeEmotions.some(e => emotion.toLowerCase().includes(e));
 };

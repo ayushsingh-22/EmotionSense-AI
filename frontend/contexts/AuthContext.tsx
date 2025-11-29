@@ -350,16 +350,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: sessionsError };
       }
 
-      // Delete emotion sessions
-      const { error: emotionError } = await supabase
-        .from('emotion_sessions')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (emotionError) {
-        console.error('Error deleting emotion sessions:', emotionError);
-        return { error: emotionError };
-      }
+      // Note: Emotion data is stored in messages table, which cascades delete with chat_sessions
+      // No need to delete from a separate emotion_sessions table
 
       toast({
         title: 'Data deleted',

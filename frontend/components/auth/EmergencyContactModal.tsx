@@ -41,7 +41,7 @@ export function EmergencyContactModal({
     }
     toast({
       title: 'Success',
-      description: 'Emergency contact saved! You&apos;re all set.',
+      description: 'Emergency contact saved!',
       variant: 'default'
     });
   };

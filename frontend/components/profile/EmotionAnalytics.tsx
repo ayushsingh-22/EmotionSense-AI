@@ -14,14 +14,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  LineChart,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Area,
-  AreaChart,
 } from 'recharts';
 import { subDays, format } from 'date-fns';
 
@@ -233,9 +232,9 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Emotions</SelectItem>
-                <SelectItem value="happy">😊 Happy</SelectItem>
-                <SelectItem value="sad">😢 Sad</SelectItem>
-                <SelectItem value="angry">😠 Angry</SelectItem>
+                <SelectItem value="joy">😀 Joy</SelectItem>
+                <SelectItem value="sadness">😭 Sadness</SelectItem>
+                <SelectItem value="anger">🤬 Anger</SelectItem>
                 <SelectItem value="fear">😨 Fear</SelectItem>
                 <SelectItem value="neutral">😐 Neutral</SelectItem>
                 <SelectItem value="surprise">😲 Surprise</SelectItem>
@@ -329,17 +328,7 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
               </span>
             </h4>
             <ResponsiveContainer width="100%" height={350}>
-              <AreaChart data={data.timelineData}>
-                <defs>
-                  <linearGradient id="analysisGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="confidenceGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+              <LineChart data={data.timelineData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                 <XAxis
                   dataKey="date"
@@ -380,13 +369,12 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
                     return [value, 'Messages'];
                   }}
                 />
-                <Area
+                <Line
                   yAxisId="left"
                   type="monotone"
                   dataKey="count"
                   stroke="hsl(var(--primary))"
                   strokeWidth={3}
-                  fill="url(#analysisGradient)"
                   dot={{ r: 4, fill: 'hsl(var(--primary))', strokeWidth: 2, stroke: '#fff' }}
                   activeDot={{ r: 6, strokeWidth: 3 }}
                 />
@@ -399,7 +387,7 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
                   dot={{ r: 3, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
                   activeDot={{ r: 5, strokeWidth: 2 }}
                 />
-              </AreaChart>
+              </LineChart>
             </ResponsiveContainer>
           </motion.div>
 

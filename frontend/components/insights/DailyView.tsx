@@ -123,8 +123,8 @@ export const DailyView = React.memo(({ insights, isLoading }: DailyViewProps) =>
           <CardContent className="p-12 text-center">
             <motion.div
               animate={{ 
-                rotate: [0, 10, -10, 0],
-                scale: [1, 1.1, 1]
+                rotate: 10,
+                scale: 1.1
               }}
               transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
             >
@@ -144,8 +144,9 @@ export const DailyView = React.memo(({ insights, isLoading }: DailyViewProps) =>
     <div className="space-y-6">
       <AnimatePresence mode="popLayout">
         {insights.map((insight, idx) => {
-          const config = getEmotionConfig(insight.dominant_emotion);
-          const emoji = getEmotionEmoji(insight.dominant_emotion);
+          const dominantEmotion = insight.emotion_summary?.dominant_emotion || 'neutral';
+          const config = getEmotionConfig(dominantEmotion);
+          const emoji = getEmotionEmoji(dominantEmotion);
 
           return (
             <motion.div
@@ -189,7 +190,7 @@ export const DailyView = React.memo(({ insights, isLoading }: DailyViewProps) =>
                         </h3>
                       </div>
                       <p className="text-white/90 text-sm font-medium">
-                        Mood Score: {Math.round(insight.mood_score)}/100
+                        Mood Score: {Math.round(insight.emotion_summary?.mood_score || 50)}/100
                       </p>
                     </div>
                     
@@ -199,44 +200,89 @@ export const DailyView = React.memo(({ insights, isLoading }: DailyViewProps) =>
                     >
                       <div className="text-4xl">{emoji}</div>
                       <Badge variant="secondary" className="capitalize font-semibold bg-white/90 text-gray-900">
-                        {insight.dominant_emotion}
+                        {insight.emotion_summary?.dominant_emotion || 'neutral'}
                       </Badge>
                     </motion.div>
                   </div>
 
                   {/* Mood Wave Sparkline */}
                   <div className="mt-4">
-                    <MoodWaveSparkline moodScore={insight.mood_score} />
+                    <MoodWaveSparkline moodScore={insight.emotion_summary?.mood_score || 50} />
                   </div>
                 </div>
 
                 <CardContent className="p-6 space-y-6">
+                  {/* Day-at-a-Glance Stats - NEW */}
+                  <motion.div
+                    className="grid grid-cols-3 gap-4"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-3 text-center border border-primary/20">
+                      <div className="text-2xl font-bold text-primary">
+                        {insight.emotion_summary?.message_count || 0}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">Messages</div>
+                    </div>
+                    <div className="bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-lg p-3 text-center border border-secondary/20">
+                      <div className="text-2xl font-bold text-secondary-foreground">
+                        {insight.emotion_summary?.time_segments?.filter((s: any) => s.count > 0).length || 0}/3
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">Time Periods</div>
+                    </div>
+                    <div className="bg-gradient-to-br from-accent/5 to-accent/10 rounded-lg p-3 text-center border border-accent/20">
+                      <div className="text-lg font-bold flex items-center justify-center gap-1">
+                        {Object.entries(insight.emotion_summary?.emotion_counts || {})
+                          .sort(([, a]: any, [, b]: any) => (b as number) - (a as number))
+                          .slice(0, 3)
+                          .map(([emotion]) => getEmotionEmoji(emotion))
+                          .join(' ')}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">Top Emotions</div>
+                    </div>
+                  </motion.div>
+
+                  {/* Context Summary */}
+                  {insight.emotion_summary?.context_summary && (
+                    <motion.div
+                      className="bg-gradient-to-r from-muted/50 to-muted/30 rounded-xl p-4 border border-border/50"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <p className="text-sm text-muted-foreground italic">
+                        {insight.emotion_summary.context_summary}
+                      </p>
+                    </motion.div>
+                  )}
+
                   {/* Journal Entry with Quote Icon */}
-                  {insight.journal_text && (
+                  {insight.content && (
                     <motion.div
                       className="relative bg-gradient-to-br from-primary/5 to-primary/10 rounded-2xl p-5 border border-primary/20"
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.2 }}
+                      transition={{ delay: 0.3 }}
                     >
                       <Quote className="absolute top-3 left-3 h-6 w-6 text-primary/30" />
                       <div className="pl-8">
                         <h4 className="text-xs font-semibold text-primary mb-2 uppercase tracking-wider">
                           Daily Reflection
                         </h4>
-                        <TypewriterText text={insight.journal_text} />
+                        <TypewriterText text={insight.content} />
                       </div>
                     </motion.div>
                   )}
 
                   {/* Emotion Flow */}
-                  {insight.time_segments && insight.time_segments.length > 0 && (
-                    <EmotionFlow timeSegments={insight.time_segments} />
+                  {insight.emotion_summary?.time_segments && insight.emotion_summary.time_segments.length > 0 && (
+                    <EmotionFlow timeSegments={insight.emotion_summary.time_segments} />
                   )}
 
                   {/* Emotion Distribution Bubbles */}
-                  {insight.emotion_counts && Object.keys(insight.emotion_counts).length > 0 && (
-                    <EmotionDistribution emotionCounts={insight.emotion_counts} />
+                  {insight.emotion_summary?.emotion_counts && Object.keys(insight.emotion_summary.emotion_counts).length > 0 && (
+                    <EmotionDistribution emotionCounts={insight.emotion_summary.emotion_counts} />
                   )}
                 </CardContent>
               </Card>
