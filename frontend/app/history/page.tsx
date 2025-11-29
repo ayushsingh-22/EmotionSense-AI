@@ -13,7 +13,7 @@ import { Search, MessageCircle, Calendar, ChevronRight, Sparkles, ExternalLink }
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import Link from 'next/link';
+
 import { useRouter } from 'next/navigation';
 import { ChatMessage as ChatMessageComponent } from '@/components/chat/ChatMessage';
 import { motion } from 'framer-motion';
@@ -34,7 +34,7 @@ export default function HistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   
   const { user } = useAuth();
-  const { loadExistingSession, startNewSession } = useChat();
+  const { startNewSession } = useChat();
   const router = useRouter();
 
   const loadChatSessions = useCallback(async () => {

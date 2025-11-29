@@ -287,7 +287,7 @@ const CollapsibleWeekCard = React.memo(React.forwardRef<HTMLDivElement, Collapsi
                         .sort(([,a], [,b]) => (b as number) - (a as number))
                         .slice(0, 6)
                         .map(([emotion, count]) => {
-                          const total = Object.values(insight.emotion_summary).reduce((sum: number, c: any) => sum + c, 0);
+                          const total = Object.values(insight.emotion_summary).reduce((sum: number, c: unknown) => sum + (c as number), 0);
                           const percentage = Math.round(((count as number) / total) * 100);
                           
                           return (

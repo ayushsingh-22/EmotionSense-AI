@@ -3,18 +3,15 @@
 import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { ChatMessage } from '@/components/chat/ChatMessage';
 import type { UIEvent } from 'react';
-import axios from 'axios';
 import { MessageSquare, Mic, MicOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChat } from '@/contexts/ChatContext';
 import { Button } from '@/components/ui/button';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { toast } from '@/hooks/use-toast';
-import { getChatMessages } from '@/lib/api';
 import { ChatMessage as ChatMessageType } from '@/lib/supabase';
 import { PerformanceMonitor } from '@/lib/performance';
 import { useStore } from '@/store/useStore';
-import { api } from '@/lib/api';
 import { useSearchParams } from 'next/navigation';
 
 const ChatLayout = lazy(() => import('@/components/chat/ChatLayout').then((m) => ({ default: m.ChatLayout })));
@@ -53,7 +50,7 @@ interface VoiceResponsePayload {
 
 export default function ChatPage() {
   const { user } = useAuth();
-  const { messages, currentSessionId, isLoading, sendMessage: sendChatMessage, loadExistingSession, startNewSession } = useChat();
+  const { messages, currentSessionId, isLoading, sendMessage: sendChatMessage, loadExistingSession, startNewSession, setCurrentSessionId, setMessages } = useChat();
   const [localMessages, setLocalMessages] = useState<ExtendedChatMessage[]>([]);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [messageText, setMessageText] = useState('');
@@ -68,8 +65,6 @@ export default function ChatPage() {
   const pendingScrollRef = useRef(false);
 
   const chatOverrides = useStore((state) => state.chatOverrides);
-  const hideChatMessage = useStore((state) => state.hideChatMessage);
-  const setEditedChatMessage = useStore((state) => state.setEditedChatMessage);
 
   useEffect(() => {
     PerformanceMonitor.mark('chat-page-mount');
@@ -265,7 +260,7 @@ export default function ChatPage() {
       setCurrentSessionId(sessionId);
       setSidebarRefreshTrigger((prev) => prev + 1);
     }
-  }, [currentSessionId, user?.id]);
+  }, [currentSessionId, user?.id, setMessages, setCurrentSessionId]);
 
   const headerContent = (
     <div className="flex w-full items-center justify-between gap-4">

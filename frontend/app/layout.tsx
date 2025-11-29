@@ -74,8 +74,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Font preloading with proper crossorigin */}
-        <link rel="preload" href="/_next/static/css/app/layout.css" as="style" />
-        <link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiA.woff2" crossOrigin="anonymous" />
+
         {/* Route prefetching for faster navigation */}
         <link rel="prefetch" href="/chat" />
         <link rel="prefetch" href="/profile" />

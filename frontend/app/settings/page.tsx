@@ -1,7 +1,7 @@
 'use client';
 
 import { useStore } from '@/store/useStore';
-import { Card } from '@/components/ui/card';
+
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,7 +10,7 @@ import { useTheme } from 'next-themes';
 import { Palette, Brain, Info, Settings as SettingsIcon } from 'lucide-react';
 import { GradientHeader } from '@/components/ui/GradientHeader';
 import { GlassPanel } from '@/components/ui/GlassPanel';
-import { AnimatedIcon } from '@/components/ui/AnimatedIcon';
+
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();

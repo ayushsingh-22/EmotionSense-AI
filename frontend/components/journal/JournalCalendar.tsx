@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { MoodScoreBadge } from "@/components/ui/MoodScoreBadge";
+import { Button } from '@/components/ui/button';
 import { cn } from "@/lib/utils";
-import { format, isSameMonth, isToday } from "date-fns";
 
 type CalendarEntry = {
 	date: string;

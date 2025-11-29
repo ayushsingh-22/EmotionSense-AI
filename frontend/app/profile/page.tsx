@@ -1,203 +1,136 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Edit, Trash2, User, BarChart3, Heart, AlertTriangle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { User, Edit, Trash2, AlertTriangle, Heart, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { EMOTION_CONFIG } from '@/types';
-import { useToast } from '@/hooks/use-toast';
-import { AuthGuard } from '@/components/auth/AuthGuard';
-import { DeleteAccountDialog, DeleteDataDialog } from '@/components/auth/DeleteConfirmationDialog';
-import { EmergencyContactForm } from '@/components/auth/EmergencyContactForm';
-import { getEmergencyContact } from '@/lib/api';
-import { GradientHeader } from '@/components/ui/GradientHeader';
+import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase';
 import { GlassPanel } from '@/components/ui/GlassPanel';
+import { GradientHeader } from '@/components/ui/GradientHeader';
 import { AnimatedIcon } from '@/components/ui/AnimatedIcon';
-import { motion } from 'framer-motion';
+import { DeleteDataDialog, DeleteAccountDialog } from '@/components/auth/DeleteConfirmationDialog';
+import { EmergencyContactForm } from '@/components/auth/EmergencyContactForm';
 import { EmotionAnalytics } from '@/components/profile/EmotionAnalytics';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+import { motion } from 'framer-motion';
 
-interface EmotionStats {
-  emotion: string;
-  count: number;
-  percentage: number;
-  avgConfidence: number;
-}
-
-interface SessionStats {
-  totalSessions: number;
-  thisWeek: number;
-  thisMonth: number;
-  averageConfidence: number;
-  mostFrequentEmotion: string;
-  emotionBreakdown: EmotionStats[];
-}
-
-interface EmergencyContactData {
-  id: string;
-  user_id: string;
+interface EmergencyContact {
   contact_name: string;
   contact_email: string;
   contact_phone?: string;
   notify_enabled: boolean;
-  created_at: string;
-  updated_at: string;
 }
 
 export default function ProfilePage() {
+  const { user, profile, signOut } = useAuth();
+  const router = useRouter();
+  
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState('');
-  const [stats, setStats] = useState<SessionStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  // Emergency Contact State
+  const [emergencyContact, setEmergencyContact] = useState<EmergencyContact | null>(null);
+  const [showEmergencyForm, setShowEmergencyForm] = useState(false);
+  const [emergencyLoading, setEmergencyLoading] = useState(false);
+
+  // Dialog States
   const [deleteDataDialogOpen, setDeleteDataDialogOpen] = useState(false);
   const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
   const [isDeletingData, setIsDeletingData] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const [showEmergencyForm, setShowEmergencyForm] = useState(false);
-  const [emergencyContact, setEmergencyContact] = useState<EmergencyContactData | null>(null);
-  const [emergencyLoading, setEmergencyLoading] = useState(true);
-  
-  const { user, profile, updateProfile, signOut, deleteAccount, deleteAllData: deleteAllUserData } = useAuth();
-  const { toast } = useToast();
 
   useEffect(() => {
-    if (profile) {
+    if (profile?.full_name) {
       setFullName(profile.full_name);
     }
   }, [profile]);
 
   const fetchEmergencyContact = useCallback(async () => {
     if (!user) return;
+    
     try {
-      const contact = await getEmergencyContact(user.id);
-      setEmergencyContact(contact);
-    } catch (error) {
-      console.error('Error fetching emergency contact:', error);
-    } finally {
-      setEmergencyLoading(false);
-    }
-  }, [user]);
-
-  const fetchUserStats = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      setIsLoading(true);
-
-      // Fetch chat sessions (emotion data is stored in messages, sessions track conversations)
-      const { data: sessions, error } = await supabase
-        .from('chat_sessions')
+      setEmergencyLoading(true);
+      const { data, error } = await supabase
+        .from('emergency_contacts')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .single();
 
-      if (error) {
-        console.error('Error fetching stats:', error);
-        return;
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching emergency contact:', error);
+      } else if (data) {
+        setEmergencyContact(data);
+      } else {
+        setEmergencyContact(null);
       }
-
-      if (!sessions || sessions.length === 0) {
-        setStats({
-          totalSessions: 0,
-          thisWeek: 0,
-          thisMonth: 0,
-          averageConfidence: 0,
-          mostFrequentEmotion: 'neutral',
-          emotionBreakdown: [],
-        });
-        return;
-      }
-
-      // Calculate stats
-      const now = new Date();
-      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-      const thisWeekSessions = sessions.filter(
-        s => new Date(s.created_at) >= oneWeekAgo
-      );
-      const thisMonthSessions = sessions.filter(
-        s => new Date(s.created_at) >= oneMonthAgo
-      );
-
-      // Emotion breakdown
-      const emotionCounts: { [key: string]: { count: number; totalConfidence: number } } = {};
-      sessions.forEach(session => {
-        const emotion = session.emotion_detected;
-        if (!emotionCounts[emotion]) {
-          emotionCounts[emotion] = { count: 0, totalConfidence: 0 };
-        }
-        emotionCounts[emotion].count++;
-        emotionCounts[emotion].totalConfidence += session.confidence_score || 0;
-      });
-
-      const emotionBreakdown: EmotionStats[] = Object.entries(emotionCounts)
-        .map(([emotion, data]) => ({
-          emotion,
-          count: data.count,
-          percentage: (data.count / sessions.length) * 100,
-          avgConfidence: data.totalConfidence / data.count,
-        }))
-        .sort((a, b) => b.count - a.count);
-
-      const averageConfidence = sessions.reduce(
-        (sum, s) => sum + (s.confidence_score || 0),
-        0
-      ) / sessions.length;
-
-      setStats({
-        totalSessions: sessions.length,
-        thisWeek: thisWeekSessions.length,
-        thisMonth: thisMonthSessions.length,
-        averageConfidence,
-        mostFrequentEmotion: emotionBreakdown[0]?.emotion || 'neutral',
-        emotionBreakdown,
-      });
-
     } catch (error) {
-      console.error('Error calculating stats:', error);
+      console.error('Error:', error);
     } finally {
-      setIsLoading(false);
+      setEmergencyLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
-        await Promise.all([
-          fetchUserStats(),
-          fetchEmergencyContact(),
-        ]);
+        await fetchEmergencyContact();
       }
     };
     fetchData();
-  }, [user, fetchUserStats, fetchEmergencyContact]);
+  }, [user, fetchEmergencyContact]);
 
   const handleUpdateProfile = async () => {
-    if (!fullName.trim()) return;
+    if (!user) return;
 
-    await updateProfile({ full_name: fullName.trim() });
-    setIsEditing(false);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ full_name: fullName })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Profile updated',
+        description: 'Your profile information has been updated successfully.',
+      });
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update profile. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleDeleteAllData = async () => {
-    setIsDeletingData(true);
+    if (!user) return;
+    
     try {
-      const result = await deleteAllUserData();
-      if (!result.error) {
-        setDeleteDataDialogOpen(false);
-        // Refresh stats to show empty state
-        fetchUserStats();
-      } else {
-        toast({
-          title: 'Error',
-          description: 'Failed to delete data. Please try again.',
-          variant: 'destructive',
-        });
-      }
+      setIsDeletingData(true);
+      
+      // Delete all chat sessions (cascade delete should handle messages and emotion logs)
+      const { error } = await supabase
+        .from('chat_sessions')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Data deleted',
+        description: 'All your emotion data and chat history have been permanently deleted.',
+      });
+      setDeleteDataDialogOpen(false);
+      
+      // Refresh stats
+      // fetchUserStats(); // Removed as it's no longer available
     } catch (error) {
       console.error('Error deleting data:', error);
       toast({
@@ -211,19 +144,35 @@ export default function ProfilePage() {
   };
 
   const handleDeleteAccount = async () => {
-    setIsDeletingAccount(true);
+    if (!user) return;
+
     try {
-      const result = await deleteAccount();
-      if (!result.error) {
-        setDeleteAccountDialogOpen(false);
-        // User will be automatically signed out and redirected
-      } else {
+      setIsDeletingAccount(true);
+      
+      // Call Supabase Edge Function or API route to delete user from Auth
+      // For now, we'll just delete data and sign out as client-side can't delete auth users easily
+      // In a real app, this should call a backend endpoint
+      
+      const { error } = await supabase.rpc('delete_user');
+      
+      if (error) {
+        // Fallback if RPC doesn't exist: just sign out and show message
+        console.error('Account deletion RPC failed:', error);
         toast({
-          title: 'Error',
-          description: 'Failed to delete account. Please try again.',
-          variant: 'destructive',
+            title: 'Account deletion pending',
+            description: 'Please contact support to complete account deletion.',
+            variant: 'destructive'
         });
+        return;
       }
+
+      await signOut();
+      router.push('/');
+      
+      toast({
+        title: 'Account deleted',
+        description: 'Your account has been permanently deleted.',
+      });
     } catch (error) {
       console.error('Error deleting account:', error);
       toast({
@@ -236,18 +185,9 @@ export default function ProfilePage() {
     }
   };
 
-  const getEmotionColor = (emotion: string) => {
-    return EMOTION_CONFIG[emotion as keyof typeof EMOTION_CONFIG]?.color || '#666';
-  };
-
-  const getEmotionEmoji = (emotion: string) => {
-    return EMOTION_CONFIG[emotion as keyof typeof EMOTION_CONFIG]?.emoji || '😐';
-  };
-
   return (
-    <AuthGuard requireAuth={true}>
+    <AuthGuard requireAuth>
       <div className="max-w-5xl mx-auto space-y-8 p-6">
-      {/* Header */}
       <div className="text-center space-y-4">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}

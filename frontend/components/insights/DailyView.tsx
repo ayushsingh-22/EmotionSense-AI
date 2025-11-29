@@ -227,14 +227,14 @@ export const DailyView = React.memo(({ insights, isLoading }: DailyViewProps) =>
                     </div>
                     <div className="bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-lg p-3 text-center border border-secondary/20">
                       <div className="text-2xl font-bold text-secondary-foreground">
-                        {insight.emotion_summary?.time_segments?.filter((s: any) => s.count > 0).length || 0}/3
+                        {insight.emotion_summary?.time_segments?.filter((s: { count: number }) => s.count > 0).length || 0}/3
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">Time Periods</div>
                     </div>
                     <div className="bg-gradient-to-br from-accent/5 to-accent/10 rounded-lg p-3 text-center border border-accent/20">
                       <div className="text-lg font-bold flex items-center justify-center gap-1">
                         {Object.entries(insight.emotion_summary?.emotion_counts || {})
-                          .sort(([, a]: any, [, b]: any) => (b as number) - (a as number))
+                          .sort(([, a], [, b]) => (b as number) - (a as number))
                           .slice(0, 3)
                           .map(([emotion]) => getEmotionEmoji(emotion))
                           .join(' ')}

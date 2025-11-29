@@ -46,7 +46,7 @@ export const SimplifiedChart = ({ dailyArc }: SimplifiedChartProps) => {
     <div className="w-full h-96 bg-blue-50 border-2 border-blue-200 p-4">
       <h3 className="text-lg font-semibold mb-2">Simplified Chart Debug</h3>
       <p className="text-sm text-gray-600 mb-4">
-        Data points: {chartData.length}, Valid scores: {chartData.filter(d => d.displayMoodScore !== null).length}
+        Data points: {chartData.length}, Valid scores: {chartData.filter(d => d && d.displayMoodScore !== null).length}
       </p>
       
       <div className="w-full h-64 bg-white border border-gray-300">

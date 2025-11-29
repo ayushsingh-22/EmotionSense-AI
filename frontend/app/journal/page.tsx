@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getJournalList, getJournalToday, generateJournal, getJournalByDate, refreshTodayJournal, JournalEntry, api } from '@/lib/api';
+import { getJournalList, getJournalToday, generateJournal, getJournalByDate, refreshTodayJournal, JournalEntry } from '@/lib/api';
 import { JournalList } from '@/components/journal/JournalList';
 import { JournalDetail } from '@/components/journal/JournalDetail';
 import { Button } from '@/components/ui/button';
@@ -183,11 +183,12 @@ export default function JournalPage() {
           });
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error generating journal:', error);
       
       // Check if it's a "no data" error vs actual error
-      const isNoDataError = error?.response?.data?.error?.includes('No chat messages');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isNoDataError = (error as any)?.response?.data?.error?.includes('No chat messages');
       
       toast({
         title: isNoDataError && force ? 'No Messages Yet' : 'Error',
@@ -242,9 +243,10 @@ export default function JournalPage() {
           variant: 'default',
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error generating journal:', error);
-      const isNoDataError = error?.response?.data?.error?.includes('No chat messages');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isNoDataError = (error as any)?.response?.data?.error?.includes('No chat messages');
       
       toast({
         title: isNoDataError ? 'No Messages' : 'Error',
