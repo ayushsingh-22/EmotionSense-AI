@@ -328,11 +328,3 @@ MIT License - Feel free to use this project for educational and commercial purpo
 For questions, feature requests, or bug reports, please open an issue on GitHub.
 
 ---
-
-
-## 🙏 Acknowledgment
-
-**Special thanks to**  
-🔹 [Honey Singh](https://github.com/honey7733) — for developing and contributing the **BiLSTM ONNX emotion model** used in this project.
-
----
