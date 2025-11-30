@@ -317,7 +317,7 @@ emotion-sense-ai/
 
 ## 📄 License
 
-MIT License - Feel free to use this project for educational and commercial purposes.
+MIT License - Feel free to use this project for educational purposes.
 
 ---
 
