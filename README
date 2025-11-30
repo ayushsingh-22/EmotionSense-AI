@@ -32,7 +32,7 @@ A **full-stack AI-powered emotion detection platform** featuring **unified data 
 
 - **📊 Real-time Emotion Detection** - Multi-modal analysis via text and voice
 - **🧠 Intelligent Insights** - Advanced analytics and emotional patterns
-- **📔 Auto-Journaling** - AI-powered daily emotional reflections  
+- **📔 Auto-Journaling** - AI-powered daily emotional reflections
 - **💬 Empathetic Chat** - Context-aware AI conversations with safety features
 - **📈 Unified Analytics** - Consistent data across all features via master activity table
 - **🆘 Safety Support** - Emergency contact system with automated alerts
@@ -40,6 +40,7 @@ A **full-stack AI-powered emotion detection platform** featuring **unified data 
 - **🌍 Multi-language** - Automatic language detection and response
 
 ### ✨ Key Differentiators
+
 - **Unified Data Architecture** - Single source of truth for all emotional data
 - **Dual-Model Accuracy** - BiLSTM + HuggingFace ensemble for superior predictions
 - **Enterprise Safety** - Built-in crisis detection and emergency contact system
@@ -51,12 +52,14 @@ A **full-stack AI-powered emotion detection platform** featuring **unified data 
 ## 🆕 Latest Features
 
 ### 📊 **Unified Data Architecture (Nov 2025)**
+
 - **🎯 Single Source of Truth**: All features (chat, history, insights, journal) now use `master_user_activity` table
 - **📈 Data Consistency**: No more inconsistencies between different sections
 - **⚡ Performance**: Optimized queries with unified data access patterns
 - **🔄 Migration Complete**: Automatic migration from legacy tables
 
 ### 📔 **AI-Powered Daily Journaling**
+
 - **🕐 Auto-Generation**: Nightly journal creation at 23:30 IST using cron scheduler
 - **🤖 AI Reflections**: Gemini/LLaMA-powered emotional summaries and insights
 - **📊 Emotion Tracking**: Daily mood scores, emotion distributions, and patterns
@@ -65,19 +68,22 @@ A **full-stack AI-powered emotion detection platform** featuring **unified data 
 - **🔐 Secure Storage**: Supabase RLS-protected journal data
 
 ### 📈 **Advanced Insights Dashboard**
+
 - **📊 User Statistics**: Comprehensive emotion analytics and trends
-- **🎯 Key Moments**: AI-identified emotional highlights and significant events  
+- **🎯 Key Moments**: AI-identified emotional highlights and significant events
 - **📅 Daily/Weekly Views**: Detailed breakdowns with mood progression
 - **📈 Emotion Timeline**: Visual emotion journey with confidence scores
 - **🔍 Smart Filtering**: Advanced search and filtering capabilities
 
 ### 🔄 **Enhanced Chat Experience**
+
 - **💾 Session Persistence**: Unified chat history across all devices
 - **🧠 Context Awareness**: Improved conversation memory with emotional context
 - **🌍 Language Support**: Automatic detection and multilingual responses
 - **⚡ Performance**: Optimized message loading and session management
 
 ### 🛡️ **Enhanced Safety Features**
+
 - **🚨 Advanced Risk Detection**: Improved keyword scanning and context analysis
 - **📧 Reliable Alerts**: Enhanced emergency contact notification system
 - **📝 Audit Logging**: Comprehensive safety event tracking
@@ -88,32 +94,34 @@ A **full-stack AI-powered emotion detection platform** featuring **unified data 
 ## 🛠 Tech Stack
 
 ### Backend
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **Runtime** | Node.js 18+ | JavaScript runtime |
-| **Framework** | Express.js | HTTP server & routing |
-| **ML Models** | ONNX Runtime | BiLSTM inference (text) |
-| **Audio Processing** | FFmpeg, WAV | Audio format conversion |
-| **LLM** | Google Gemini + Groq LLaMA | Text generation |
-| **STT** | Groq Whisper v3 | Speech-to-text |
-| **TTS** | Google Cloud, Piper, Sarvam | Text-to-speech |
-| **Emotion Models** | HuggingFace | DistilRoBERTa, Wav2Vec2 |
-| **Email Alerts** | Nodemailer (Gmail/SMTP/SendGrid) | Emergency notifications |
-| **Database** | Supabase (PostgreSQL) | User data & chat history |
-| **Cache** | In-memory | 5-min emotion cache |
+
+| Component            | Technology                       | Purpose                  |
+| -------------------- | -------------------------------- | ------------------------ |
+| **Runtime**          | Node.js 18+                      | JavaScript runtime       |
+| **Framework**        | Express.js                       | HTTP server & routing    |
+| **ML Models**        | ONNX Runtime                     | BiLSTM inference (text)  |
+| **Audio Processing** | FFmpeg, WAV                      | Audio format conversion  |
+| **LLM**              | Google Gemini + Groq LLaMA       | Text generation          |
+| **STT**              | Groq Whisper v3                  | Speech-to-text           |
+| **TTS**              | Google Cloud, Sarvam AI, Murf AI | Text-to-speech           |
+| **Emotion Models**   | HuggingFace                      | DistilRoBERTa, Wav2Vec2  |
+| **Email Alerts**     | Nodemailer (Gmail/SMTP/SendGrid) | Emergency notifications  |
+| **Database**         | Supabase (PostgreSQL)            | User data & chat history |
+| **Cache**            | In-memory                        | 5-min emotion cache      |
 
 ### Frontend
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **Framework** | Next.js 14 | React SSR/SSG |
-| **Language** | TypeScript | Type safety |
-| **Styling** | Tailwind CSS + Radix UI | UI components |
-| **State Management** | Zustand + React Context | Global state |
-| **API Client** | Axios | HTTP requests |
-| **Database Client** | Supabase SDK | Real-time DB sync |
-| **Voice Recording** | Web Audio API | Browser recording |
-| **Audio Visualization** | WaveSurfer.js | Waveform display |
-| **Analytics** | Custom Performance Monitor | Request tracking |
+
+| Component               | Technology                 | Purpose           |
+| ----------------------- | -------------------------- | ----------------- |
+| **Framework**           | Next.js 14                 | React SSR/SSG     |
+| **Language**            | TypeScript                 | Type safety       |
+| **Styling**             | Tailwind CSS + Radix UI    | UI components     |
+| **State Management**    | Zustand + React Context    | Global state      |
+| **API Client**          | Axios                      | HTTP requests     |
+| **Database Client**     | Supabase SDK               | Real-time DB sync |
+| **Voice Recording**     | Web Audio API              | Browser recording |
+| **Audio Visualization** | WaveSurfer.js              | Waveform display  |
+| **Analytics**           | Custom Performance Monitor | Request tracking  |
 
 ---
 
@@ -209,7 +217,7 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 ```
 📊 MASTER USER ACTIVITY TABLE (Single Source of Truth)
 ├─ user_id (RLS Protected)
-├─ activity_type (emotion_analysis | chat_message | ai_response)  
+├─ activity_type (emotion_analysis | chat_message | ai_response)
 ├─ emotion_data (JSON: emotion, confidence, scores)
 ├─ content (text/message content)
 ├─ metadata (JSON: model_info, audio_features, etc.)
@@ -279,8 +287,8 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
    │SERVICE    │  │SERVICE  │     │              │
    │           │  │         │     │•Orchestration│
    │•Google    │  │•Supabase│     │•Error Handle │
-   │•Piper     │  │•RLS     │     │•Performance  │
-   │•Sarvam    │  │•Auth    │     │ Monitor      │
+   │•Sarvam AI │  │•RLS     │     │•Performance  │
+   │•Murf AI   │  │•Auth    │     │ Monitor      │
    └───────────┘  └─────────┘     └──────────────┘
 
   Safety-specific utilities (`emergencyNotifier`, `safetyHelper`, `nodemailerHelper`) plug into the chat request flow, allowing high-risk detections to query master_user_activity for patterns and dispatch alerts without blocking the main response pipeline.
@@ -291,6 +299,7 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 ## ✨ Core Features
 
 ### 🎭 **Multi-Modal Emotion Detection**
+
 - **🔄 Unified Architecture**: All emotion data flows through `master_user_activity` table
 - **🎯 Dual-Model Text Analysis**: BiLSTM ONNX + HuggingFace DistilRoBERTa ensemble
 - **🎤 Advanced Voice Analysis**: Groq Whisper STT + HuggingFace Wav2Vec2 + audio features
@@ -299,6 +308,7 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 - **📊 Confidence Metrics**: Detailed prediction confidence and model comparison
 
 ### 🤖 **AI Response & LLM Integration**
+
 - **🧠 Primary LLM**: Google Gemini 2.0 Flash (state-of-the-art reasoning)
 - **🔄 Smart Fallback**: LLaMA 3.3 70B via Groq with automatic failover
 - **💭 Context-Aware**: Reads last 5-10 messages for coherent conversations
@@ -307,6 +317,7 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 - **🎛️ Configurable**: Adjustable temperature, max tokens, and safety settings
 
 ### 📊 **Comprehensive Insights & Analytics**
+
 - **📈 Unified Dashboard**: Consistent data across all sections
 - **📅 Daily Summaries**: Mood scores, emotion patterns, and message analysis
 - **📊 Weekly Insights**: Trend analysis with emotional arcs and highlights
@@ -315,6 +326,7 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 - **⏰ Timeline Views**: Hour-by-hour and date-range emotional progression
 
 ### 📔 **AI-Powered Journaling System**
+
 - **🕐 Automated Generation**: Nightly cron scheduler (23:30 IST)
 - **🤖 AI Reflection**: Context-aware emotional summaries using LLM
 - **📊 Emotion Analysis**: Daily mood scores and dominant emotion tracking
@@ -323,13 +335,15 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 - **🔍 Smart Retrieval**: Date-based and list-based journal access
 
 ### 🎤 **Advanced Voice Processing**
+
 - **🎯 Multi-Stage Pipeline**: STT → Text Analysis → Voice Features → Fusion
 - **🌍 Auto-Language Detection**: Groq Whisper v3 Turbo with 90+ languages
 - **📊 Audio Feature Analysis**: Prosody, pitch, energy, and rhythm analysis
-- **🔊 TTS Synthesis**: Multi-provider (Google → Piper → Sarvam) fallbacks
+- **🔊 TTS Synthesis**: Multi-provider (Google → Sarvam AI → Murf AI) fallback chain
 - **📱 Format Support**: WAV, MP3, OPUS, OGG with auto-conversion
 
 ### 💬 **Enhanced Chat System**
+
 - **🔄 Unified Data**: Session and message data from master activity table
 - **📚 Smart Context**: Conversation history with emotional awareness
 - **💾 Session Management**: Persistent chat sessions with metadata
@@ -338,6 +352,7 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 - **📱 Multi-device**: Synchronized chat history across platforms
 
 ### 🎨 **Modern Frontend Experience**
+
 - **📱 Responsive Design**: Mobile-first with Tailwind CSS and Radix UI
 - **🌙 Dark Mode**: Automatic theme detection with manual toggle
 - **🎤 Voice Controls**: Browser-native recording with visualization
@@ -347,6 +362,7 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 - **⚡ Optimized Loading**: Skeleton states and progressive loading
 
 ### 🔐 **Enterprise Security & Safety**
+
 - **🛡️ Supabase RLS**: Row-Level Security for complete data isolation
 - **🔐 JWT Authentication**: Secure sessions with automatic refresh
 - **🌐 CORS Protection**: Controlled cross-origin resource sharing
@@ -355,6 +371,7 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 - **📊 Audit Logging**: Comprehensive activity and safety logging
 
 ### 🆘 **Crisis Support & Safety**
+
 - **👥 Emergency Contacts**: User-configurable trusted contact system
 - **🚨 Risk Detection**: Advanced keyword and context analysis
 - **📧 Automated Alerts**: Multi-provider email notification system
@@ -363,6 +380,7 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 - **🔧 Admin Controls**: Management interface for safety configurations
 
 ### 🔧 **DevOps & Monitoring**
+
 - **📊 Performance Tracking**: Request timing and error monitoring
 - **📝 Comprehensive Logging**: Structured logging with correlation IDs
 - **🔄 Health Checks**: Automated service health monitoring
@@ -375,224 +393,227 @@ EmotionSense AI now features a **unified data architecture** with the `master_us
 ## 📁 Project Structure
 
 ```
+
 emotion-sense-ai/
-├── backend/                              # Node.js Backend
-│   ├── src/
-│   │   ├── server.js                    # Main Express entry point
-│   │   ├── config/
-│   │   │   ├── index.js                 # Centralized configuration
-│   │   │   └── indianLanguages.js       # Language code mappings
-│   │   ├── middleware/
-│   │   │   ├── errorHandler.js          # Global error middleware
-│   │   │   ├── requestLogger.js         # HTTP request logging
-│   │   │   └── uploadMiddleware.js      # Multer file upload config
-│   │   ├── routes/
-│   │   │   ├── chatRoutes.js            # Enhanced chat session endpoints
-│   │   │   ├── emergencyRoutes.js       # Emergency contact management
-│   │   │   ├── textRoutes.js            # Text emotion endpoints
-│   │   │   ├── voiceRoutes.js           # Voice emotion endpoints
-│   │   │   ├── multiModalRoutes.js      # Combined emotion endpoints
-│   │   │   ├── responseRoutes.js        # LLM response endpoints
-│   │   │   ├── ttsRoutes.js             # Text-to-speech endpoints
-│   │   │   ├── journalRoutes.js         # 📔 AI journaling endpoints
-│   │   │   ├── insightsRoutes.js        # 📊 Analytics endpoints
-│   │   │   └── healthRoutes.js          # Health check endpoints
-│   │   ├── storage-service/
-│   │   │   ├── index.js                 # Legacy Supabase ORM layer
-│   │   │   ├── masterActivityService.js # 🎯 UNIFIED DATA SERVICE
-│   │   │   ├── masterActivityIntegration.js # Legacy migration support
-│   │   │   ├── unifiedChatService.js    # 💬 Unified chat data access
-│   │   │   └── README.md                # Service documentation
-│   │   ├── journal-service/             # 📔 AI JOURNALING SYSTEM
-│   │   │   ├── index.js                 # Journal generation & management
-│   │   │   ├── cronScheduler.js         # Automated nightly journals (23:30 IST)
-│   │   │   ├── journalGenerator.js      # LLM-powered journal creation
-│   │   │   └── README.md                # Journaling feature documentation
-│   │   ├── text-service/
-│   │   │   ├── index.js                 # Text emotion analysis
-│   │   │   ├── bilstm_onnx_inference.py # BiLSTM Python wrapper
-│   │   │   └── README.md                # Service documentation
-│   │   ├── voice-service/
-│   │   │   ├── index.js                 # Voice emotion analysis
-│   │   │   ├── emotion_inference.py     # Voice feature extraction
-│   │   │   ├── huggingface_emotion.py   # HuggingFace wrapper
-│   │   │   └── README.md                # Service documentation
-│   │   ├── llm-service/
-│   │   │   ├── index.js                 # LLM response generation (Gemini → LLaMA)
-│   │   │   └── README.md                # Service documentation
-│   │   ├── tts-service/
-│   │   │   ├── index.js                 # Text-to-speech synthesis
-│   │   │   └── README.md                # Service documentation
-│   │   ├── aggregator/
-│   │   │   ├── index.js                 # Emotion fusion logic
-│   │   │   └── README.md                # Service documentation
-│   │   ├── multi-modal-layer/
-│   │   │   ├── index.js                 # Multi-modal processing
-│   │   │   └── README.md                # Service documentation
-│   │   ├── utils/
-│   │   │   ├── helpers.js               # Utility functions
-│   │   │   ├── logger.js                # Logging utility
-│   │   │   ├── translationHelper.js     # Translation utilities
-│   │   │   ├── emergencyNotifier.js     # Safety alert orchestration
-│   │   │   ├── safetyHelper.js          # High-risk detection helpers
-│   │   │   ├── nodemailerHelper.js      # Email provider abstraction
-│   │   │   └── voiceHelper.js           # Voice utilities
-│   │   └── models/
-│   │       └── emotion_bilstm_final.onnx # BiLSTM model file
-│   ├── migrations/                      # Database Schema Evolution
-│   │   ├── add_audio_features_column.sql          # Audio feature storage
-│   │   ├── create_alert_logs_table.sql            # Initial alert logging schema
-│   │   ├── create_alert_logs_table_FIXED.sql      # Patched alert logging schema
-│   │   ├── create_emergency_contacts.sql          # Emergency contacts + safety alerts
-│   │   ├── 20251115_create_emotion_insights_complete.sql  # 📊 Unified insights schema
-│   │   ├── 20241115_emotion_flow_extensions.sql   # Master activity table
-│   │   ├── 20241117_align_messages_schema.sql     # Schema alignment
-│   │   ├── create_chat_tables.sql                 # Chat system tables
-│   │   ├── create_daily_emotion_summary.sql       # Daily aggregation views
-│   │   └── create_weekly_emotion_summary.sql      # Weekly aggregation views
-│   ├── scripts/                         # Utility Scripts
-│   │   ├── generate-insights-from-messages.js     # Data migration utilities
-│   │   ├── migrate-to-master-activity.js          # Legacy data migration
-│   │   ├── populate-emotions.js                   # Test data generation
-│   │   └── cleanup-legacy-tables.js               # Database cleanup
-│   ├── .env                             # Environment variables
-│   ├── .env.example                     # Environment template
-│   ├── package.json                     # Dependencies
-│   ├── requirements.txt                 # Python dependencies
-│   ├── test-*.js                        # Test scripts
-│   ├── JOURNAL_DEVELOPER_GUIDE.md       # 📔 Journal system documentation
-│   ├── VERIFICATION_REPORT.md           # System verification status
-│   └── README_DETAILED.md               # Detailed backend docs
+├── backend/ # Node.js Backend
+│ ├── src/
+│ │ ├── server.js # Main Express entry point
+│ │ ├── config/
+│ │ │ ├── index.js # Centralized configuration
+│ │ │ └── indianLanguages.js # Language code mappings
+│ │ ├── middleware/
+│ │ │ ├── errorHandler.js # Global error middleware
+│ │ │ ├── requestLogger.js # HTTP request logging
+│ │ │ └── uploadMiddleware.js # Multer file upload config
+│ │ ├── routes/
+│ │ │ ├── chatRoutes.js # Enhanced chat session endpoints
+│ │ │ ├── emergencyRoutes.js # Emergency contact management
+│ │ │ ├── textRoutes.js # Text emotion endpoints
+│ │ │ ├── voiceRoutes.js # Voice emotion endpoints
+│ │ │ ├── multiModalRoutes.js # Combined emotion endpoints
+│ │ │ ├── responseRoutes.js # LLM response endpoints
+│ │ │ ├── ttsRoutes.js # Text-to-speech endpoints
+│ │ │ ├── journalRoutes.js # 📔 AI journaling endpoints
+│ │ │ ├── insightsRoutes.js # 📊 Analytics endpoints
+│ │ │ └── healthRoutes.js # Health check endpoints
+│ │ ├── storage-service/
+│ │ │ ├── index.js # Legacy Supabase ORM layer
+│ │ │ ├── masterActivityService.js # 🎯 UNIFIED DATA SERVICE
+│ │ │ ├── masterActivityIntegration.js # Legacy migration support
+│ │ │ ├── unifiedChatService.js # 💬 Unified chat data access
+│ │ │ └── README.md # Service documentation
+│ │ ├── journal-service/ # 📔 AI JOURNALING SYSTEM
+│ │ │ ├── index.js # Journal generation & management
+│ │ │ ├── cronScheduler.js # Automated nightly journals (23:30 IST)
+│ │ │ ├── journalGenerator.js # LLM-powered journal creation
+│ │ │ └── README.md # Journaling feature documentation
+│ │ ├── text-service/
+│ │ │ ├── index.js # Text emotion analysis
+│ │ │ ├── bilstm*onnx_inference.py # BiLSTM Python wrapper
+│ │ │ └── README.md # Service documentation
+│ │ ├── voice-service/
+│ │ │ ├── index.js # Voice emotion analysis
+│ │ │ ├── emotion_inference.py # Voice feature extraction
+│ │ │ ├── huggingface_emotion.py # HuggingFace wrapper
+│ │ │ └── README.md # Service documentation
+│ │ ├── llm-service/
+│ │ │ ├── index.js # LLM response generation (Gemini → LLaMA)
+│ │ │ └── README.md # Service documentation
+│ │ ├── tts-service/
+│ │ │ ├── index.js # Text-to-speech synthesis
+│ │ │ └── README.md # Service documentation
+│ │ ├── aggregator/
+│ │ │ ├── index.js # Emotion fusion logic
+│ │ │ └── README.md # Service documentation
+│ │ ├── multi-modal-layer/
+│ │ │ ├── index.js # Multi-modal processing
+│ │ │ └── README.md # Service documentation
+│ │ ├── utils/
+│ │ │ ├── helpers.js # Utility functions
+│ │ │ ├── logger.js # Logging utility
+│ │ │ ├── translationHelper.js # Translation utilities
+│ │ │ ├── emergencyNotifier.js # Safety alert orchestration
+│ │ │ ├── safetyHelper.js # High-risk detection helpers
+│ │ │ ├── nodemailerHelper.js # Email provider abstraction
+│ │ │ └── voiceHelper.js # Voice utilities
+│ │ └── models/
+│ │ └── emotion_bilstm_final.onnx # BiLSTM model file
+│ ├── migrations/ # Database Schema Evolution
+│ │ ├── add_audio_features_column.sql # Audio feature storage
+│ │ ├── create_alert_logs_table.sql # Initial alert logging schema
+│ │ ├── create_alert_logs_table_FIXED.sql # Patched alert logging schema
+│ │ ├── create_emergency_contacts.sql # Emergency contacts + safety alerts
+│ │ ├── 20251115_create_emotion_insights_complete.sql # 📊 Unified insights schema
+│ │ ├── 20241115_emotion_flow_extensions.sql # Master activity table
+│ │ ├── 20241117_align_messages_schema.sql # Schema alignment
+│ │ ├── create_chat_tables.sql # Chat system tables
+│ │ ├── create_daily_emotion_summary.sql # Daily aggregation views
+│ │ └── create_weekly_emotion_summary.sql # Weekly aggregation views
+│ ├── scripts/ # Utility Scripts
+│ │ ├── generate-insights-from-messages.js # Data migration utilities
+│ │ ├── migrate-to-master-activity.js # Legacy data migration
+│ │ ├── populate-emotions.js # Test data generation
+│ │ └── cleanup-legacy-tables.js # Database cleanup
+│ ├── .env # Environment variables
+│ ├── .env.example # Environment template
+│ ├── package.json # Dependencies
+│ ├── requirements.txt # Python dependencies
+│ ├── test-\*.js # Test scripts
+│ ├── JOURNAL_DEVELOPER_GUIDE.md # 📔 Journal system documentation
+│ ├── VERIFICATION_REPORT.md # System verification status
+│ └── README_DETAILED.md # Detailed backend docs
 │
-├── frontend/                            # Next.js 14 Frontend
-│   ├── app/
-│   │   ├── layout.tsx                   # Root layout with providers
-│   │   ├── page.tsx                     # Home page
-│   │   ├── auth/
-│   │   │   ├── login/page.tsx           # Login page
-│   │   │   └── signup/page.tsx          # Registration page
-│   │   ├── chat/
-│   │   │   ├── page.tsx                 # 💬 Enhanced chat interface
-│   │   │   ├── enhanced-page.tsx        # Enhanced chat version
-│   │   │   └── page-optimized.tsx       # Optimized version
-│   │   ├── insights/                    # 📊 ANALYTICS DASHBOARD
-│   │   │   ├── page.tsx                 # Main insights dashboard
-│   │   │   ├── daily/page.tsx           # Daily emotion summaries
-│   │   │   ├── weekly/page.tsx          # Weekly trend analysis
-│   │   │   └── timeline/page.tsx        # Emotional timeline view
-│   │   ├── journal/                     # 📔 AI JOURNALING INTERFACE
-│   │   │   ├── page.tsx                 # Journal list & management
-│   │   │   ├── create/page.tsx          # Manual journal creation
-│   │   │   ├── [date]/page.tsx          # View specific journal entry
-│   │   │   └── layout.tsx               # Journal section layout
-│   │   ├── history/                     # 📊 UNIFIED HISTORY
-│   │   │   ├── page.tsx                 # Enhanced history view
-│   │   │   ├── emotions/page.tsx        # Emotion analysis history
-│   │   │   └── conversations/page.tsx   # Chat conversation history
-│   │   ├── text/page.tsx                # Text analysis page
-│   │   ├── voice/page.tsx               # Voice analysis page
-│   │   ├── multimodal/page.tsx          # Multi-modal analysis page
-│   │   ├── profile/page.tsx             # User profile page
-│   │   ├── settings/page.tsx            # Settings page
-│   │   ├── setup/
-│   │   │   └── emergency-contact/page.tsx # Guided emergency contact onboarding
-│   │   └── globals.css                  # Global styles
-│   ├── components/
-│   │   ├── EmergencyContactChecker.tsx  # Safety prompt modal wrapper
-│   │   ├── navbar.tsx                   # Navigation bar
-│   │   ├── sidebar.tsx                  # Side navigation
-│   │   ├── MainContent.tsx              # Main content wrapper
-│   │   ├── LoadingStates.tsx            # Loading skeletons
-│   │   ├── theme-provider.tsx           # Theme wrapper
-│   │   ├── theme-toggle.tsx             # Dark mode toggle
-│   │   ├── insights/                    # 📊 ANALYTICS COMPONENTS
-│   │   │   ├── InsightsDashboard.tsx    # Main dashboard layout
-│   │   │   ├── EmotionChart.tsx         # Emotion distribution charts
-│   │   │   ├── MoodTimeline.tsx         # Temporal mood visualization
-│   │   │   ├── WeeklyTrends.tsx         # Weekly pattern analysis
-│   │   │   ├── KeyMoments.tsx           # Significant event highlights
-│   │   │   ├── StatsCards.tsx           # Summary statistics
-│   │   │   └── EmotionDistribution.tsx  # Pie/bar charts
-│   │   ├── journal/                     # 📔 JOURNALING COMPONENTS
-│   │   │   ├── JournalEntry.tsx         # Individual journal display
-│   │   │   ├── JournalList.tsx          # Journal entries list
-│   │   │   ├── JournalCalendar.tsx      # Calendar view for journals
-│   │   │   ├── EmotionSummary.tsx       # Daily emotion summary
-│   │   │   ├── GenerateJournalButton.tsx # Manual journal trigger
-│   │   │   └── JournalFilters.tsx       # Date/emotion filtering
-│   │   ├── auth/
-│   │   │   ├── AuthGuard.tsx            # Route protection
-│   │   │   ├── DeleteConfirmationDialog.tsx
-│   │   │   ├── EmergencyContactForm.tsx # Create/update safety contact
-│   │   │   └── EmergencyContactModal.tsx # Modal experience for prompts
-│   │   ├── chat/
-│   │   │   ├── ChatLayout.tsx           # Chat container
-│   │   │   ├── ChatSidebar.tsx          # Chat session list
-│   │   │   ├── ChatMessage.tsx          # Message component
-│   │   │   ├── ChatBubble.tsx           # Message bubble
-│   │   │   ├── ChatInput.tsx            # Message input
-│   │   │   ├── EnhancedChatInput.tsx    # Rich input
-│   │   │   ├── EnhancedVoiceControls.tsx
-│   │   │   ├── SimpleVoiceRecorder.tsx  # Voice recorder
-│   │   │   └── TypingIndicator.tsx      # Typing animation
-│   │   ├── emotions/
-│   │   │   └── [emotion-components]    # Emotion display
-│   │   ├── voice/
-│   │   │   └── [voice-components]      # Voice controls
-│   │   └── ui/
-│   │       ├── button.tsx               # Button component
-│   │       ├── input.tsx                # Input field
-│   │       ├── card.tsx                 # Card layout
-│   │       ├── dialog.tsx               # Modal dialog
-│   │       ├── toast.tsx                # Toast notifications
-│   │       └── [other-ui-components]
-│   ├── contexts/
-│   │   ├── AuthContext.tsx              # Auth state & methods
-│   │   ├── ChatContext.tsx              # Enhanced chat state & methods
-│   │   └── SidebarContext.tsx           # Sidebar state
-│   ├── hooks/
-│   │   ├── use-toast.ts                 # Toast hook
-│   │   ├── useEmergencyContactSetup.ts  # Safety setup logic
-│   │   ├── useVoiceRecorder.ts          # Voice recording logic
-│   │   └── useVoiceRecording.ts         # Alternative recording
-│   ├── lib/
-│   │   ├── api.ts                       # Enhanced API client with caching
-│   │   ├── supabase.ts                  # Supabase client
-│   │   ├── performance.ts               # Performance monitoring
-│   │   └── utils.ts                     # Utility functions
-│   ├── store/
-│   │   └── useStore.ts                  # Zustand global store with persistence
-│   ├── types/
-│   │   └── index.ts                     # Enhanced TypeScript interfaces
-│   ├── styles/
-│   │   ├── globals.css                  # Global styles
-│   │   ├── chat-enhancements.css        # Chat styling
-│   │   └── chat-optimized.css           # Optimized styling
-│   ├── package.json                     # Dependencies
-│   ├── tsconfig.json                    # TypeScript config
-│   ├── tailwind.config.ts               # Tailwind config
-│   ├── postcss.config.mjs               # PostCSS config
-│   ├── README_JOURNAL_FEATURE.md        # 📔 Journal feature documentation
-│   ├── ARCHITECTURE.md                  # Frontend architecture guide
-│   └── next.config.mjs                  # Next.js config
+├── frontend/ # Next.js 14 Frontend
+│ ├── app/
+│ │ ├── layout.tsx # Root layout with providers
+│ │ ├── page.tsx # Home page
+│ │ ├── auth/
+│ │ │ ├── login/page.tsx # Login page
+│ │ │ └── signup/page.tsx # Registration page
+│ │ ├── chat/
+│ │ │ ├── page.tsx # 💬 Enhanced chat interface
+│ │ │ ├── enhanced-page.tsx # Enhanced chat version
+│ │ │ └── page-optimized.tsx # Optimized version
+│ │ ├── insights/ # 📊 ANALYTICS DASHBOARD
+│ │ │ ├── page.tsx # Main insights dashboard
+│ │ │ ├── daily/page.tsx # Daily emotion summaries
+│ │ │ ├── weekly/page.tsx # Weekly trend analysis
+│ │ │ └── timeline/page.tsx # Emotional timeline view
+│ │ ├── journal/ # 📔 AI JOURNALING INTERFACE
+│ │ │ ├── page.tsx # Journal list & management
+│ │ │ ├── create/page.tsx # Manual journal creation
+│ │ │ ├── [date]/page.tsx # View specific journal entry
+│ │ │ └── layout.tsx # Journal section layout
+│ │ ├── history/ # 📊 UNIFIED HISTORY
+│ │ │ ├── page.tsx # Enhanced history view
+│ │ │ ├── emotions/page.tsx # Emotion analysis history
+│ │ │ └── conversations/page.tsx # Chat conversation history
+│ │ ├── text/page.tsx # Text analysis page
+│ │ ├── voice/page.tsx # Voice analysis page
+│ │ ├── multimodal/page.tsx # Multi-modal analysis page
+│ │ ├── profile/page.tsx # User profile page
+│ │ ├── settings/page.tsx # Settings page
+│ │ ├── setup/
+│ │ │ └── emergency-contact/page.tsx # Guided emergency contact onboarding
+│ │ └── globals.css # Global styles
+│ ├── components/
+│ │ ├── EmergencyContactChecker.tsx # Safety prompt modal wrapper
+│ │ ├── navbar.tsx # Navigation bar
+│ │ ├── sidebar.tsx # Side navigation
+│ │ ├── MainContent.tsx # Main content wrapper
+│ │ ├── LoadingStates.tsx # Loading skeletons
+│ │ ├── theme-provider.tsx # Theme wrapper
+│ │ ├── theme-toggle.tsx # Dark mode toggle
+│ │ ├── insights/ # 📊 ANALYTICS COMPONENTS
+│ │ │ ├── InsightsDashboard.tsx # Main dashboard layout
+│ │ │ ├── EmotionChart.tsx # Emotion distribution charts
+│ │ │ ├── MoodTimeline.tsx # Temporal mood visualization
+│ │ │ ├── WeeklyTrends.tsx # Weekly pattern analysis
+│ │ │ ├── KeyMoments.tsx # Significant event highlights
+│ │ │ ├── StatsCards.tsx # Summary statistics
+│ │ │ └── EmotionDistribution.tsx # Pie/bar charts
+│ │ ├── journal/ # 📔 JOURNALING COMPONENTS
+│ │ │ ├── JournalEntry.tsx # Individual journal display
+│ │ │ ├── JournalList.tsx # Journal entries list
+│ │ │ ├── JournalCalendar.tsx # Calendar view for journals
+│ │ │ ├── EmotionSummary.tsx # Daily emotion summary
+│ │ │ ├── GenerateJournalButton.tsx # Manual journal trigger
+│ │ │ └── JournalFilters.tsx # Date/emotion filtering
+│ │ ├── auth/
+│ │ │ ├── AuthGuard.tsx # Route protection
+│ │ │ ├── DeleteConfirmationDialog.tsx
+│ │ │ ├── EmergencyContactForm.tsx # Create/update safety contact
+│ │ │ └── EmergencyContactModal.tsx # Modal experience for prompts
+│ │ ├── chat/
+│ │ │ ├── ChatLayout.tsx # Chat container
+│ │ │ ├── ChatSidebar.tsx # Chat session list
+│ │ │ ├── ChatMessage.tsx # Message component
+│ │ │ ├── ChatBubble.tsx # Message bubble
+│ │ │ ├── ChatInput.tsx # Message input
+│ │ │ ├── EnhancedChatInput.tsx # Rich input
+│ │ │ ├── EnhancedVoiceControls.tsx
+│ │ │ ├── SimpleVoiceRecorder.tsx # Voice recorder
+│ │ │ └── TypingIndicator.tsx # Typing animation
+│ │ ├── emotions/
+│ │ │ └── [emotion-components] # Emotion display
+│ │ ├── voice/
+│ │ │ └── [voice-components] # Voice controls
+│ │ └── ui/
+│ │ ├── button.tsx # Button component
+│ │ ├── input.tsx # Input field
+│ │ ├── card.tsx # Card layout
+│ │ ├── dialog.tsx # Modal dialog
+│ │ ├── toast.tsx # Toast notifications
+│ │ └── [other-ui-components]
+│ ├── contexts/
+│ │ ├── AuthContext.tsx # Auth state & methods
+│ │ ├── ChatContext.tsx # Enhanced chat state & methods
+│ │ └── SidebarContext.tsx # Sidebar state
+│ ├── hooks/
+│ │ ├── use-toast.ts # Toast hook
+│ │ ├── useEmergencyContactSetup.ts # Safety setup logic
+│ │ ├── useVoiceRecorder.ts # Voice recording logic
+│ │ └── useVoiceRecording.ts # Alternative recording
+│ ├── lib/
+│ │ ├── api.ts # Enhanced API client with caching
+│ │ ├── supabase.ts # Supabase client
+│ │ ├── performance.ts # Performance monitoring
+│ │ └── utils.ts # Utility functions
+│ ├── store/
+│ │ └── useStore.ts # Zustand global store with persistence
+│ ├── types/
+│ │ └── index.ts # Enhanced TypeScript interfaces
+│ ├── styles/
+│ │ ├── globals.css # Global styles
+│ │ ├── chat-enhancements.css # Chat styling
+│ │ └── chat-optimized.css # Optimized styling
+│ ├── package.json # Dependencies
+│ ├── tsconfig.json # TypeScript config
+│ ├── tailwind.config.ts # Tailwind config
+│ ├── postcss.config.mjs # PostCSS config
+│ ├── README_JOURNAL_FEATURE.md # 📔 Journal feature documentation
+│ ├── ARCHITECTURE.md # Frontend architecture guide
+│ └── next.config.mjs # Next.js config
 │
 ├── .github/
-│   └── copilot-instructions.md          # Project development guidelines
+│ └── copilot-instructions.md # Project development guidelines
 │
-├── UNIFIED_DATA_ARCHITECTURE.md         # 🎯 Unified architecture documentation
-├── MASTER_ARCHITECTURE_*.md             # Architecture migration guides
-├── GLOBAL_DATA_CONSISTENCY_FIX.md       # Data consistency documentation
-├── EMOTION_SYSTEM_QUICK_REFERENCE.md    # Quick reference guide
-├── DEPLOYMENT_CHECKLIST.md              # Production deployment guide
-├── QUICK_START_MASTER_ARCHITECTURE.md   # Quick start guide
-└── README.md                            # This comprehensive documentation
+├── UNIFIED_DATA_ARCHITECTURE.md # 🎯 Unified architecture documentation
+├── MASTER_ARCHITECTURE*\*.md # Architecture migration guides
+├── GLOBAL_DATA_CONSISTENCY_FIX.md # Data consistency documentation
+├── EMOTION_SYSTEM_QUICK_REFERENCE.md # Quick reference guide
+├── DEPLOYMENT_CHECKLIST.md # Production deployment guide
+├── QUICK_START_MASTER_ARCHITECTURE.md # Quick start guide
+└── README.md # This comprehensive documentation
+
 ```
 
 ---
 
 ## 🆕 Recent Major Updates (2024)
 
-### 🎯 **Unified Data Architecture** 
+### 🎯 **Unified Data Architecture**
+
 **The biggest architectural advancement in the project's history**
 
 - **Single Source of Truth**: All emotional and chat data now flows through the `master_user_activity` table
@@ -602,6 +623,7 @@ emotion-sense-ai/
 - **Future-Proof**: Scalable architecture supports new features without major refactoring
 
 ### 📔 **AI-Powered Daily Journaling System**
+
 **Automated emotional reflection and analysis**
 
 - **Automated Generation**: Cron scheduler creates journals nightly at 23:30 IST
@@ -610,7 +632,8 @@ emotion-sense-ai/
 - **Manual Creation**: Users can generate journals for any date on-demand
 - **Smart Retrieval**: Date-based access and comprehensive journal management
 
-### 📊 **Comprehensive Insights & Analytics Dashboard** 
+### 📊 **Comprehensive Insights & Analytics Dashboard**
+
 **Deep emotional intelligence and pattern recognition**
 
 - **Daily Summaries**: Detailed emotion analysis, message counts, and key moments
@@ -620,6 +643,7 @@ emotion-sense-ai/
 - **Key Moments Detection**: AI-identified significant emotional events and patterns
 
 ### 💬 **Enhanced Chat System**
+
 **Unified and context-aware conversational AI**
 
 - **Unified Data**: All chat data flows through the master activity architecture
@@ -629,6 +653,7 @@ emotion-sense-ai/
 - **Real-time Features**: Better WebSocket integration and live updates
 
 ### 🔧 **Developer Experience Improvements**
+
 **Enhanced development workflow and documentation**
 
 - **Comprehensive Documentation**: Complete API documentation, architecture guides, and quick-start guides
@@ -642,9 +667,10 @@ emotion-sense-ai/
 ## 🚀 What's Next?
 
 ### **Planned Features**
+
 - **🌍 Mobile App**: React Native app with offline support
 - **🔄 Real-time Collaboration**: Multi-user emotion sharing and support groups
-- **📱 Wearables Integration**: Smartwatch emotion tracking and heart rate analysis  
+- **📱 Wearables Integration**: Smartwatch emotion tracking and heart rate analysis
 - **🧠 Advanced ML**: Custom transformer models and federated learning
 - **🎯 Personalization**: Adaptive UI and personalized insights algorithms
 - **🌐 Multi-language Support**: Expanded language coverage and cultural emotion models
@@ -658,16 +684,19 @@ emotion-sense-ai/
 ### Prerequisites
 
 ```
+
 ✓ Node.js 18 or higher (npm 9+)
 ✓ Python 3.8+ (for ONNX inference)
 ✓ Git
 ✓ API Keys:
-  - Google Gemini API
-  - Groq API (for LLaMA & Whisper)
-  - HuggingFace API Token
-  - Supabase Project
-  - Google TTS API (optional)
-```
+
+- Google Gemini API
+- Groq API (for LLaMA & Whisper)
+- HuggingFace API Token
+- Supabase Project
+- Google TTS API (optional)
+
+````
 
 ### Backend Setup
 
@@ -698,7 +727,7 @@ ls -la src/models/emotion_bilstm_final.onnx
 npm run dev
 
 # Backend runs on: http://localhost:8080
-```
+````
 
 ### Frontend Setup
 
@@ -757,13 +786,16 @@ curl http://localhost:3000/api/health
 ## 🔧 Backend Services
 
 ### 1. **Text Service** (`src/text-service/`)
+
 Dual-model text emotion analysis combining BiLSTM and HuggingFace.
 
 **Models:**
+
 - BiLSTM ONNX: 6 emotions (angry, disgust, fear, happy, neutral, sad)
 - HuggingFace DistilRoBERTa: 7 emotions (adds surprise)
 
 **Features:**
+
 - Parallel model execution
 - 5-minute caching
 - Weighted fusion (50/50 by default)
@@ -772,6 +804,7 @@ Dual-model text emotion analysis combining BiLSTM and HuggingFace.
 **Input:** `{ text: string }`
 
 **Output:**
+
 ```json
 {
   "emotion": "happy",
@@ -794,15 +827,18 @@ Dual-model text emotion analysis combining BiLSTM and HuggingFace.
 ---
 
 ### 2. **Voice Service** (`src/voice-service/`)
+
 Multi-stage voice emotion analysis with transcription.
 
 **Pipeline:**
+
 1. Audio Upload → Groq Whisper STT (auto language detection)
 2. Transcription → Text Emotion Analysis
 3. Audio Features → HuggingFace Wav2Vec2 Voice Emotion
 4. Fusion: Weight text (60%) + voice (40%)
 
 **Features:**
+
 - Multi-language support
 - Audio format conversion (FFmpeg)
 - Feature extraction (MFCC, prosody)
@@ -811,6 +847,7 @@ Multi-stage voice emotion analysis with transcription.
 **Input:** Audio file (WAV, MP3, OPUS)
 
 **Output:**
+
 ```json
 {
   "transcript": "I am feeling great today",
@@ -824,12 +861,14 @@ Multi-stage voice emotion analysis with transcription.
 ---
 
 ### 3. **LLM Service** (`src/llm-service/`)
+
 Empathetic response generation with fallback chain.
 
 **Primary Model:** Google Gemini 2.0 Flash (fast, multimodal)
 **Fallback:** LLaMA 3.3 70B via Groq
 
 **Features:**
+
 - Context-aware prompting (last 5-10 messages)
 - Empathetic tone based on detected emotion
 - Fallback to Groq LLaMA if Gemini fails
@@ -837,6 +876,7 @@ Empathetic response generation with fallback chain.
 - Temperature control (default 0.7)
 
 **Function Signature:**
+
 ```javascript
 generateResponse({
   message: string,
@@ -848,6 +888,7 @@ generateResponse({
 ```
 
 **Prompt Template:**
+
 ```
 The user is feeling {emotion} (confidence: {confidence}%).
 Recent context: {chatHistory}
@@ -859,15 +900,18 @@ if relevant. Keep response concise (2-3 sentences).
 ---
 
 ### 4. **TTS Service** (`src/tts-service/`)
+
 Multi-provider text-to-speech synthesis.
 
 **Providers:**
+
 1. Google Cloud TTS (primary) - Supports 100+ languages, Neural voices
 2. Piper TTS (fallback) - Open-source, fast
 3. Sarvam TTS (fallback) - Indian language support
 4. OpenAI TTS (fallback) - High quality
 
 **Features:**
+
 - Language auto-detection from text
 - Voice selection based on gender/language
 - MP3 or WAV output
@@ -880,9 +924,11 @@ Multi-provider text-to-speech synthesis.
 ---
 
 ### 5. **Storage Service** (`src/storage-service/`)
+
 Supabase ORM layer for persistent data storage.
 
 **Tables:**
+
 - `users`: User profiles
 - `chat_sessions`: Chat session metadata
 - `messages`: Individual chat messages
@@ -891,12 +937,14 @@ Supabase ORM layer for persistent data storage.
 - `safety_alerts`: High-risk message audit trail
 
 **Features:**
+
 - Row-Level Security (RLS) for user isolation
 - Transaction support for atomic operations
 - Automatic timestamps and user tracking
 - Query optimization with proper indexing
 
 **Key Functions:**
+
 ```javascript
 // Sessions
 createSession(userId, topic)
@@ -925,9 +973,11 @@ logSafetyAlert(userId, emotion, message, contactId?, alertSent?)
 ---
 
 ### 6. **Aggregator** (`src/aggregator/`)
+
 Weighted emotion fusion for multi-modal analysis.
 
 **Fusion Logic:**
+
 ```
 Combined Emotion = (text_emotion_score × text_weight) + (voice_emotion_score × voice_weight)
 
@@ -939,6 +989,7 @@ Custom weights can be configured per use case
 ```
 
 **Features:**
+
 - Confidence-based weighting
 - Outlier detection
 - Emotion conflict resolution
@@ -947,9 +998,11 @@ Custom weights can be configured per use case
 ---
 
 ### 7. **Multi-Modal Layer** (`src/multi-modal-layer/`)
+
 Orchestrates text, voice, and data services.
 
 **Responsibilities:**
+
 - Request routing
 - Service coordination
 - Error handling & fallbacks
@@ -958,9 +1011,11 @@ Orchestrates text, voice, and data services.
 ---
 
 ### 8. **Emergency & Safety Service** (`src/routes/emergencyRoutes.js` + `src/utils/emergencyNotifier.js`)
+
 Safeguards users by monitoring high-risk language and managing emergency outreach.
 
 **Features:**
+
 - Emergency contact CRUD with Supabase RLS and REST endpoints
 - High/medium risk keyword detection configurable via environment
 - Automated email alerts via Nodemailer with per-contact opt-in (`notify_enabled`)
@@ -968,6 +1023,7 @@ Safeguards users by monitoring high-risk language and managing emergency outreac
 - Optional escalation hooks reusable across services
 
 **Key Endpoints:**
+
 ```http
 POST /api/emergency/save        # Create or replace contact
 POST /api/emergency/update      # Update existing contact (PUT supported)
@@ -978,6 +1034,7 @@ GET  /api/emergency/email/status# Inspect email provider configuration
 ```
 
 **Sample Alert Log:**
+
 ```json
 {
   "user_id": "uuid",
@@ -1070,7 +1127,7 @@ App
 // lib/api.ts - Centralized API calls
 export const analyzeText = async (text: string) => {
   return withCache(`text-${text.slice(0, 50)}`, async () => {
-    const response = await api.post('/analyze/text', { text });
+    const response = await api.post("/analyze/text", { text });
     return transformResponse(response.data);
   });
 };
@@ -1097,6 +1154,7 @@ export const analyzeText = async (text: string) => {
 ## 📡 API Endpoints
 
 ### 🔐 Authentication (Supabase)
+
 ```
 POST   /auth/signup           - Register new user
 POST   /auth/login            - Login user
@@ -1105,6 +1163,7 @@ GET    /auth/profile          - Get user profile
 ```
 
 ### 📝 Text Analysis
+
 ```
 POST   /api/analyze/text
 Content-Type: application/json
@@ -1119,6 +1178,7 @@ Response: TextAnalysisResult (includes unified data save)
 ```
 
 ### 🎤 Voice Analysis
+
 ```
 POST   /api/analyze/voice
 Content-Type: multipart/form-data
@@ -1130,6 +1190,7 @@ Response: VoiceAnalysisResult (includes unified data save)
 ```
 
 ### 💬 Enhanced Chat System
+
 ```
 POST   /api/chat/message
 Content-Type: application/json
@@ -1161,6 +1222,7 @@ GET    /api/chat/history/:userId  - Get unified chat history from master_user_ac
 ```
 
 ### 📔 AI-Powered Journaling System
+
 ```
 POST   /api/journal/generate
 Content-Type: application/json
@@ -1185,7 +1247,7 @@ Response:
       "mood_score": 7.2,
       "emotion_distribution": {
         "morning": "neutral",
-        "afternoon": "happy", 
+        "afternoon": "happy",
         "evening": "content"
       }
     },
@@ -1199,7 +1261,8 @@ GET    /api/journal/recent/:userId       - Get last 7 days of journals
 POST   /api/journal/manual              - Manually trigger journal generation
 ```
 
-### 📊 Comprehensive Insights & Analytics  
+### 📊 Comprehensive Insights & Analytics
+
 ```
 GET    /api/insights/daily/:userId/:date
 Authorization: Bearer <JWT>
@@ -1233,7 +1296,7 @@ GET    /api/insights/weekly/:userId/:weekStart
 Response:
 {
   "week_start": "2024-01-08",
-  "week_end": "2024-01-14", 
+  "week_end": "2024-01-14",
   "summary": {
     "total_messages": 84,
     "average_mood_score": 6.8,
@@ -1286,6 +1349,7 @@ Response:
 ```
 
 ### 🆘 Emergency Contact Management
+
 ```
 POST   /api/emergency/save
 Content-Type: application/json
@@ -1295,7 +1359,7 @@ Request:
 {
   "userId": "uuid",
   "contactName": "Jane Doe",
-  "contactEmail": "jane@example.com", 
+  "contactEmail": "jane@example.com",
   "contactPhone": "+1-555-123-4567"
 }
 
@@ -1307,6 +1371,7 @@ GET    /api/emergency/email/status   - Inspect Nodemailer configuration
 ```
 
 ### 🤖 Response Generation
+
 ```
 POST   /api/response-generator
 Content-Type: application/json
@@ -1332,6 +1397,7 @@ Response:
 ```
 
 ### 🔊 Text-to-Speech
+
 ```
 POST   /api/tts/synthesize
 Content-Type: application/json
@@ -1354,20 +1420,24 @@ Response:
 ```
 
 ### ⚡ Health & Monitoring
+
 ```
 GET    /api/health              - System health check
 GET    /api/health/detailed     - Detailed service status
 GET    /api/performance/stats   - Performance metrics
 GET    /api/config/models       - Available ML models status
 ```
+
 ```
 
 ### Health & Diagnostics
 ```
-GET    /api/health              - Server status
-GET    /api/health/services     - All service status
-GET    /api/health/models       - ML model status
-```
+
+GET /api/health - Server status
+GET /api/health/services - All service status
+GET /api/health/models - ML model status
+
+````
 
 ---
 
@@ -1389,9 +1459,10 @@ CREATE TABLE users (
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
-```
+````
 
 #### `chat_sessions`
+
 ```sql
 CREATE TABLE chat_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1406,6 +1477,7 @@ CREATE TABLE chat_sessions (
 ```
 
 #### `messages`
+
 ```sql
 CREATE TABLE messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1420,6 +1492,7 @@ CREATE TABLE messages (
 ```
 
 #### `emotions`
+
 ```sql
 CREATE TABLE emotions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1434,6 +1507,7 @@ CREATE TABLE emotions (
 ```
 
 #### `emergency_contacts`
+
 ```sql
 CREATE TABLE emergency_contacts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1449,6 +1523,7 @@ CREATE TABLE emergency_contacts (
 ```
 
 #### `safety_alerts`
+
 ```sql
 CREATE TABLE safety_alerts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1485,6 +1560,7 @@ CREATE POLICY "Users can create sessions"
 ### 1. Text Emotion Detection
 
 **Step 1: Input Processing**
+
 - Normalize text (lowercase, remove extra spaces)
 - Check 5-minute cache for exact match
 - Return cached result if found
@@ -1492,21 +1568,24 @@ CREATE POLICY "Users can create sessions"
 **Step 2: Parallel Model Inference**
 
 **BiLSTM ONNX Model:**
+
 - Input: Tokenized text
 - Model: emotion_bilstm_final.onnx
 - Output: 6 emotion logits
 - Labels: angry, disgust, fear, happy, neutral, sad
 
 **HuggingFace DistilRoBERTa:**
+
 - Model: `michellejieli/emotion_text_classifier`
 - Output: 7 emotion scores (includes surprise)
 - Provider: HuggingFace Inference API
 
 **Step 3: Weighted Fusion**
+
 ```javascript
 combinedScores = {};
 for (emotion in allEmotions) {
-  score = (bilstmScore[emotion] * 0.5) + (hfScore[emotion] * 0.5);
+  score = bilstmScore[emotion] * 0.5 + hfScore[emotion] * 0.5;
   combinedScores[emotion] = score;
 }
 finalEmotion = max(combinedScores);
@@ -1514,6 +1593,7 @@ confidence = combinedScores[finalEmotion];
 ```
 
 **Step 4: Cache Result**
+
 - Store in memory for 5 minutes
 - Key: hash(text)
 
@@ -1522,6 +1602,7 @@ confidence = combinedScores[finalEmotion];
 ### 2. Voice Emotion Detection
 
 **Step 1: Speech-to-Text (Groq Whisper)**
+
 ```
 Audio File (any format)
     ↓
@@ -1533,10 +1614,12 @@ Text Transcription + Language Detection
 ```
 
 **Step 2: Text Emotion from Transcription**
+
 - Run text emotion pipeline on transcript
 - Confidence adjusted by transcription quality
 
 **Step 3: Voice Feature Extraction**
+
 ```
 Audio Analysis:
 - MFCC (Mel-Frequency Cepstral Coefficients)
@@ -1546,11 +1629,13 @@ Audio Analysis:
 ```
 
 **Step 4: Voice Emotion via Wav2Vec2**
+
 - Model: `superb/wav2vec2-base-superb-er`
 - Input: Audio features + waveform
 - Output: Emotion classification
 
 **Step 5: Multi-Modal Fusion**
+
 ```
 Voice Emotion Score = (transcription_emotion * 0.6) + (audio_emotion * 0.4)
 ```
@@ -1560,11 +1645,13 @@ Voice Emotion Score = (transcription_emotion * 0.6) + (audio_emotion * 0.4)
 ### 3. Multi-Modal Fusion
 
 **Scenario 1: Text + Voice (equal confidence)**
+
 ```
 Final Emotion = (text_emotion * 0.5) + (voice_emotion * 0.5)
 ```
 
 **Scenario 2: Text + Voice (confidence-based)**
+
 ```
 text_weight = text_confidence / (text_confidence + voice_confidence)
 voice_weight = voice_confidence / (text_confidence + voice_confidence)
@@ -1573,6 +1660,7 @@ Final Emotion = (text_emotion * text_weight) + (voice_emotion * voice_weight)
 ```
 
 **Scenario 3: Conflicting emotions**
+
 ```
 if (text_emotion != voice_emotion) {
   // Choose based on higher confidence
@@ -1684,6 +1772,7 @@ NEXT_PUBLIC_ENABLE_CHAT_PERSISTENCE=true
 ### Adding a New Emotion Detection Model
 
 **1. Implement Model Service**
+
 ```javascript
 // backend/src/your-service/index.js
 export const analyzeWithNewModel = async (input) => {
@@ -1692,6 +1781,7 @@ export const analyzeWithNewModel = async (input) => {
 ```
 
 **2. Update Fusion Layer**
+
 ```javascript
 // backend/src/aggregator/index.js
 const newModelResult = await analyzeWithNewModel(input);
@@ -1699,6 +1789,7 @@ scores.newModel = newModelResult.scores;
 ```
 
 **3. Update Types**
+
 ```typescript
 // frontend/types/index.ts
 export interface TextAnalysisResult {
@@ -1714,6 +1805,7 @@ export interface TextAnalysisResult {
 ### Adding a New LLM Provider
 
 **1. Implement Provider Function**
+
 ```javascript
 // backend/src/llm-service/index.js
 async function generateResponseWithNewProvider(message, context) {
@@ -1722,6 +1814,7 @@ async function generateResponseWithNewProvider(message, context) {
 ```
 
 **2. Add to Fallback Chain**
+
 ```javascript
 export async function generateResponse(message, emotion) {
   try {
@@ -1741,23 +1834,28 @@ export async function generateResponse(message, emotion) {
 ### Enabling Emergency Alert Workflow
 
 1. **Run Database Migration**
-  ```bash
-  psql $SUPABASE_DATABASE_URL -f migrations/create_emergency_contacts.sql
-  ```
-  This creates `emergency_contacts`, `safety_alerts`, and associated RLS policies.
+
+```bash
+psql $SUPABASE_DATABASE_URL -f migrations/create_emergency_contacts.sql
+```
+
+This creates `emergency_contacts`, `safety_alerts`, and associated RLS policies.
 
 2. **Configure Email Provider**
-  - Set `EMAIL_ENABLED=true` and select a provider via `EMAIL_PROVIDER`
-  - Supply credentials (`GMAIL_APP_PASSWORD`, SMTP secrets, or `SENDGRID_API_KEY`)
-  - Verify configuration with `GET /api/emergency/email/status`
+
+- Set `EMAIL_ENABLED=true` and select a provider via `EMAIL_PROVIDER`
+- Supply credentials (`GMAIL_APP_PASSWORD`, SMTP secrets, or `SENDGRID_API_KEY`)
+- Verify configuration with `GET /api/emergency/email/status`
 
 3. **Seed Emergency Contacts (Optional)**
-  - Users can add contacts via `/setup/emergency-contact`
-  - For testing, POST to `/api/emergency/save` with a Supabase-authenticated user ID
+
+- Users can add contacts via `/setup/emergency-contact`
+- For testing, POST to `/api/emergency/save` with a Supabase-authenticated user ID
 
 4. **Trigger a Safe Test**
-  - Send a chat message containing a high-risk keyword (e.g., "I want to hurt myself")
-  - Confirm an email is sent and an entry appears in `safety_alerts`
+
+- Send a chat message containing a high-risk keyword (e.g., "I want to hurt myself")
+- Confirm an email is sent and an entry appears in `safety_alerts`
 
 ---
 
@@ -1829,26 +1927,31 @@ npm run test:translation
 ### Frontend Development Tips
 
 **1. Environment Variables**
+
 - Always prefix with `NEXT_PUBLIC_` for browser access
 - Create `.env.local` for local development
 
 **2. Type Safety**
+
 - Define interfaces in `types/index.ts`
 - Use TypeScript strict mode
 - Avoid `any` type
 
 **3. State Management**
+
 - Use Zustand for global state
 - Use Context for auth/chat
 - Local component state for UI
 
 **4. Performance**
+
 - Use `React.memo()` for expensive components
 - Implement `useMemo()` for heavy computations
 - Use dynamic imports for large components
 - Cache API responses
 
 **5. Safety Prompts**
+
 - Mount `EmergencyContactChecker` near the app shell so it can prompt authenticated users once
 - Reuse `EmergencyContactForm` in onboarding pages and modals to keep validation consistent
 - Gate alert-related UI behind Supabase-authenticated `user.id` to avoid anonymous API calls
@@ -1922,10 +2025,13 @@ docker run -p 8080:8080 emotion-sense-backend
 ### Common Issues & Solutions
 
 #### 1. **ONNX Model Not Found**
+
 ```
 Error: Cannot find module 'emotion_bilstm_final.onnx'
 ```
+
 **Solution:**
+
 - Verify file exists: `ls backend/src/models/emotion_bilstm_final.onnx`
 - Check permissions: `chmod 644 src/models/*.onnx`
 - Download model if missing: [Download Link]
@@ -1933,10 +2039,13 @@ Error: Cannot find module 'emotion_bilstm_final.onnx'
 ---
 
 #### 2. **HuggingFace Rate Limited**
+
 ```
 Error: Rate limit exceeded from HuggingFace API
 ```
+
 **Solution:**
+
 - Text emotion results are cached for 5 minutes
 - Wait 1-2 minutes before retrying
 - Batch requests where possible
@@ -1945,10 +2054,13 @@ Error: Rate limit exceeded from HuggingFace API
 ---
 
 #### 3. **Gemini API Key Invalid**
+
 ```
 Error: 403 Permission denied from Gemini API
 ```
+
 **Solution:**
+
 - Verify API key in `.env`
 - Check API key has correct permissions
 - Ensure quota not exceeded
@@ -1957,10 +2069,13 @@ Error: 403 Permission denied from Gemini API
 ---
 
 #### 4. **Supabase Connection Failed**
+
 ```
 Error: Failed to connect to Supabase
 ```
+
 **Solution:**
+
 - Check `SUPABASE_URL` and `SUPABASE_KEY` in `.env`
 - Verify network connectivity
 - Ensure Supabase project is running
@@ -1969,10 +2084,13 @@ Error: Failed to connect to Supabase
 ---
 
 #### 5. **Voice Recording Permission Denied**
+
 ```
 Error: NotAllowedError: Permission denied
 ```
+
 **Solution:**
+
 - HTTPS required for production (localhost OK)
 - Check browser microphone permissions
 - Request permission explicitly in app
@@ -1981,10 +2099,13 @@ Error: NotAllowedError: Permission denied
 ---
 
 #### 6. **Frontend Can't Connect to Backend**
+
 ```
 Error: Failed to fetch from http://localhost:8080
 ```
+
 **Solution:**
+
 - Backend must be running on port 8080
 - Check CORS configuration in backend
 - Verify `NEXT_PUBLIC_API_URL` in frontend `.env.local`
@@ -1993,10 +2114,13 @@ Error: Failed to fetch from http://localhost:8080
 ---
 
 #### 7. **Python Dependencies Missing**
+
 ```
 Error: ModuleNotFoundError: No module named 'onnxruntime'
 ```
+
 **Solution:**
+
 ```bash
 cd backend
 pip install -r requirements.txt
@@ -2008,10 +2132,13 @@ pip install onnxruntime numpy librosa
 ---
 
 #### 8. **Emergency Alerts Not Sending**
+
 ```
 Warning: Failed to send emergency alert email
 ```
+
 **Solution:**
+
 - Ensure `EMAIL_ENABLED=true` and `EMAIL_PROVIDER` matches your credential set
 - For Gmail, use an App Password and enable `Less secure app access` (or Workspace equivalent)
 - Confirm `GET /api/emergency/email/status` reports `configured: true`
@@ -2053,18 +2180,21 @@ curl http://localhost:8080/api/health/models
 ## 📚 Additional Resources
 
 ### Documentation Files
+
 - **Backend**: `backend/README_DETAILED.md`
 - **Backend Services**: Each service has `README.md`
 - **Frontend**: `frontend/ARCHITECTURE.md`
 - **Copilot Instructions**: `.github/copilot-instructions.md`
 
 ### API Documentation
+
 - [Groq API Docs](https://console.groq.com/docs)
 - [Google Gemini API](https://ai.google.dev/)
 - [HuggingFace Inference](https://huggingface.co/docs/api-inference)
 - [Supabase Docs](https://supabase.com/docs)
 
 ### ML Model Resources
+
 - [ONNX Runtime](https://onnxruntime.ai/)
 - [Transformers Library](https://huggingface.co/docs/transformers)
 - [Wav2Vec2 Model](https://huggingface.co/docs/transformers/model_doc/wav2vec2)
@@ -2074,12 +2204,14 @@ curl http://localhost:8080/api/health/models
 ## 🤝 Contributing
 
 ### Code Standards
+
 - Follow ESLint rules (frontend)
 - Use consistent naming conventions
 - Document complex logic with comments
 - Test before pushing
 
 ### Pull Request Process
+
 1. Create feature branch: `git checkout -b feature/your-feature`
 2. Make changes following code standards
 3. Test thoroughly
