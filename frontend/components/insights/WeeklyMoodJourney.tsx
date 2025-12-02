@@ -7,7 +7,6 @@
 
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { format, parseISO } from 'date-fns';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import type { WeeklyInsight } from '@/lib/insightsApi';
 
@@ -66,39 +65,7 @@ export const WeeklyMoodJourney = React.memo(({ weeklyInsights }: WeeklyMoodJourn
     return { peakDay: peak, lowDay: low };
   }, [timelineData]);
 
-  // Generate SVG path for the mood line (include all points, even 0)
-  const { linePath, areaPath, validPoints } = useMemo(() => {
-    const width = 100;
-    const height = 100;
-    const padding = 10;
-    
-    // Include ALL data points (even those with 0 mood score)
-    const allData = timelineData;
-    
-    if (allData.length === 0) {
-      return { linePath: '', areaPath: '', validPoints: [] };
-    }
-    
-    const xScale = (index: number) => 
-      padding + ((index / (allData.length - 1 || 1)) * (width - 2 * padding));
-    
-    const yScale = (score: number) => 
-      height - padding - ((score / 100) * (height - 2 * padding));
-    
-    const points = allData.map((d, i) => ({
-      x: xScale(i),
-      y: yScale(d.moodScore), // Will use 0 for days without data
-      data: d
-    }));
-    
-    const line = points.map((p, i) => 
-      i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`
-    ).join(' ');
-    
-    const area = `${line} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`;
-    
-    return { linePath: line, areaPath: area, validPoints: points };
-  }, [timelineData]);
+
 
   if (timelineData.length === 0) {
     return null;
