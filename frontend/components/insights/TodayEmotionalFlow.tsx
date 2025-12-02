@@ -30,9 +30,12 @@ const periodLabels = {
 export const TodayEmotionalFlow = React.memo(({ insight }: TodayEmotionalFlowProps) => {
   const { emotion_summary } = insight;
   
-  // Calculate unique emotions count
+  // Calculate unique emotions count (normalize keys to avoid duplicates due to casing/variants)
   const uniqueEmotionsCount = useMemo(() => {
-    return Object.keys(emotion_summary?.emotion_counts || {}).length;
+    const counts = emotion_summary?.emotion_counts || {};
+    const normalized = Object.keys(counts).map(k => (k || '').toLowerCase().trim());
+    const unique = Array.from(new Set(normalized));
+    return unique.length;
   }, [emotion_summary]);
 
   // Process time segments for visualization
@@ -41,13 +44,19 @@ export const TodayEmotionalFlow = React.memo(({ insight }: TodayEmotionalFlowPro
       return [];
     }
     
-    return emotion_summary.time_segments.map(segment => ({
-      ...segment,
-      Icon: periodIcons[segment.period] || Sun,
-      label: periodLabels[segment.period] || segment.period,
-      config: getEmotionConfig(segment.emotion),
-      emoji: getEmotionEmoji(segment.emotion),
-    }));
+    return emotion_summary.time_segments.map(segment => {
+      const raw = segment.emotion || 'neutral';
+      const normalized = (raw || 'neutral').toLowerCase().trim();
+
+      return {
+        ...segment,
+        normalizedEmotion: normalized,
+        Icon: periodIcons[segment.period] || Sun,
+        label: periodLabels[segment.period] || segment.period,
+        config: getEmotionConfig(normalized),
+        emoji: getEmotionEmoji(normalized),
+      };
+    });
   }, [emotion_summary]);
 
   if (!emotion_summary || timeSegments.length === 0) {
@@ -110,9 +119,9 @@ export const TodayEmotionalFlow = React.memo(({ insight }: TodayEmotionalFlowPro
                       <span className="text-sm font-semibold">{segment.label}</span>
                       <span className="text-xl">{segment.emoji}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {segment.count} {segment.count === 1 ? 'message' : 'messages'}
-                    </p>
+                      <p className="text-xs text-muted-foreground">
+                        {segment.count} {segment.count === 1 ? 'message' : 'messages'}
+                      </p>
                   </div>
                 </div>
 
@@ -133,7 +142,7 @@ export const TodayEmotionalFlow = React.memo(({ insight }: TodayEmotionalFlowPro
                   {/* Content overlay */}
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-sm font-semibold text-white drop-shadow-lg capitalize">
-                      {segment.emotion}
+                      {segment.normalizedEmotion}
                     </span>
                   </div>
                   

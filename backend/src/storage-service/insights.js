@@ -9,6 +9,8 @@ import config from '../config/index.js';
 import * as unifiedEmotion from './unifiedEmotionService.js';
 import logger from '../utils/logger.js';
 
+const { normalizeEmotion } = unifiedEmotion;
+
 const supabase = createClient(
   config.database.supabase.url, 
   config.database.supabase.serviceRoleKey || config.database.supabase.anonKey
@@ -54,19 +56,20 @@ async function getDailyInsights(userId, startDate, endDate) {
         // Fuse journal emotion with message emotions
         const fusedEmotion = unifiedEmotion.fuseJournalAndMessageEmotions(journal, messageSummary);
         
-        // Return enriched journal with consistent emotion data
+        // Return enriched journal with consistent emotion data (NORMALIZED)
+        const normalizedDominant = normalizeEmotion(fusedEmotion.dominantEmotion);
         return {
           ...journal,
           emotion_summary: {
             ...journal.emotion_summary,
-            dominant_emotion: fusedEmotion.dominantEmotion,
+            dominant_emotion: normalizedDominant,
             mood_score: fusedEmotion.moodScore,
             emotion_counts: messageSummary.emotionCounts || journal.emotion_summary?.emotion_counts || {},
             time_segments: messageSummary.timeSegments || journal.emotion_summary?.time_segments || [],
             context_summary: messageSummary.contextSummary || journal.emotion_summary?.context_summary || '',
             message_count: messageSummary.messageCount || 0
           },
-          emotion: fusedEmotion.dominantEmotion,
+          emotion: normalizedDominant,
           emotion_emoji: fusedEmotion.emotionEmoji
         };
       } catch (enrichError) {

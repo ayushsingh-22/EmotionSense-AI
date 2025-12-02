@@ -34,14 +34,16 @@ export function JournalEmotionSummary({
       <div className="space-y-3">
         {sortedEmotions.map(([emotion, count]) => {
           const percentage = ((count / totalEmotions) * 100).toFixed(1);
-          const isDominant = emotion === dominantEmotion;
-          const emotionConfig = getEmotionConfig(emotion);
+          const normalizedEmotion = (emotion || 'neutral').toLowerCase().trim();
+          const normalizedDominant = (dominantEmotion || 'neutral').toLowerCase().trim();
+          const isDominant = normalizedEmotion === normalizedDominant;
+          const emotionConfig = getEmotionConfig(normalizedEmotion);
 
           return (
             <div key={emotion} className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-base">{getEmotionEmoji(emotion)}</span>
+                  <span className="text-base">{getEmotionEmoji(normalizedEmotion)}</span>
                   <span
                     className={cn(
                       'capitalize',
@@ -49,7 +51,7 @@ export function JournalEmotionSummary({
                       emotionConfig.text
                     )}
                   >
-                    {emotion}
+                    {normalizedEmotion}
                     {isDominant && (
                       <span className="ml-2 text-xs opacity-70">
                         (dominant)

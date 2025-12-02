@@ -127,7 +127,8 @@ class JournalGenerator {
           mood_score: emotionSummary.moodScore,
           dominant_emotion: emotionSummary.primaryEmotion,
           emotion_counts: emotionSummary.emotionCounts,
-          total_messages: emotionSummary.totalMessages
+          total_messages: emotionSummary.totalMessages,
+          time_segments: emotionSummary.timeSegments || []
         },
         source: manual ? 'manual' : 'auto',
         generated_at: new Date().toISOString()
@@ -236,9 +237,10 @@ class JournalGenerator {
       }
     });
     
-    // Find primary emotion
-    const primaryEmotion = Object.entries(emotionCounts)
+    // Find primary emotion (NORMALIZE LABEL)
+    const rawPrimary = Object.entries(emotionCounts)
       .sort(([, a], [, b]) => b - a)[0]?.[0] || 'neutral';
+    const primaryEmotion = unifiedEmotion.normalizeEmotion(rawPrimary);
     
     const primaryEmoji = this.emotionEmojis[primaryEmotion] || '😐';
     
@@ -246,13 +248,66 @@ class JournalGenerator {
     // This uses valence (happy=high, sad=low) instead of just confidence
     const moodScore = unifiedEmotion.calculateAverageMoodScore(emotionList);
     
+    // Calculate time segments (morning, afternoon, evening) for consistent insights
+    const timeSegments = this.calculateTimeSegments(messages);
+    
     return {
       primaryEmotion,
       primaryEmoji,
       moodScore,
       emotionCounts,
-      totalMessages: messages.length
+      totalMessages: messages.length,
+      timeSegments
     };
+  }
+
+  /**
+   * Calculate time segments from messages
+   * Returns array of {period, emotion, count} for morning/afternoon/evening
+   */
+  calculateTimeSegments(messages) {
+    const segments = {
+      morning: { period: 'morning', emotions: {}, count: 0 },
+      afternoon: { period: 'afternoon', emotions: {}, count: 0 },
+      evening: { period: 'evening', emotions: {}, count: 0 }
+    };
+    
+    messages.forEach(msg => {
+      if (!msg.created_at || !msg.emotion) return;
+      
+      const hour = new Date(msg.created_at).getHours();
+      let period;
+      
+      if (hour >= 5 && hour < 12) period = 'morning';
+      else if (hour >= 12 && hour < 17) period = 'afternoon';
+      else period = 'evening';
+      
+      const emotion = unifiedEmotion.normalizeEmotion(msg.emotion);
+      segments[period].count++;
+      segments[period].emotions[emotion] = (segments[period].emotions[emotion] || 0) + 1;
+    });
+    
+    // Calculate dominant emotion per period - ONLY return segments with actual data
+    return Object.keys(segments)
+      .map(periodKey => {
+        const segment = segments[periodKey];
+        
+        // Skip periods with no emotion data
+        if (Object.keys(segment.emotions).length === 0) {
+          return null;
+        }
+        
+        // Get emotion with highest count
+        const dominantEmotion = Object.entries(segment.emotions)
+          .sort(([,a], [,b]) => b - a)[0][0];
+        
+        return {
+          period: periodKey,
+          emotion: dominantEmotion,
+          count: segment.count
+        };
+      })
+      .filter(segment => segment !== null); // Remove null entries
   }
 
   /**
@@ -303,7 +358,7 @@ ${messagesBlock}
 
 Emotion summary:
 Primary emotion: ${emotionSummary.primaryEmotion} (${emotionSummary.primaryEmoji})
-Mood score: ${emotionSummary.moodScore}/10
+Mood score: ${emotionSummary.moodScore}/100
 Emotion histogram: ${emotionJson}
 
 CRITICAL OUTPUT REQUIREMENTS:

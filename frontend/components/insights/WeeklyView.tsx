@@ -62,8 +62,9 @@ HighlightChip.displayName = 'HighlightChip';
 
 const CollapsibleWeekCard = React.memo(React.forwardRef<HTMLDivElement, CollapsibleWeekCardProps>(({ insight, index }, ref) => {
   const [isOpen, setIsOpen] = useState(index === 0);
-  const config = getEmotionConfig(insight.dominant_emotion);
-  const emoji = getEmotionEmoji(insight.dominant_emotion);
+  const normalizedDominant = (insight.dominant_emotion || 'neutral').toLowerCase().trim();
+  const config = getEmotionConfig(normalizedDominant);
+  const emoji = getEmotionEmoji(normalizedDominant);
 
   return (
     <motion.div
@@ -121,7 +122,7 @@ const CollapsibleWeekCard = React.memo(React.forwardRef<HTMLDivElement, Collapsi
                 </h3>
                 <div className="flex items-center gap-3">
                   <Badge variant="secondary" className="capitalize font-semibold bg-white/90 text-gray-900">
-                    {insight.dominant_emotion}
+                    {normalizedDominant}
                   </Badge>
                   <span className="text-white/90 text-sm font-medium">
                     Avg Mood: {Math.round(insight.avg_mood_score)}/100

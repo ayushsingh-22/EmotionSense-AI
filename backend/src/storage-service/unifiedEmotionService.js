@@ -405,14 +405,14 @@ function analyzeTimeSegments(messages) {
     segments[period].count++;
   });
 
-  // Find dominant emotion per segment
+  // Find dominant emotion per segment (NORMALIZE LABELS)
   const result = [];
   Object.keys(segments).forEach(period => {
     if (segments[period].count > 0) {
       const dominant = getDominantEmotion(segments[period].emotions);
       result.push({
         period,
-        emotion: dominant,
+        emotion: normalizeEmotion(dominant),
         count: segments[period].count
       });
     }
