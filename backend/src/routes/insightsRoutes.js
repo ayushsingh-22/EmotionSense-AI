@@ -381,7 +381,7 @@ router.get("/daily", async (req, res) => {
     const activities = activitiesResult.data || [];
 
     // Get journal entries for the same date range to ensure consistent mood scores
-    const { data: journalEntries, error: journalError } = await supabase
+    const { data: journalEntries } = await supabase
       .from("journal_entries")
       .select("date, emotion_summary")
       .eq("user_id", userId)
