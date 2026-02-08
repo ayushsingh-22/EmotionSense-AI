@@ -33,6 +33,7 @@ import emergencyRoutes from './routes/emergencyRoutes.js';
 import insightsRoutes from './routes/insightsRoutes.js';
 import journalRoutes from './routes/journalRoutes.js';
 import activityRoutes from './routes/activityRoutes.js';
+import cronRoutes from './routes/cronRoutes.js';
 import { journalService } from './journal-service/index.js';
 
 // Load environment variables
@@ -120,6 +121,7 @@ const configureRoutes = () => {
   app.use('/api/insights', insightsRoutes);
   app.use('/api/activity', activityRoutes);
   app.use('/api/journal', journalRoutes);
+  app.use('/api/cron', cronRoutes);
 
   app.get('/', (req, res) => {
     res.json({

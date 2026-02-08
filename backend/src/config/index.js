@@ -178,6 +178,11 @@ const config = {
     maxTimelineDays: parseInt(process.env.DASHBOARD_MAX_TIMELINE_DAYS || '45', 10),
     generateStories: process.env.DASHBOARD_GENERATE_STORIES !== 'false',
     defaultLookbackDays: parseInt(process.env.DASHBOARD_LOOKBACK_DAYS || '3650', 10)
+  },
+
+  // Cron Configuration (for external cron services like cron-job.org)
+  cron: {
+    secret: process.env.CRON_SECRET // Required for /api/cron/ping endpoint
   }
 };
 
