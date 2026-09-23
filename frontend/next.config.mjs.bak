@@ -18,15 +18,6 @@ const nextConfig = {
       '@radix-ui/react-icons',
       'lucide-react',
     ],
-    // Without this, Next.js's webpack bundler inlines @prisma/client into
-    // each API route's compiled output, which breaks Prisma's own relative
-    // lookup for its native query-engine binary at runtime — surfacing as
-    // "PrismaClientInitializationError ... built on Vercel" during build-time
-    // page-data collection, even though `prisma generate` ran successfully.
-    // Marking it external tells Next.js to resolve it via normal node_modules
-    // require() instead of bundling it, exactly like Prisma's own Next.js
-    // deployment docs recommend.
-    serverComponentsExternalPackages: ['@prisma/client', '.prisma/client'],
   },
 
   // Preload critical fonts
