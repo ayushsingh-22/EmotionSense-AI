@@ -69,3 +69,4 @@ backend/models/
 # Firebase
 firebase-credentials.json
 serviceAccountKey.json
+frontend/frontend_main.log

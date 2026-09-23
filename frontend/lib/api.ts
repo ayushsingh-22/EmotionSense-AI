@@ -13,7 +13,11 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // Increased to 30 seconds for insights with LLM generation
+  // The backend can fall through several Gemini models in sequence when one
+  // is rate-limited/overloaded (observed a real ~45s round trip during
+  // testing) before finally succeeding — 30s was cutting that off client-side
+  // even though the backend would have responded successfully.
+  timeout: 60000,
 });
 
 // Request interceptor for performance monitoring

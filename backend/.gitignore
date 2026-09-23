@@ -19,6 +19,9 @@ npm-debug.log*
 data/*.db
 *.sqlite
 
+# Cached daily model catalog (machine-local, regenerated automatically)
+data/model-catalog-cache.json
+
 # Model files (too large for git)
 # models/
 

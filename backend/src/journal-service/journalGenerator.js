@@ -12,6 +12,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 import logger from '../utils/logger.js';
 import * as unifiedEmotion from '../storage-service/unifiedEmotionService.js';
+import { getGeminiModelList, getGroqChatModel } from '../utils/modelCatalog.js';
 
 // NOTE ON SCHEMA GAP: the original Supabase schema had a dedicated
 // `journal_entries` table. The finalized Neon/Prisma schema
@@ -26,12 +27,9 @@ import * as unifiedEmotion from '../storage-service/unifiedEmotionService.js';
 
 class JournalGenerator {
   constructor() {
-    // Initialize Gemini
-    const geminiApiKey = config.gemini?.apiKey1 || config.gemini?.apiKey;
-    if (geminiApiKey) {
-      const genAI = new GoogleGenerativeAI(geminiApiKey);
-      this.geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-    }
+    // Gemini: store the key and construct the model lazily (see getGeminiModel())
+    // since the best available model id is resolved daily and async.
+    this.geminiApiKey = config.gemini?.apiKeys?.[0] || config.gemini?.apiKey;
 
     // Initialize Groq (for LLaMA fallback)
     const groqApiKey = process.env.GROQ_API_KEY || config.llama?.apiKey;
@@ -49,6 +47,19 @@ class JournalGenerator {
       disgust: '🤢',
       neutral: '😐'
     };
+  }
+
+  /**
+   * Resolve the best currently-available Gemini model (daily-refreshed) and
+   * build a fresh generative model instance for it.
+   */
+  async getGeminiModel() {
+    if (!this.geminiApiKey) {
+      return null;
+    }
+    const [modelName] = await getGeminiModelList();
+    const genAI = new GoogleGenerativeAI(this.geminiApiKey);
+    return genAI.getGenerativeModel({ model: modelName });
   }
 
   /**
@@ -436,8 +447,12 @@ Now generate the meaningful, insightful journal for ${formattedDate}.`;
 
       // Try Gemini first
       try {
+        const geminiModel = await this.getGeminiModel();
+        if (!geminiModel) {
+          throw new Error('Gemini API key not configured');
+        }
         logger.info('🤖 Calling Gemini for journal generation...');
-        const result = await this.geminiModel.generateContent(prompt);
+        const result = await geminiModel.generateContent(prompt);
         const response = await result.response;
         let text = response.text().trim();
         
@@ -462,7 +477,7 @@ Now generate the meaningful, insightful journal for ${formattedDate}.`;
       try {
         logger.info('🔄 Calling Groq LLaMA for journal generation...');
         const completion = await this.groq.chat.completions.create({
-          model: 'llama-3.3-70b-versatile',
+          model: await getGroqChatModel(),
           messages: [
             {
               role: 'system',

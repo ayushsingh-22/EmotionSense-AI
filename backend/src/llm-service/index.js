@@ -14,6 +14,7 @@ import axios from 'axios';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import config from '../config/index.js';
 import { indianContextConfig } from '../config/indianContext.js';
+import { getGeminiModelList, getGroqChatModel } from '../utils/modelCatalog.js';
 
 /**
  * Build Indian context guidance based on detected topic
@@ -411,11 +412,11 @@ RESPOND NATURALLY, CONTEXTUALLY, AND WITH INDIAN AWARENESS:`;
  * Primary LLM service with model fallback
  */
 export const generateWithGemini = async (prompt) => {
-  // Try API keys in sequence with fallback
-  const apiKey1 = config.gemini.apiKey1;
-  const apiKey2 = config.gemini.apiKey2;
-  
-  if (!apiKey1 && !apiKey2) {
+  // Try every configured API key (new single GEMINI_API_KEY and/or the
+  // legacy GEMINI_API_KEY1/2 pair — see config/index.js) in sequence.
+  const apiKeys = config.gemini.apiKeys;
+
+  if (apiKeys.length === 0) {
     throw new Error('No Gemini API keys configured');
   }
 
@@ -449,39 +450,37 @@ export const generateWithGemini = async (prompt) => {
 
   let error;
 
-  // Get models from config with fallback order
-  const models = config.gemini.models || ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-flash-tts', 'gemini-2.5-flash-tts', 'gemini-2.5-pro	'];
-  
-  // Try first API key with all models
-  if (apiKey1) {
+  // Best-suited models available right now (daily-refreshed; see modelCatalog.js)
+  const models = await getGeminiModelList();
+
+  for (const [keyIndex, apiKey] of apiKeys.entries()) {
     for (const modelName of models) {
       try {
-        console.log(`🤖 Attempting Gemini API Key 1 with model: ${modelName}`);
-        const genAI = new GoogleGenerativeAI(apiKey1);
-        const model = genAI.getGenerativeModel({ 
+        console.log(`🤖 Attempting Gemini API Key ${keyIndex + 1} with model: ${modelName}`);
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
           model: modelName,
           generationConfig,
           safetySettings
         });
         const result = await model.generateContent(prompt);
         const response = result.response;
-        
+
         // Check if response was blocked by safety filters
         if (response.promptFeedback?.blockReason) {
           console.warn(`⚠️ Response blocked by safety filter: ${response.promptFeedback.blockReason}`);
           throw new Error(`Response blocked: ${response.promptFeedback.blockReason}`);
         }
-        
+
         const text = response.text()?.trim();
-        
+
         // Validate that we got actual content
         if (!text || text.length === 0) {
           console.warn(`⚠️ Empty response received from Gemini model: ${modelName}`);
-          console.warn(`Response object:`, JSON.stringify(response, null, 2));
           throw new Error('Empty response received from Gemini');
         }
-        
-        console.log(`✅ Gemini response generated with ${modelName} (API Key 1)`);
+
+        console.log(`✅ Gemini response generated with ${modelName} (API Key ${keyIndex + 1})`);
         console.log(`📝 Response preview: "${text.substring(0, 100)}..."`);
         return {
           text,
@@ -489,100 +488,14 @@ export const generateWithGemini = async (prompt) => {
           success: true
         };
       } catch (err) {
-        console.warn(`API Key 1 with ${modelName} failed:`, err.message);
+        console.warn(`API Key ${keyIndex + 1} with ${modelName} failed:`, err.message);
         error = err;
       }
     }
   }
 
-  // Try second API key with all models if first one failed
-  if (apiKey2) {
-    for (const modelName of models) {
-      try {
-        console.log(`🤖 Attempting Gemini API Key 2 with model: ${modelName}`);
-        const genAI = new GoogleGenerativeAI(apiKey2);
-        const model = genAI.getGenerativeModel({ 
-          model: modelName,
-          generationConfig,
-          safetySettings
-        });
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        
-        // Check if response was blocked by safety filters
-        if (response.promptFeedback?.blockReason) {
-          console.warn(`⚠️ Response blocked by safety filter: ${response.promptFeedback.blockReason}`);
-          throw new Error(`Response blocked: ${response.promptFeedback.blockReason}`);
-        }
-        
-        const text = response.text()?.trim();
-        
-        // Validate that we got actual content
-        if (!text || text.length === 0) {
-          console.warn(`⚠️ Empty response received from Gemini model: ${modelName}`);
-          console.warn(`Response object:`, JSON.stringify(response, null, 2));
-          throw new Error('Empty response received from Gemini');
-        }
-        
-        console.log(`✅ Gemini response generated with ${modelName} (API Key 2)`);
-        console.log(`📝 Response preview: "${text.substring(0, 100)}..."`);
-        return {
-          text,
-          model: `gemini-${modelName}`,
-          success: true
-        };
-      } catch (err) {
-        console.warn(`API Key 2 with ${modelName} failed:`, err.message);
-        error = err;
-      }
-    }
-  }
-
-  // If both keys failed with all models, throw the last error
+  // If every key/model combination failed, throw the last error
   throw new Error(`All Gemini API keys failed. Last error: ${error?.message || 'Unknown error'}`);
-
-  // Legacy code below (will not be reached)
-  // Try each model in the fallback array
-  let lastError = null;
-
-  for (const [index, modelName] of models.entries()) {
-    try {
-      console.log(`🤖 Attempting Gemini API with model: ${modelName} (${index + 1}/${models.length})`);
-
-      // Get the generative model
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig
-      });
-
-      // Generate content
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      let text = response.text().trim();
-
-      console.log(`✅ Gemini response generated successfully with ${modelName}`);
-
-      return {
-        text,
-        model: `gemini-${modelName}`,
-        success: true
-      };
-
-    } catch (error) {
-      lastError = error;
-      console.warn(`⚠️  Model ${modelName} failed: ${error.message}`);
-      
-      // If not the last model, try the next one
-      if (index < models.length - 1) {
-        console.log(`🔄 Trying next model...`);
-        continue;
-      }
-    }
-  }
-
-  // All models failed
-  console.error('❌ All Gemini models failed');
-  throw new Error(`Gemini API call failed after trying ${models.length} models: ${lastError?.message || 'Unknown error'}`);
 };
 
 /**
@@ -601,12 +514,13 @@ export const generateWithLLaMA = async (prompt) => {
   }
 
   try {
-    console.log(`🤖 Calling LLaMA via Groq (${config.llama.model})...`);
+    const modelName = await getGroqChatModel();
+    console.log(`🤖 Calling LLaMA via Groq (${modelName})...`);
 
     const response = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
       {
-        model: config.llama.model,
+        model: modelName,
         messages: [
           {
             role: 'user',
@@ -628,16 +542,16 @@ export const generateWithLLaMA = async (prompt) => {
 
     // Extract text from Groq response
     const generatedText = response.data.choices?.[0]?.message?.content;
-    
+
     if (!generatedText) {
       throw new Error('No response text from Groq LLaMA API');
     }
-    
+
     console.log(`✅ LLaMA (Groq) response generated successfully`);
 
     return {
       text: generatedText.trim(),
-      model: `llama-groq-${config.llama.model}`,
+      model: `llama-groq-${modelName}`,
       success: true
     };
   } catch (error) {

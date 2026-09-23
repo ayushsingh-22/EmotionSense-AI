@@ -57,16 +57,17 @@ console.log(response);
 Set the following in `.env`:
 
 ### Gemini (Primary)
-- `GEMINI_API_KEY`: Your Google Gemini API key
-- `GEMINI_MODEL`: Model name (default: gemini-2.5-flash)
-- `GEMINI_API_URL`: API endpoint
+- `GEMINI_API_KEY` (or legacy `GEMINI_API_KEY1`/`GEMINI_API_KEY2`): Your Google Gemini API key(s)
+- `GEMINI_MODEL`: Optional — pins a specific model. Leave unset to let
+  `../utils/modelCatalog.js` auto-pick and refresh the best available model daily.
 - `GEMINI_MAX_TOKENS`: Maximum response length (default: 1024)
 - `GEMINI_TEMPERATURE`: Creativity (0-1, default: 0.7)
 
-### LLaMA (Fallback)
+### LLaMA (Fallback, via Groq)
 - `LLAMA_ENABLED`: Enable/disable LLaMA fallback (true/false)
-- `LLAMA_API_URL`: LLaMA server endpoint
-- `LLAMA_MODEL_PATH`: Path to model weights
+- `GROQ_API_KEY`: Groq API key (also used for speech-to-text)
+- `LLAMA_MODEL`: Optional — pins a specific Groq model. Leave unset to let
+  `../utils/modelCatalog.js` auto-pick and refresh the best available model daily.
 - `LLAMA_MAX_TOKENS`: Maximum response length
 - `LLAMA_TEMPERATURE`: Creativity (0-1)
 

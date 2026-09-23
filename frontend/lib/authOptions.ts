@@ -3,6 +3,16 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 
+// NextAuth reads NEXTAUTH_URL from process.env internally. If it's not set
+// explicitly (easy to forget on a first Vercel deploy), fall back to
+// Vercel's own auto-provided VERCEL_URL so auth doesn't silently break.
+// If you attach a custom domain, set NEXTAUTH_URL explicitly to that domain
+// instead — VERCEL_URL points at the current deployment's own subdomain, not
+// a custom domain.
+if (!process.env.NEXTAUTH_URL && process.env.VERCEL_URL) {
+  process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
+}
+
 /**
  * Shared NextAuth (Auth.js v4) configuration.
  *

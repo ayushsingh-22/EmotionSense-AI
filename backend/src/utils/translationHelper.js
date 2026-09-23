@@ -14,15 +14,18 @@ import { translate } from '@vitalets/google-translate-api';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import config from '../config/index.js';
 import { detectHinglish } from '../config/indianLanguages.js';
+import { getGeminiModelList } from './modelCatalog.js';
 
-// Helper function to get Gemini model with API key fallback
-const getGeminiModel = (modelName = 'gemini-2.0-flash-exp') => {
-  const apiKey = config.gemini.apiKey1 || config.gemini.apiKey2 || config.gemini.apiKey;
+// Helper function to get a Gemini model instance, using the best
+// currently-available model (daily-refreshed) unless one is explicitly given.
+const getGeminiModel = async (modelName) => {
+  const apiKey = config.gemini.apiKeys[0];
   if (!apiKey) {
     throw new Error('No Gemini API key available');
   }
+  const resolvedModelName = modelName || (await getGeminiModelList())[0];
   const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({ model: modelName });
+  return genAI.getGenerativeModel({ model: resolvedModelName });
 };
 
 /**
@@ -160,7 +163,7 @@ export async function translateBackToUserLanguage(text, targetLang) {
  */
 async function geminiTranslateFallback(text) {
   try {
-    const model = getGeminiModel('gemini-2.0-flash-exp');
+    const model = await getGeminiModel();
     
     const prompt = `You are a language detection and translation expert. 
 
@@ -226,7 +229,7 @@ Text to analyze: "${text}"`;
  */
 async function geminiTranslateBack(text, targetLang) {
   try {
-    const model = getGeminiModel('gemini-2.0-flash-exp');
+    const model = await getGeminiModel();
     
     const prompt = `Translate the following English text to ${targetLang}. Maintain the tone, emotion, and meaning as accurately as possible:
 
@@ -254,7 +257,7 @@ Respond with ONLY the translated text, no additional comments or formatting.`;
  */
 async function geminiTranslateHinglish(text) {
   try {
-    const model = getGeminiModel('gemini-2.0-flash-exp');
+    const model = await getGeminiModel();
     
     const prompt = `You are a Hinglish (Romanized Hindi + English mix) to English translator.
 
@@ -284,7 +287,7 @@ Respond with ONLY the English translation, no additional comments.`;
  */
 async function geminiTranslateToHinglish(text) {
   try {
-    const model = getGeminiModel('gemini-2.0-flash-exp');
+    const model = await getGeminiModel();
     
     const prompt = `You are an English to Hinglish translator. Hinglish is a natural mix of Hindi and English where Hindi words are written in Roman script (Latin alphabet).
 

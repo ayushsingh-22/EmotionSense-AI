@@ -156,7 +156,7 @@ export async function getWeeklyInsights(
   try {
     const params = new URLSearchParams({ userId, limit: limit.toString() });
     const response = await api.get(`${API_URL}/api/insights/weekly?${params}`, {
-      timeout: 30000, // 30 second timeout for LLM generation
+      timeout: 60000, // generous timeout — the backend can fall through several LLM models before succeeding
     });
     return response.data.data.insights || [];
   } catch (error) {

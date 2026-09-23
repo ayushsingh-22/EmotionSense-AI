@@ -73,6 +73,12 @@ const configureMiddleware = () => {
   app.use(compression());
 
   /* ===================== SIMPLE CORS ===================== */
+  // CORS_ORIGIN is a comma-separated allow-list, e.g.:
+  //   http://localhost:3000,https://your-app.vercel.app
+  // Entries may include a single `*` wildcard segment (matched as a regex),
+  // e.g. `https://*.vercel.app` to cover Vercel's per-branch preview
+  // deployments without listing each one — those get a new subdomain per
+  // deploy that can't be known in advance.
   const rawOrigins = process.env.CORS_ORIGIN || "";
 
   let allowedOrigins = [];
@@ -80,14 +86,23 @@ const configureMiddleware = () => {
     allowedOrigins = "*"; // allow all
     console.log("🌍 CORS: All origins allowed (*)");
   } else {
-    allowedOrigins = rawOrigins.split(",").map(o => o.trim());
+    allowedOrigins = rawOrigins.split(",").map(o => o.trim()).filter(Boolean);
     console.log("🌍 CORS Allowed Origins:", allowedOrigins);
   }
 
+  const originMatchers = allowedOrigins === "*" ? "*" : allowedOrigins.map((pattern) => {
+    if (!pattern.includes("*")) {
+      return { exact: pattern };
+    }
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+    return { regex: new RegExp(`^${escaped}$`) };
+  });
+
   app.use(cors({
-    origin: allowedOrigins === "*" ? true : (origin, cb) => {
+    origin: originMatchers === "*" ? true : (origin, cb) => {
       if (!origin) return cb(null, true);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
+      const allowed = originMatchers.some((m) => (m.exact ? m.exact === origin : m.regex.test(origin)));
+      if (allowed) return cb(null, true);
       return cb(new Error(`❌ CORS BLOCKED → ${origin}`));
     },
     credentials: true,

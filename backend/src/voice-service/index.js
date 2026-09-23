@@ -16,6 +16,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Groq from 'groq-sdk';
 import config from '../config/index.js';
+import { getGroqSttModel } from '../utils/modelCatalog.js';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
@@ -103,13 +104,14 @@ export const speechToTextGroq = async (audioPath) => {
     }
 
     // Create transcription with auto language detection
-    console.log(`🌐 Calling Groq API with model: ${config.stt.groq.model}`);
+    const sttModel = await getGroqSttModel();
+    console.log(`🌐 Calling Groq API with model: ${sttModel}`);
     console.log(`🌐 Language detection: ${config.stt.groq.language ? config.stt.groq.language : 'AUTO-DETECT (All languages)'}`);
-    
+
     // Build transcription options - only include language if explicitly set
     const transcriptionOptions = {
       file: fs.createReadStream(wavPath),
-      model: config.stt.groq.model,
+      model: sttModel,
       temperature: config.stt.groq.temperature,
       response_format: config.stt.groq.responseFormat,
       timestamp_granularities: ["word", "segment"]
@@ -146,7 +148,7 @@ export const speechToTextGroq = async (audioPath) => {
       transcript: transcript.trim(),
       confidence: confidence,
       provider: 'groq',
-      model: config.stt.groq.model,
+      model: sttModel,
       language: detectedLanguage, // Language auto-detected by Whisper
       duration: transcription.duration,
       segments: transcription.segments || [],

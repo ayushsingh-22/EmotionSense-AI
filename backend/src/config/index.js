@@ -17,10 +17,22 @@ const config = {
 
   // Gemini API Configuration (Primary LLM)
   gemini: {
-    apiKey: process.env.GEMINI_API_KEY1 || process.env.GEMINI_API_KEY2, // Default to first key for backward compatibility
+    // GEMINI_API_KEY is the modern single-key convention; GEMINI_API_KEY1/2 is
+    // this project's older two-key rotation setup. Both are supported at once —
+    // apiKeys lists every configured key in priority order (new key first) so
+    // callers can try each one in turn instead of picking just one.
+    apiKey: process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY1 || process.env.GEMINI_API_KEY2,
     apiKey1: process.env.GEMINI_API_KEY1,
     apiKey2: process.env.GEMINI_API_KEY2,
-    models: [
+    apiKeys: [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY1, process.env.GEMINI_API_KEY2]
+      .filter(Boolean)
+      .filter((key, index, all) => all.indexOf(key) === index),
+    // Explicit manual pin (optional) — if set, tried before the auto-discovered
+    // model list rather than replacing it, so a bad pin still falls back.
+    modelOverride: process.env.GEMINI_MODEL || null,
+    // Last-resort list if the daily model-catalog fetch has never succeeded
+    // (see utils/modelCatalog.js, which normally supplies this dynamically).
+    fallbackModels: [
       'gemini-2.0-flash-exp',
       'gemini-2.0-flash',
       'gemini-1.5-flash',
@@ -35,7 +47,10 @@ const config = {
   // LLaMA Configuration (Fallback LLM via Groq)
   llama: {
     provider: process.env.LLAMA_PROVIDER || 'groq',
-    model: process.env.LLAMA_MODEL || 'llama-3.3-70b-versatile',
+    // Explicit manual pin (optional) — if unset, utils/modelCatalog.js picks the
+    // best currently-available Groq chat model instead of a hardcoded one.
+    modelOverride: process.env.LLAMA_MODEL || null,
+    fallbackModel: 'llama-3.3-70b-versatile',
     enabled: process.env.LLAMA_ENABLED === 'true',
     maxTokens: parseInt(process.env.LLAMA_MAX_TOKENS) || 1024,
     temperature: parseFloat(process.env.LLAMA_TEMPERATURE) || 0.7,
@@ -47,7 +62,10 @@ const config = {
     provider: process.env.STT_PROVIDER || 'groq',
     groq: {
       apiKey: process.env.GROQ_API_KEY,
-      model: process.env.GROQ_MODEL || 'whisper-large-v3-turbo' || 'whisper-large-v3',
+      // Explicit manual pin (optional) — if unset, utils/modelCatalog.js picks
+      // the best currently-available Groq Whisper model instead of a hardcoded one.
+      modelOverride: process.env.GROQ_MODEL || null,
+      fallbackModel: 'whisper-large-v3-turbo',
       language: process.env.STT_LANGUAGE || undefined, // Set to undefined for auto-detect, or specify 'en', 'hi', etc.
       temperature: parseFloat(process.env.GROQ_TEMPERATURE) || 0.0,
       responseFormat: process.env.GROQ_RESPONSE_FORMAT || 'verbose_json'
