@@ -8,7 +8,16 @@
 // created_at) don't have to change.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" covers local dev (Windows/Mac/whatever you run on); the Linux
+  // targets cover Vercel's and Render's actual serverless/container runtime,
+  // which doesn't always match the build machine's own reported platform.
+  // Without this, Prisma only generates an engine for the build machine,
+  // which can silently mismatch what Next.js's serverless bundler picks up
+  // at runtime — this is a well-documented Prisma+Vercel/Next.js failure
+  // mode distinct from the dependency-caching issue Prisma's own error
+  // message suggests.
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
