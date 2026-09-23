@@ -4,15 +4,13 @@
  * UPDATED: Uses unified emotion service for consistency
  */
 
-import { createClient } from '@supabase/supabase-js';
-import config from '../config/index.js';
+import prisma from '../lib/prisma.js';
+import * as insightsStorage from './insights.js';
 import logger from '../utils/logger.js';
 import * as unifiedEmotion from './unifiedEmotionService.js';
 
-const supabase = createClient(
-  config.database.supabase.url,
-  config.database.supabase.serviceRoleKey || config.database.supabase.anonKey
-);
+// SCHEMA NOTE: `weekly_insights` no longer exists as its own table - see
+// insights.js's upsertWeeklyInsight, which stores through WeeklyEmotionSummary.
 
 /**
  * Reflection templates based on dominant emotion (STRICT 7 EMOTIONS)
@@ -84,27 +82,15 @@ export async function generateWeeklyInsight(userId, weekStart) {
     const reflectionText = REFLECTION_TEMPLATES[dominantEmotion] || 
       'This week brought a variety of emotional experiences as you navigated daily life.';
 
-    // Upsert weekly insight
-    const { data: insight, error: upsertError } = await supabase
-      .from('weekly_insights')
-      .upsert({
-        user_id: userId,
-        week_start: weekStart,
-        week_end: weekEnd,
-        dominant_emotion: dominantEmotion,
-        avg_mood_score: avgMoodScore, // Already 0-100 from unified service
-        reflection_text: reflectionText,
-        emotion_summary: emotionCounts,
-        daily_arc: dailyArc,
-        key_highlights: keyHighlights,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'user_id,week_start'
-      })
-      .select()
-      .single();
-
-    if (upsertError) throw upsertError;
+    // Upsert weekly insight (stored as a WeeklyEmotionSummary - see insights.js)
+    const insight = await insightsStorage.upsertWeeklyInsight(userId, weekStart, {
+      dominant_emotion: dominantEmotion,
+      avg_mood_score: avgMoodScore, // Already 0-100 from unified service
+      reflection_text: reflectionText,
+      emotion_summary: emotionCounts,
+      daily_arc: dailyArc,
+      key_highlights: keyHighlights
+    });
 
     logger.info(`✅ Generated weekly insight for user ${userId}, week ${weekStart}`);
     return insight;
@@ -184,16 +170,14 @@ export async function generateCurrentWeekInsights() {
     monday.setDate(today.getDate() + mondayOffset);
     const weekStart = monday.toISOString().split('T')[0];
 
-    // Get all users who have journal entries this week
-    const { data: users, error } = await supabase
-      .from('journal_entries')
-      .select('user_id')
-      .gte('date', weekStart)
-      .neq('user_id', null);
+    // Get all users who have journal entries (daily emotion summaries) this week
+    const summaries = await prisma.dailyEmotionSummary.findMany({
+      where: { date: { gte: weekStart } },
+      select: { userId: true },
+      distinct: ['userId']
+    });
 
-    if (error) throw error;
-
-    const uniqueUsers = [...new Set(users.map(u => u.user_id))];
+    const uniqueUsers = summaries.map(u => u.userId);
     logger.info(`Generating weekly insights for ${uniqueUsers.length} users`);
 
     const results = [];
@@ -230,22 +214,22 @@ export async function backfillWeeklyInsights(userId = null) {
     if (userId) {
       userIds = [userId];
     } else {
-      const { data: users } = await supabase
-        .from('journal_entries')
-        .select('user_id')
-        .neq('user_id', null);
-      userIds = [...new Set(users.map(u => u.user_id))];
+      const users = await prisma.dailyEmotionSummary.findMany({
+        select: { userId: true },
+        distinct: ['userId']
+      });
+      userIds = users.map(u => u.userId);
     }
 
     let totalGenerated = 0;
 
     for (const uid of userIds) {
       // Get all unique weeks for this user
-      const { data: journals } = await supabase
-        .from('journal_entries')
-        .select('date')
-        .eq('user_id', uid)
-        .order('date', { ascending: true });
+      const journals = await prisma.dailyEmotionSummary.findMany({
+        where: { userId: uid },
+        select: { date: true },
+        orderBy: { date: 'asc' }
+      });
 
       if (!journals || journals.length === 0) continue;
 

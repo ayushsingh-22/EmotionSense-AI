@@ -4,6 +4,7 @@ import "./globals.css";
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SessionProviderWrapper } from "@/components/providers/SessionProviderWrapper";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ChatProvider } from "@/contexts/ChatContext";
 import { SidebarProvider } from "@/contexts/SidebarContext";
@@ -83,6 +84,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} antialiased bg-white dark:bg-gray-950`} suppressHydrationWarning>
         <ThemeProvider>
+          <SessionProviderWrapper>
           <AuthProvider>
             <ChatProvider>
               <SidebarProvider>
@@ -114,6 +116,7 @@ export default function RootLayout({
               </SidebarProvider>
             </ChatProvider>
           </AuthProvider>
+          </SessionProviderWrapper>
         </ThemeProvider>
       </body>
     </html>

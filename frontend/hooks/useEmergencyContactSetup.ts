@@ -43,23 +43,23 @@ export const useEmergencyContactSetup = () => {
  * Returns true if user was created in the last 2 minutes
  */
 export const useIsNewUser = () => {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const [isNew, setIsNew] = useState(false);
 
   useEffect(() => {
-    if (!user?.created_at) {
+    if (!profile?.created_at) {
       setIsNew(false);
       return;
     }
 
-    const createdAt = new Date(user.created_at);
+    const createdAt = new Date(profile.created_at);
     const now = new Date();
     const diffMs = now.getTime() - createdAt.getTime();
     const diffMinutes = diffMs / (1000 * 60);
 
     // User is considered new if created in last 2 minutes
     setIsNew(diffMinutes < 2);
-  }, [user]);
+  }, [profile]);
 
   return isNew;
 };

@@ -154,7 +154,7 @@ export default function SettingsPage() {
             <div>
               <h4 className="font-semibold text-base mb-2 bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">Technology</h4>
               <p className="text-sm text-muted-foreground">
-                Next.js, TypeScript, Supabase, and advanced neural networks
+                Next.js, TypeScript, Neon Postgres, and advanced neural networks
               </p>
             </div>
           </div>

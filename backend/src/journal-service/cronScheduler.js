@@ -1,16 +1,10 @@
 import cron from 'node-cron';
 import journalGenerator from './journalGenerator.js';
-import { createClient} from '@supabase/supabase-js';
-import config from '../config/index.js';
+import prisma from '../lib/prisma.js';
 import logger from '../utils/logger.js';
 
 class CronScheduler {
   constructor() {
-    this.supabase = createClient(
-      config.database.supabase.url,
-      config.database.supabase.serviceRoleKey || config.database.supabase.anonKey
-    );
-    
     // Run at 23:30 IST (6:00 PM UTC) every night
     this.cronSchedule = process.env.JOURNAL_CRON_SCHEDULE || '30 23 * * *';
     this.isRunning = false;
@@ -82,18 +76,18 @@ class CronScheduler {
       logger.info(`📅 Generating journals for date: ${journalDate}`);
 
       // Get all users who have messages today
-      const { data: userMessages, error } = await this.supabase
-        .from('messages')
-        .select('user_id')
-        .gte('created_at', `${journalDate}T00:00:00Z`)
-        .lte('created_at', `${journalDate}T23:59:59Z`);
-      
-      if (error) {
-        throw error;
-      }
-      
+      const userMessages = await prisma.message.findMany({
+        where: {
+          createdAt: {
+            gte: new Date(`${journalDate}T00:00:00Z`),
+            lte: new Date(`${journalDate}T23:59:59Z`)
+          }
+        },
+        select: { userId: true }
+      });
+
       // Deduplicate user IDs
-      const uniqueUserIds = [...new Set(userMessages.map(m => m.user_id))];
+      const uniqueUserIds = [...new Set(userMessages.map(m => m.userId))];
       
       logger.info(`👥 Found ${uniqueUserIds.length} users with messages today`);
       

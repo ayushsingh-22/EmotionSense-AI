@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { EMOTION_CONFIG, type EmotionType } from '@/types';
 import { Activity, TrendingUp, Sparkles } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import type { EmotionHistoryMessage } from '@/lib/types';
 
 export function SessionStats() {
   const { user } = useAuth();
@@ -20,18 +20,13 @@ export function SessionStats() {
       try {
         setIsLoading(true);
 
-        // Fetch all user messages from messages table
-        const { data: messages, error } = await supabase
-          .from('messages')
-          .select('emotion')
-          .eq('user_id', user.id)
-          .eq('role', 'user')
-          .not('emotion', 'is', null);
-
-        if (error) {
-          console.error('Error fetching stats:', error);
+        // Fetch all of the current user's emotion-tagged messages
+        const response = await fetch('/api/messages/emotion-history', { credentials: 'same-origin' });
+        if (!response.ok) {
+          console.error('Error fetching stats:', await response.text());
           return;
         }
+        const { messages } = (await response.json()) as { messages: EmotionHistoryMessage[] };
 
         setTotalAnalyses(messages?.length || 0);
 

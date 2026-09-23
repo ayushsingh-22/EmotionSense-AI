@@ -1,22 +1,25 @@
 /**
  * Alert Logger Utility
- * Handles logging of emergency alerts to Supabase alert_logs table
+ * Handles logging of emergency alerts to the alert_logs table (Neon/Prisma)
  * Provides audit trail for all emergency notifications sent
  */
 
-import { supabaseClient, initializeSupabase } from './index.js';
+import prisma from '../lib/prisma.js';
 
-let supabase = null;
-
-/**
- * Initialize Supabase for alert logging
- * @returns {Promise<Object|null>} - Supabase client or null
- */
-const initializeAlertLogger = async () => {
-  if (!supabase) {
-    supabase = await initializeSupabase();
+const normalizeAlertRow = (row) => {
+  if (!row) {
+    return row;
   }
-  return supabase;
+
+  return {
+    id: row.id,
+    user_id: row.userId,
+    contact_email: row.contactEmail,
+    alert_type: row.alertType,
+    message_excerpt: row.messageExcerpt,
+    additional_data: row.additionalData,
+    created_at: row.createdAt
+  };
 };
 
 /**
@@ -38,47 +41,25 @@ export const logAlertEvent = async (
   additionalData = {}
 ) => {
   try {
-    // Initialize Supabase if needed
-    const client = await initializeAlertLogger();
-
-    if (!client) {
-      console.warn('⚠️ Supabase not initialized - cannot log alert');
-      return null;
-    }
-
     // Truncate message to first 1000 characters
     const messageExcerpt = messageText
       ? messageText.slice(0, 1000) + (messageText.length > 1000 ? '...' : '')
       : null;
 
-    // Prepare alert log entry
-    const alertLogEntry = {
-      user_id: userId,
-      contact_email: contactEmail,
-      alert_type: alertType,
-      message_excerpt: messageExcerpt,
-      additional_data: additionalData || null,
-      created_at: new Date().toISOString()
-    };
-
     console.log(`📝 Logging alert event to alert_logs table...`);
 
-    // Insert into alert_logs table
-    const { data, error } = await client
-      .from('alert_logs')
-      .insert([alertLogEntry])
-      .select()
-      .single();
+    const created = await prisma.alertLog.create({
+      data: {
+        userId,
+        contactEmail,
+        alertType,
+        messageExcerpt,
+        additionalData: additionalData || null
+      }
+    });
 
-    if (error) {
-      console.error('❌ Error inserting alert log:', error.message);
-      console.log('   This may be because the alert_logs table does not exist yet.');
-      console.log('   Run the migration: backend/migrations/create_alert_logs_table.sql');
-      return null;
-    }
-
-    console.log(`✅ Alert logged successfully with ID: ${data?.id}`);
-    return data;
+    console.log(`✅ Alert logged successfully with ID: ${created.id}`);
+    return normalizeAlertRow(created);
   } catch (error) {
     console.error('❌ Unexpected error logging alert:', error.message);
     return null;
@@ -94,26 +75,14 @@ export const logAlertEvent = async (
  */
 export const getAlertHistoryForUser = async (userId, limit = 50, offset = 0) => {
   try {
-    const client = await initializeAlertLogger();
+    const rows = await prisma.alertLog.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      skip: offset,
+      take: limit
+    });
 
-    if (!client) {
-      console.warn('⚠️ Supabase not initialized');
-      return null;
-    }
-
-    const { data, error } = await client
-      .from('alert_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    if (error) {
-      console.error('❌ Error fetching alert history:', error.message);
-      return null;
-    }
-
-    return data || [];
+    return rows.map(normalizeAlertRow);
   } catch (error) {
     console.error('❌ Unexpected error fetching alert history:', error.message);
     return null;
@@ -127,45 +96,21 @@ export const getAlertHistoryForUser = async (userId, limit = 50, offset = 0) => 
  */
 export const getAlertStatistics = async (userId) => {
   try {
-    const client = await initializeAlertLogger();
-
-    if (!client) {
-      console.warn('⚠️ Supabase not initialized');
-      return null;
-    }
-
     // Get total count
-    const { count: totalAlerts, error: countError } = await client
-      .from('alert_logs')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
-
-    if (countError) {
-      console.error('❌ Error counting alerts:', countError.message);
-      return null;
-    }
+    const totalAlerts = await prisma.alertLog.count({ where: { userId } });
 
     // Get count from last 24 hours
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count: alertsLast24h, error: count24hError } = await client
-      .from('alert_logs')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', oneDayAgo);
-
-    if (count24hError) {
-      console.error('❌ Error counting 24h alerts:', count24hError.message);
-    }
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const alertsLast24h = await prisma.alertLog.count({
+      where: { userId, createdAt: { gte: oneDayAgo } }
+    });
 
     // Get unique contact emails that have been alerted
-    const { data: contactEmails, error: contactError } = await client
-      .from('alert_logs')
-      .select('contact_email', { distinct: true })
-      .eq('user_id', userId);
-
-    if (contactError) {
-      console.error('❌ Error fetching contact emails:', contactError.message);
-    }
+    const contactEmails = await prisma.alertLog.findMany({
+      where: { userId },
+      select: { contactEmail: true },
+      distinct: ['contactEmail']
+    });
 
     return {
       totalAlerts: totalAlerts || 0,
@@ -186,29 +131,16 @@ export const getAlertStatistics = async (userId) => {
  */
 export const deleteOldAlerts = async (daysOld = 90) => {
   try {
-    const client = await initializeAlertLogger();
+    const cutoffDate = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000);
 
-    if (!client) {
-      console.warn('⚠️ Supabase not initialized');
-      return null;
-    }
+    console.log(`🗑️ Deleting alerts older than ${daysOld} days (before ${cutoffDate.toISOString()})`);
 
-    const cutoffDate = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000).toISOString();
+    const result = await prisma.alertLog.deleteMany({
+      where: { createdAt: { lt: cutoffDate } }
+    });
 
-    console.log(`🗑️ Deleting alerts older than ${daysOld} days (before ${cutoffDate})`);
-
-    const { data, error, count } = await client
-      .from('alert_logs')
-      .delete()
-      .lt('created_at', cutoffDate);
-
-    if (error) {
-      console.error('❌ Error deleting old alerts:', error.message);
-      return null;
-    }
-
-    console.log(`✅ Deleted ${count} old alert records`);
-    return count;
+    console.log(`✅ Deleted ${result.count} old alert records`);
+    return result.count;
   } catch (error) {
     console.error('❌ Unexpected error deleting old alerts:', error.message);
     return null;

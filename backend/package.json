@@ -7,9 +7,13 @@
     "scripts": {
         "start": "node src/server.js",
         "dev": "nodemon src/server.js",
-        "build": "npm install",
+        "build": "npm install && prisma generate --schema=../prisma/schema.prisma",
+        "postinstall": "prisma generate --schema=../prisma/schema.prisma",
         "test": "echo \"Error: no test specified\" && exit 1",
         "migrate:master-activity": "node scripts/migrate-to-master-activity-new.js"
+    },
+    "prisma": {
+        "schema": "../prisma/schema.prisma"
     },
     "keywords": [
         "emotion-detection",
@@ -24,9 +28,11 @@
         "@ffmpeg-installer/ffmpeg": "^1.1.0",
         "@google/generative-ai": "^0.21.0",
         "@huggingface/inference": "^4.13.2",
-        "@supabase/supabase-js": "^2.75.0",
+        "@prisma/client": "^5.20.0",
         "@vitalets/google-translate-api": "^9.2.1",
         "axios": "^1.6.0",
+        "bcryptjs": "^2.4.3",
+        "jose": "^5.9.6",
         "compression": "^1.8.1",
         "cors": "^2.8.5",
         "dotenv": "^16.3.1",
@@ -44,6 +50,7 @@
         "wav": "^1.0.2"
     },
     "devDependencies": {
-        "nodemon": "^3.1.11"
+        "nodemon": "^3.1.11",
+        "prisma": "^5.20.0"
     }
 }

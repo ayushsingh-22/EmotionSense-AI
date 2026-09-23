@@ -18,6 +18,12 @@ interface VoiceChatProps {
   onError?: (error: string) => void;
   className?: string;
   disabled?: boolean;
+  /**
+   * Same gate text chat uses: returns an existing/new session id, or null if
+   * blocked (e.g. no emergency contact on file yet). Voice chat must not
+   * start recording or submit without going through this.
+   */
+  ensureSessionReady?: () => Promise<string | null>;
 }
 
 // Memoized component for better performance
@@ -28,6 +34,7 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
   onError,
   className,
   disabled = false,
+  ensureSessionReady,
 }) => {
   // State
   const [isMounted, setIsMounted] = useState(false);
@@ -146,7 +153,17 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
   // Recording control functions - memoized for performance
   const startListening = useCallback(async () => {
     if (disabled) return;
-    
+
+    if (ensureSessionReady) {
+      const ready = await ensureSessionReady();
+      if (!ready) {
+        // Blocked (e.g. no emergency contact on file) — ChatContext already
+        // surfaces the required prompt; don't start recording.
+        onError?.('emergency_contact_required');
+        return;
+      }
+    }
+
     // Clear previous recording data
     audioChunksRef.current = [];
     setCurrentTranscript('');
@@ -220,7 +237,7 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       setError(errorMessage);
       if (onError) onError(errorMessage);
     }
-  }, [disabled, permission, onError]);
+  }, [disabled, permission, onError, ensureSessionReady]);
 
   // Voice message submission - memoized
   const submitVoiceMessage = useCallback(async () => {
@@ -233,13 +250,27 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
     setError(null);
 
     try {
+      // Re-confirm right before sending — authoritative, avoids racing the
+      // sessionId prop update from a startListening-time check.
+      let resolvedSessionId = sessionId;
+      if (ensureSessionReady) {
+        const ready = await ensureSessionReady();
+        if (!ready) {
+          setIsProcessing(false);
+          setCurrentTranscript('');
+          onError?.('emergency_contact_required');
+          return;
+        }
+        resolvedSessionId = ready;
+      }
+
       setCurrentTranscript('Processing voice message...');
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
       const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
 
       const formData = new FormData();
       formData.append('userId', userId);
-      if (sessionId) formData.append('sessionId', sessionId);
+      if (resolvedSessionId) formData.append('sessionId', resolvedSessionId);
       formData.append('audio', audioBlob, 'voice-message.webm');
       formData.append('type', 'voice');
 
@@ -307,7 +338,7 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
     } finally {
       setIsProcessing(false);
     }
-  }, [disabled, isProcessing, userId, sessionId, onMessageReceived, onError, playAudioResponse]);
+  }, [disabled, isProcessing, userId, sessionId, onMessageReceived, onError, playAudioResponse, ensureSessionReady]);
 
   const stopListening = useCallback(async () => {
     try {

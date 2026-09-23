@@ -50,17 +50,11 @@ const nextConfig = {
               priority: 10,
               reuseExistingChunk: true,
             },
-            // Separate React and Supabase into dedicated chunks
+            // Separate React into its own dedicated chunk
             react: {
               test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
               name: 'react-vendors',
               priority: 20,
-              reuseExistingChunk: true,
-            },
-            supabase: {
-              test: /[\\/]node_modules[\\/](@supabase)[\\/]/,
-              name: 'supabase-vendors',
-              priority: 15,
               reuseExistingChunk: true,
             },
             // Common shared modules between chunks

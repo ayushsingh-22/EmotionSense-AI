@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { EMOTION_CONFIG, type EmotionType } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { MessageCircle, ArrowRight } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { getChatSessions, getChatMessages } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 interface ChatSession {
@@ -34,18 +34,14 @@ export function RecentChats({ userId }: RecentChatsProps) {
       try {
         setIsLoading(true);
 
-        // Fetch last 3 chat sessions
-        const { data: sessionsData, error: sessionsError } = await supabase
-          .from('chat_sessions')
-          .select('*')
-          .eq('user_id', userId)
-          .order('updated_at', { ascending: false })
-          .limit(3);
-
-        if (sessionsError) {
-          console.error('Error fetching sessions:', sessionsError);
-          return;
-        }
+        // Fetch chat sessions (most recently updated first), then take the top 3
+        const sessionsResponse = await getChatSessions(userId);
+        const sessionsData = (sessionsResponse || [])
+          .slice()
+          .sort((a: { updated_at: string }, b: { updated_at: string }) =>
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          )
+          .slice(0, 3);
 
         if (!sessionsData || sessionsData.length === 0) {
           setSessions([]);
@@ -54,15 +50,16 @@ export function RecentChats({ userId }: RecentChatsProps) {
 
         // For each session, get messages to calculate dominant emotion and preview
         const sessionsWithDetails = await Promise.all(
-          sessionsData.map(async (session) => {
-            const { data: messages, error: messagesError } = await supabase
-              .from('chat_messages')
-              .select('*')
-              .eq('session_id', session.id)
-              .order('created_at', { ascending: false })
-              .limit(10);
+          sessionsData.map(async (session: { id: string; session_title: string; created_at: string; updated_at: string }) => {
+            let messages: Array<{ role: string; emotion?: string | null; content?: string; message?: string }> = [];
+            try {
+              const messagesResult = await getChatMessages(session.id, userId);
+              messages = (messagesResult?.messages || []).slice(-10).reverse();
+            } catch (messagesError) {
+              console.error('Error fetching messages for session:', session.id, messagesError);
+            }
 
-            if (messagesError || !messages || messages.length === 0) {
+            if (!messages || messages.length === 0) {
               return {
                 id: session.id,
                 session_title: session.session_title || 'Untitled Chat',

@@ -6,15 +6,9 @@
  * unified calculations for all frontend sections to ensure consistency.
  */
 
-import { createClient } from '@supabase/supabase-js';
-import config from '../config/index.js';
+import prisma from '../lib/prisma.js';
 import logger from '../utils/logger.js';
 import { getISTDateStart, getISTDateEnd, utcToISTDate } from '../utils/dateUtils.js';
-
-const supabase = createClient(
-  config.database.supabase.url,
-  config.database.supabase.serviceRoleKey || config.database.supabase.anonKey
-);
 
 /**
  * Emotion scoring map (0-100 scale)
@@ -219,18 +213,28 @@ export async function getMessagesWithEmotions(userId, startDate, endDate) {
     // Convert dates to IST timezone boundaries
     const startUTC = getISTDateStart(startDate);
     const endUTC = getISTDateEnd(endDate);
-    
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('role', 'user')
-      .gte('created_at', startUTC)
-      .lte('created_at', endUTC)
-      .order('created_at', { ascending: true });
 
-    if (error) throw error;
-    return data || [];
+    const rows = await prisma.message.findMany({
+      where: {
+        userId,
+        role: 'user',
+        createdAt: { gte: new Date(startUTC), lte: new Date(endUTC) }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      user_id: row.userId,
+      session_id: row.sessionId,
+      role: row.role,
+      content: row.content,
+      emotion: row.emotion,
+      emotion_confidence: row.emotionConfidence,
+      audio_url: row.audioUrl,
+      metadata: row.metadata,
+      created_at: row.createdAt
+    }));
   } catch (error) {
     logger.error('Error fetching messages with emotions:', error);
     return [];

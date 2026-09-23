@@ -1,179 +1,90 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase, UserProfile } from '@/lib/supabase';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react';
+import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { debounce } from '@/lib/performance';
+
+interface AuthUser {
+  id: string;
+  email: string | null;
+  name?: string | null;
+}
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
+  session: ReturnType<typeof useSession>['data'];
   profile: UserProfile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error?: AuthError }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error?: AuthError }>;
+  signIn: (email: string, password: string) => Promise<{ error?: string }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
-  deleteAccount: () => Promise<{ error?: AuthError }>;
-  deleteAllData: () => Promise<{ error?: Error }>;
+  deleteAccount: () => Promise<{ error?: string }>;
+  deleteAllData: () => Promise<{ error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const { data: session, status } = useSession();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Debounced profile fetch to prevent excessive API calls
-  const debouncedFetchProfile = useCallback(
-    debounce((...args: unknown[]) => {
-      const userId = args[0] as string;
-      fetchProfile(userId);
-    }, 300),
-    [user]
-  );
+  const loading = status === 'loading';
+  // Stable reference: only recompute when the underlying id/email/name
+  // actually change, not on every re-render — otherwise anything depending on
+  // `user` by reference (e.g. ChatContext's session-init effect) re-fires on
+  // every unrelated re-render, since session?.user is a fresh object each time.
+  const sessionUserId = session?.user?.id;
+  const sessionUserEmail = session?.user?.email ?? null;
+  const sessionUserName = session?.user?.name;
+  const user: AuthUser | null = useMemo(() => {
+    if (!sessionUserId) return null;
+    return { id: sessionUserId, email: sessionUserEmail, name: sessionUserName };
+  }, [sessionUserId, sessionUserEmail, sessionUserName]);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async () => {
     try {
-      // First, verify the user exists in auth
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !authUser) {
-        console.warn('User session invalid, signing out...');
-        await supabase.auth.signOut();
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-        toast({
-          title: 'Session Expired',
-          description: 'Your session has expired. Please sign in again.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile:', error);
-        return;
-      }
-
-      if (data) {
-        setProfile(data);
-      } else {
-        // Create profile if it doesn't exist
-        const { data: newProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: userId,
-              email: user?.email || '',
-              full_name: user?.user_metadata?.full_name || '',
-              avatar_url: user?.user_metadata?.avatar_url || null,
-            },
-          ])
-          .select()
-          .single();
-
-        if (createError) {
-          console.error('Error creating profile:', createError);
-        } else {
-          setProfile(newProfile);
+      const response = await fetch('/api/profile', { credentials: 'same-origin' });
+      if (!response.ok) {
+        if (response.status === 401) {
+          setProfile(null);
         }
+        return;
       }
+      const data = await response.json();
+      setProfile(data);
     } catch (error) {
-      console.error('Error in fetchProfile:', error);
+      console.error('Error fetching profile:', error);
     }
-  };
-
-  // Initialize auth state
-  useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        // Validate the session by checking if user still exists
-        if (session?.user) {
-          const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-          
-          if (authError || !authUser) {
-            // User doesn't exist in auth system, clear the session
-            console.warn('Invalid session detected, clearing...');
-            await supabase.auth.signOut();
-            setSession(null);
-            setUser(null);
-            setProfile(null);
-            setLoading(false);
-            return;
-          }
-        }
-
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          debouncedFetchProfile(session.user.id);
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        // Clear session on error
-        await supabase.auth.signOut();
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initializeAuth();
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
-        debouncedFetchProfile(session.user.id);
-      } else {
-        setProfile(null);
-      }
-
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    } else {
+      setProfile(null);
+    }
+  }, [user?.id, fetchProfile]);
 
   // Sign in
   const signIn = async (email: string, password: string) => {
     try {
-      setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      const result = await nextAuthSignIn('credentials', {
         email,
         password,
+        redirect: false,
       });
 
-      if (error) {
+      if (!result || result.error) {
+        const message = 'Invalid email or password.';
         toast({
           title: 'Authentication Error',
-          description: error.message,
+          description: message,
           variant: 'destructive',
         });
-        return { error };
+        return { error: message };
       }
 
       toast({
@@ -184,67 +95,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return {};
     } catch (error) {
       console.error('Sign in error:', error);
-      return { error: error as AuthError };
-    } finally {
-      setLoading(false);
+      return { error: error instanceof Error ? error.message : 'Failed to sign in.' };
     }
   };
 
-  // Sign up
+  // Sign up: register via our own API route, then sign in immediately
+  // (there's no email verification step in this app, unlike Supabase Auth).
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
-      setLoading(true);
-      console.log('AuthContext: Starting signup for:', email);
-      
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, fullName }),
       });
 
-      console.log('AuthContext: Supabase signup response:', { data, error });
+      const data = await response.json().catch(() => ({}));
 
-      if (error) {
-        console.error('AuthContext: Signup error from Supabase:', error);
+      if (!response.ok) {
+        const message = data?.error || 'Failed to create account. Please try again.';
         toast({
           title: 'Registration Error',
-          description: error.message,
+          description: message,
           variant: 'destructive',
         });
-        return { error };
+        return { error: message };
       }
 
-      console.log('AuthContext: Signup successful');
+      const signInResult = await nextAuthSignIn('credentials', {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (!signInResult || signInResult.error) {
+        toast({
+          title: 'Account created',
+          description: 'Your account was created. Please sign in.',
+        });
+        return {};
+      }
+
       toast({
         title: 'Account created!',
-        description: 'Please check your email to verify your account.',
+        description: 'Welcome to MantrAI! You can now start chatting.',
       });
 
       return {};
     } catch (error) {
-      console.error('AuthContext: Unexpected signup error:', error);
+      console.error('Unexpected signup error:', error);
       toast({
         title: 'Registration Error',
         description: 'An unexpected error occurred. Please try again.',
         variant: 'destructive',
       });
-      return { error: error as AuthError };
-    } finally {
-      setLoading(false);
+      return { error: error instanceof Error ? error.message : 'An unexpected error occurred.' };
     }
   };
 
   // Sign out
   const signOut = async () => {
     try {
-      setLoading(true);
-      await supabase.auth.signOut();
       setProfile(null);
-      
+      await nextAuthSignOut({ redirect: false });
       toast({
         title: 'Signed out',
         description: 'You have been successfully signed out.',
@@ -256,8 +168,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         description: 'Failed to sign out. Please try again.',
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -266,15 +176,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user || !profile) return;
 
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+      const response = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(updates),
+      });
 
-      if (error) {
+      if (!response.ok) {
         toast({
           title: 'Error',
           description: 'Failed to update profile.',
@@ -283,7 +192,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      setProfile({ ...profile, ...updates });
+      const data = await response.json();
+      setProfile(data);
       toast({
         title: 'Profile updated',
         description: 'Your profile has been successfully updated.',
@@ -293,23 +203,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const deleteAccount = async (): Promise<{ error?: AuthError }> => {
-    if (!user) return { error: new Error('No user logged in') as AuthError };
+  // Deleting the account cascades (via Prisma's onDelete: Cascade on every
+  // relation to User) through all of the user's chat sessions, messages,
+  // emergency contact, safety alerts, emotion analyses, journals, etc. — so
+  // deleteAccount and deleteAllData both collapse into the same API call.
+  const deleteAccount = async (): Promise<{ error?: string }> => {
+    if (!user) return { error: 'No user logged in' };
 
     try {
-      // First delete all user data
-      await deleteAllData();
+      const response = await fetch('/api/account', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
 
-      // Delete user profile
-      await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', user.id);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const message = data?.error || 'Failed to delete account.';
+        return { error: message };
+      }
 
-      // Note: In production, account deletion should be handled by the backend
-      // For now, we'll just delete user data and sign out
-      await signOut();
-      
+      setProfile(null);
+      await nextAuthSignOut({ redirect: false });
+
       toast({
         title: 'Account deleted',
         description: 'Your account has been permanently deleted.',
@@ -318,54 +233,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return {};
     } catch (error) {
       console.error('Delete account error:', error);
-      return { error: error as AuthError };
+      return { error: error instanceof Error ? error.message : 'Failed to delete account.' };
     }
   };
 
-  const deleteAllData = async (): Promise<{ error?: Error }> => {
-    if (!user) return { error: new Error('No user logged in') };
-
-    try {
-      // Delete in order to avoid foreign key constraints
-      
-      // Delete chat messages
-      const { error: chatError } = await supabase
-        .from('chat_messages')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (chatError) {
-        console.error('Error deleting chat messages:', chatError);
-        return { error: chatError };
-      }
-
-      // Delete chat sessions  
-      const { error: sessionsError } = await supabase
-        .from('chat_sessions')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (sessionsError) {
-        console.error('Error deleting chat sessions:', sessionsError);
-        return { error: sessionsError };
-      }
-
-      // Note: Emotion data is stored in messages table, which cascades delete with chat_sessions
-      // No need to delete from a separate emotion_sessions table
-
-      toast({
-        title: 'Data deleted',
-        description: 'All your data has been permanently deleted.',
-      });
-
-      return {};
-    } catch (error) {
-      console.error('Delete all data error:', error);
-      return { error: error as Error };
-    }
+  const deleteAllData = async (): Promise<{ error?: string }> => {
+    // All of the user's data lives on the User row via cascading relations,
+    // so "delete all data" and "delete account" are the same operation here.
+    return deleteAccount();
   };
 
-  const value = {
+  const value: AuthContextType = {
     user,
     session,
     profile,

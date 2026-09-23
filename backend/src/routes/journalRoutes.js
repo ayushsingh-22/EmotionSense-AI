@@ -1,17 +1,9 @@
 import express from 'express';
-import { createClient } from '@supabase/supabase-js';
 import journalGenerator from '../journal-service/journalGenerator.js';
 import cronScheduler from '../journal-service/cronScheduler.js';
-import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
-
-// Initialize Supabase client
-const supabase = createClient(
-  config.database.supabase.url,
-  config.database.supabase.serviceRoleKey || config.database.supabase.anonKey
-);
 
 /**
  * Get current date in IST timezone (YYYY-MM-DD format)
@@ -39,20 +31,9 @@ router.get('/today', async (req, res) => {
     }
 
     const today = getCurrentISTDate();
-    
-    // Query journal_entries table
-    const { data: journal, error } = await supabase
-      .from('journal_entries')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', today)
-      .maybeSingle();
-    
-    if (error) {
-      logger.error(`Error fetching journal: ${error.message}`);
-      throw error;
-    }
-    
+
+    const journal = await journalGenerator.getJournalEntry(userId, today);
+
     if (journal) {
       // Extract emotion data from emotion_summary or provide defaults
       const emotionSummary = journal.emotion_summary || {};
@@ -127,20 +108,9 @@ router.get('/list', async (req, res) => {
     }
 
     const requestedLimit = limit ? parseInt(limit) : 30;
-    
-    // Query journal_entries table
-    const { data: journals, error } = await supabase
-      .from('journal_entries')
-      .select('*')
-      .eq('user_id', userId)
-      .order('date', { ascending: false })
-      .limit(requestedLimit);
-    
-    if (error) {
-      logger.error(`Error fetching journals: ${error.message}`);
-      throw error;
-    }
-    
+
+    const journals = await journalGenerator.listJournalEntries(userId, requestedLimit);
+
     const formattedJournals = (journals || []).map(journal => {
       // Extract emotion data from emotion_summary or provide defaults
       const emotionSummary = journal.emotion_summary || {};
@@ -420,19 +390,8 @@ router.get('/:date', async (req, res) => {
       });
     }
     
-    // Query journal_entries table
-    const { data: journal, error } = await supabase
-      .from('journal_entries')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', date)
-      .maybeSingle();
-    
-    if (error) {
-      logger.error(`Error fetching journal: ${error.message}`);
-      throw error;
-    }
-    
+    const journal = await journalGenerator.getJournalEntry(userId, date);
+
     if (journal) {
       // Extract emotion data from emotion_summary or provide defaults
       const emotionSummary = journal.emotion_summary || {};

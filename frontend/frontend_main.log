@@ -1,0 +1,62 @@
+
+> frontend@0.1.0 dev
+> next dev
+
+  [1m[38;2;173;127;168m▲ Next.js 14.2.33[39m[22m
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ [32m[1m✓[22m[39m Starting...
+ [32m[1m✓[22m[39m Ready in 2.4s
+ [37m[1m○[22m[39m Compiling / ...
+ [32m[1m✓[22m[39m Compiled / in 4.3s (1954 modules)
+ GET / [32m200[39m in 5001ms
+ [37m[1m○[22m[39m Compiling /profile ...
+ [32m[1m✓[22m[39m Compiled /api/auth/[...nextauth] in 4.8s (3698 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 4784ms
+ GET /fonts/inter-var.woff2 [33m404[39m in 4782ms
+ GET /chat [32m200[39m in 4686ms
+ GET /profile [32m200[39m in 4633ms
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 25ms
+ GET /api/auth/session [32m200[39m in 4075ms
+ GET /api/auth/session [32m200[39m in 27ms
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 24ms
+ GET /api/auth/session [32m200[39m in 14ms
+ GET /api/auth/session [32m200[39m in 10ms
+ [32m[1m✓[22m[39m Compiled /api/profile in 341ms (2090 modules)
+ GET /api/profile [32m200[39m in 1447ms
+ [37m[1m○[22m[39m Compiling /insights ...
+ [32m[1m✓[22m[39m Compiled /insights in 671ms (3760 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 121ms
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 15ms
+ [37m[1m○[22m[39m Compiling /journal ...
+ [32m[1m✓[22m[39m Compiled /journal in 1150ms (4311 modules)
+ GET /journal [32m200[39m in 150ms
+ GET /fonts/inter-var.woff2 [33m404[39m in 66ms
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 64ms
+ GET /chat [32m200[39m in 111ms
+ GET /profile [32m200[39m in 157ms
+ GET /api/auth/session [32m200[39m in 129ms
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 151ms
+ GET /api/auth/session [32m200[39m in 12ms
+ GET /api/auth/session [32m200[39m in 7ms
+ GET /api/auth/session [32m200[39m in 8ms
+ GET /api/profile [32m200[39m in 242ms
+ [37m[1m○[22m[39m Compiling /journal/calendar ...
+ [32m[1m✓[22m[39m Compiled /journal/calendar in 1041ms (4323 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 79ms
+ [37m[1m○[22m[39m Compiling /history ...
+ [32m[1m✓[22m[39m Compiled /history in 814ms (4333 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 62ms
+ [37m[1m○[22m[39m Compiling /settings ...
+ [32m[1m✓[22m[39m Compiled /settings in 1067ms (4353 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 103ms
+ [37m[1m○[22m[39m Compiling /api/messages/emotion-history ...
+ [32m[1m✓[22m[39m Compiled /api/messages/emotion-history in 1008ms (4355 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 1123ms
+ GET /api/messages/emotion-history? [32m200[39m in 1469ms
+ GET /api/messages/emotion-history? [32m200[39m in 112ms
+ GET /.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 45ms
+ [37m[1m○[22m[39m Compiling /favicon.ico ...
+ [32m[1m✓[22m[39m Compiled /favicon.ico in 961ms (2059 modules)
+ GET /favicon.ico [32m200[39m in 1059ms

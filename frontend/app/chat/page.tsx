@@ -9,7 +9,7 @@ import { useChat } from '@/contexts/ChatContext';
 import { Button } from '@/components/ui/button';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { toast } from '@/hooks/use-toast';
-import { ChatMessage as ChatMessageType } from '@/lib/supabase';
+import { ChatMessage as ChatMessageType } from '@/lib/types';
 import { PerformanceMonitor } from '@/lib/performance';
 import { useStore } from '@/store/useStore';
 import { useSearchParams } from 'next/navigation';
@@ -50,7 +50,7 @@ interface VoiceResponsePayload {
 
 export default function ChatPage() {
   const { user } = useAuth();
-  const { messages, currentSessionId, isLoading, sendMessage: sendChatMessage, loadExistingSession, startNewSession, setCurrentSessionId, setMessages } = useChat();
+  const { messages, currentSessionId, isLoading, sendMessage: sendChatMessage, loadExistingSession, startNewSession, setCurrentSessionId, setMessages, ensureSessionReady } = useChat();
   const [localMessages, setLocalMessages] = useState<ExtendedChatMessage[]>([]);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [messageText, setMessageText] = useState('');
@@ -365,8 +365,13 @@ export default function ChatPage() {
         <VoiceChatComponent
           userId={user?.id || ''}
           sessionId={currentSessionId || undefined}
+          ensureSessionReady={ensureSessionReady}
           onMessageReceived={handleVoiceMessageReceived}
-          onError={(error: string) => toast({ title: 'Voice Chat Error', description: error, variant: 'destructive' })}
+          onError={(error: string) => {
+            // The emergency-contact prompt already communicates this one — no need for a second toast.
+            if (error === 'emergency_contact_required') return;
+            toast({ title: 'Voice Chat Error', description: error, variant: 'destructive' });
+          }}
         />
       </Suspense>
     </div>

@@ -1,3 +1,7 @@
+// NOTE: This file is NOT mounted in server.js (superseded by journalRoutes.js)
+// and still uses @supabase/supabase-js (dynamic import) in a couple of
+// helper functions. Left unmigrated intentionally as dead code - do not
+// wire this into server.js without converting it to Prisma first.
 import express from 'express';
 import { journalService, cronScheduler } from '../journal-service/index.js';
 import masterActivityService from '../storage-service/masterActivityService.js';

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { getChatSessions, getChatMessages } from '@/lib/api';
-import { ChatSession, ChatMessage } from '@/lib/supabase';
+import { ChatSession, ChatMessage } from '@/lib/types';
 import { Search, MessageCircle, Calendar, ChevronRight, Sparkles, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';

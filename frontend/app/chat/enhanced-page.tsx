@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, memo, Suspense, lazy } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { getChatMessages } from '@/lib/api';
-import { ChatMessage as ChatMessageType } from '@/lib/supabase';
+import { ChatMessage as ChatMessageType } from '@/lib/types';
 import { PerformanceMonitor } from '@/lib/performance';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { UnifiedChatInput, VoiceState } from '@/components/chat/UnifiedChatInput';

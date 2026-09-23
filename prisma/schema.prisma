@@ -1,0 +1,210 @@
+// Canonical schema for EmotionSense AI, targeting Neon (Postgres).
+// Both backend (Express) and frontend (Next.js/NextAuth) generate their
+// Prisma Client from this single file — see each app's package.json
+// "prisma.schema" pointer.
+//
+// Table/column names are kept snake_case via @map/@@map so the JSON shapes
+// returned to existing frontend components (which expect e.g. user_id,
+// created_at) don't have to change.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String?  @map("full_name")
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  chatSessions      ChatSession[]
+  messages          Message[]
+  emergencyContact  EmergencyContact?
+  safetyAlerts      SafetyAlert[]
+  emotionAnalyses   EmotionAnalysis[]
+  emotionFlowSegs   EmotionFlowSegment[]
+  dailySummaries    DailyEmotionSummary[]
+  weeklySummaries   WeeklyEmotionSummary[]
+  masterActivities  MasterUserActivity[]
+  alertLogs         AlertLog[]
+
+  @@map("users")
+}
+
+model ChatSession {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  sessionTitle String   @default("New Chat") @map("session_title")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@map("chat_sessions")
+}
+
+model Message {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  sessionId         String   @map("session_id")
+  role              String
+  content           String
+  emotion           String?
+  emotionConfidence Float?   @map("emotion_confidence")
+  audioUrl          String?  @map("audio_url")
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model EmergencyContact {
+  id           String   @id @default(uuid())
+  userId       String   @unique @map("user_id")
+  contactName  String   @map("contact_name")
+  contactEmail String   @map("contact_email")
+  contactPhone String?  @map("contact_phone")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("emergency_contacts")
+}
+
+model SafetyAlert {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  emergencyContactId  String?   @map("emergency_contact_id")
+  detectedEmotion     String?   @map("detected_emotion")
+  messageText         String?   @map("message_text")
+  alertSent           Boolean   @default(false) @map("alert_sent")
+  alertSentAt         DateTime? @map("alert_sent_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("safety_alerts")
+}
+
+model EmotionAnalysis {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  type          String
+  inputText     String?  @map("input_text")
+  transcript    String?
+  emotion       String?
+  confidence    Float?
+  scores        Json?
+  audioFeatures Json?    @map("audio_features")
+  timestamp     DateTime @default(now())
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("emotion_analysis")
+}
+
+model EmotionFlowSegment {
+  id              String  @id @default(uuid())
+  userId          String  @map("user_id")
+  date            String
+  segment         String?
+  dominantEmotion String? @map("dominant_emotion")
+  intensity       Float?
+  summary         String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("emotion_flow_segments")
+}
+
+model DailyEmotionSummary {
+  id                  String   @id @default(uuid())
+  userId              String   @map("user_id")
+  date                String
+  dominantEmotion     String?  @map("dominant_emotion")
+  emotionDistribution Json?    @map("emotion_distribution")
+  moodScore           Float?   @map("mood_score")
+  totalEntries        Int      @default(0) @map("total_entries")
+  timeSegments        Json?    @map("time_segments")
+  trendPoints         Json?    @map("trend_points")
+  compassPoints       Json?    @map("compass_points")
+  emotionFlow         Json?    @map("emotion_flow")
+  segmentSummary      Json?    @map("segment_summary")
+  keyMoments          Json?    @map("key_moments")
+  summaryText         String?  @map("summary_text")
+  eJournalEntry       String?  @map("ejournal_entry")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("daily_emotion_summary")
+}
+
+model WeeklyEmotionSummary {
+  id                 String   @id @default(uuid())
+  userId             String   @map("user_id")
+  weekStart          String   @map("week_start")
+  weekEnd            String   @map("week_end")
+  dominantEmotion    String?  @map("dominant_emotion")
+  weeklyArc          Json?    @map("weekly_arc")
+  averageMoodScore   Float?   @map("average_mood_score")
+  keyHighlights      Json?    @map("key_highlights")
+  weeklyMomentFlow   Json?    @map("weekly_moment_flow")
+  weeklyReflection   String?  @map("weekly_reflection")
+  weeklySummaryText  String?  @map("weekly_summary_text")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart, weekEnd])
+  @@map("weekly_emotion_summary")
+}
+
+model MasterUserActivity {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  sessionId     String?  @map("session_id")
+  activityType  String   @map("activity_type")
+  role          String
+  source        String
+  content       String?
+  emotionData   Json?    @map("emotion_data")
+  metadata      Json?
+  localDate     String   @map("local_date")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("master_user_activity")
+}
+
+model AlertLog {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  contactEmail    String?  @map("contact_email")
+  alertType       String   @default("emotional_distress") @map("alert_type")
+  messageExcerpt  String?  @map("message_excerpt")
+  additionalData  Json?    @map("additional_data")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("alert_logs")
+}

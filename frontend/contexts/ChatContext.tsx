@@ -1,9 +1,9 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { ChatMessage } from '@/lib/supabase';
+import { ChatMessage } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { sendChatMessage, regenerateResponse, textToSpeech } from '@/lib/api';
+import { sendChatMessage, regenerateResponse, textToSpeech, createChatSession, hasEmergencyContact } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface ChatContextType {
@@ -20,6 +20,10 @@ interface ChatContextType {
   isPlayingAudio: boolean;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setCurrentSessionId: React.Dispatch<React.SetStateAction<string | null>>;
+  needsEmergencyContact: boolean;
+  onEmergencyContactAdded: () => void;
+  dismissEmergencyContactPrompt: () => void;
+  ensureSessionReady: () => Promise<string | null>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -30,10 +34,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [needsEmergencyContact, setNeedsEmergencyContact] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
   // Start new chat session (request from backend)
+  // Requires an emergency contact on file first — chat cannot start without one.
   const startNewSession = useCallback(async () => {
     if (!user?.id) {
       toast({
@@ -44,7 +50,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
-      const { id: newSessionId } = await (await import('@/lib/api')).createChatSession(user.id);
+      const hasContact = await hasEmergencyContact(user.id);
+      if (!hasContact) {
+        setNeedsEmergencyContact(true);
+        return;
+      }
+      setNeedsEmergencyContact(false);
+      const { id: newSessionId } = await createChatSession(user.id);
       setCurrentSessionId(newSessionId);
       setMessages([]);
     } catch (error) {
@@ -56,6 +68,57 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }, [user?.id, toast]);
+
+  // Shared gate used by both text and voice sending: returns an existing
+  // session id, or creates one after confirming an emergency contact is on
+  // file. Returns null (and flips needsEmergencyContact) if blocked.
+  const ensureSessionReady = useCallback(async (): Promise<string | null> => {
+    if (!user?.id) {
+      toast({
+        title: 'Error',
+        description: 'User not authenticated',
+        variant: 'destructive',
+      });
+      return null;
+    }
+    if (currentSessionId) {
+      return currentSessionId;
+    }
+    try {
+      const hasContact = await hasEmergencyContact(user.id);
+      if (!hasContact) {
+        setNeedsEmergencyContact(true);
+        return null;
+      }
+      setNeedsEmergencyContact(false);
+      const { id: newSessionId } = await createChatSession(user.id);
+      setCurrentSessionId(newSessionId);
+      setMessages([]);
+      return newSessionId;
+    } catch (error) {
+      console.error('Failed to create session:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create new chat session',
+        variant: 'destructive',
+      });
+      return null;
+    }
+  }, [user?.id, currentSessionId, toast]);
+
+  // Called after the user successfully adds an emergency contact from the
+  // blocking prompt, so chat can actually start.
+  const onEmergencyContactAdded = useCallback(() => {
+    setNeedsEmergencyContact(false);
+    startNewSession();
+  }, [startNewSession]);
+
+  // Hides the blocking prompt without creating a session — the next attempt
+  // to chat (New Chat, sending a message, or revisiting the app) re-checks
+  // and re-triggers it, since no session actually got created.
+  const dismissEmergencyContactPrompt = useCallback(() => {
+    setNeedsEmergencyContact(false);
+  }, []);
 
   // Load chat history for a specific session
   const loadChatHistory = useCallback(async (sessionId?: string) => {
@@ -109,13 +172,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(async (content: string) => {
     if (!user || !content.trim()) return;
 
-    // Create session if none exists
-    let sessionId = currentSessionId;
+    // Create session if none exists — but never without an emergency contact on file
+    const sessionId = await ensureSessionReady();
     if (!sessionId) {
-      // Request new session from backend
-      const { id: newSessionId } = await (await import('@/lib/api')).createChatSession(user.id);
-      sessionId = newSessionId;
-      setCurrentSessionId(sessionId);
+      return;
     }
 
     setIsLoading(true);
@@ -193,7 +253,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
       setIsTyping(false);
     }
-  }, [user, currentSessionId, toast]);
+  }, [user, currentSessionId, toast, ensureSessionReady]);
 
   // Regenerate last AI response (SIMPLIFIED - no database update)
   const regenerateLastResponse = useCallback(async () => {
@@ -388,6 +448,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     isPlayingAudio,
     setMessages,
     setCurrentSessionId,
+    needsEmergencyContact,
+    onEmergencyContactAdded,
+    dismissEmergencyContactPrompt,
+    ensureSessionReady,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

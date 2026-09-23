@@ -1,21 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+// Domain types previously defined in lib/supabase.ts alongside the Supabase
+// client. Kept here, independent of any specific data-access client, since
+// many components import these shapes without needing the (now removed)
+// Supabase client itself.
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-});
-
-// Types for database tables
 export interface UserProfile {
   id: string;
   email: string;
@@ -44,6 +31,14 @@ export interface ChatSession {
   session_title: string;
   created_at: string;
   updated_at: string;
+}
+
+// Row shape returned by GET /api/messages/emotion-history
+export interface EmotionHistoryMessage {
+  id: string;
+  emotion: string;
+  emotion_confidence: number | null;
+  created_at: string;
 }
 
 export interface ChatMessage {

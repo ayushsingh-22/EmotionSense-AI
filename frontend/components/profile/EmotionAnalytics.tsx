@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { BarChart3, TrendingUp, Filter } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { EMOTION_CONFIG } from '@/types';
-import { supabase } from '@/lib/supabase';
+import type { EmotionHistoryMessage } from '@/lib/types';
 import {
   Select,
   SelectContent,
@@ -22,7 +22,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { subDays, format } from 'date-fns';
+import { format } from 'date-fns';
 
 interface EmotionStats {
   emotion: string;
@@ -66,35 +66,25 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
     try {
       setIsLoading(true);
 
-      let query = supabase
-        .from('messages')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('role', 'user')
-        .not('emotion', 'is', null)
-        .order('created_at', { ascending: false });
-
-      // Apply date filters
       const now = new Date();
-      if (filterType === '7days') {
-        const sevenDaysAgo = subDays(now, 7);
-        query = query.gte('created_at', sevenDaysAgo.toISOString());
-      } else if (filterType === '30days') {
-        const thirtyDaysAgo = subDays(now, 30);
-        query = query.gte('created_at', thirtyDaysAgo.toISOString());
+      const params = new URLSearchParams();
+      if (filterType === '7days' || filterType === '30days') {
+        params.set('range', filterType);
       }
-
-      // Apply emotion filter
       if (filterType === 'emotion' && selectedEmotion !== 'all') {
-        query = query.eq('emotion', selectedEmotion);
+        params.set('emotion', selectedEmotion);
       }
 
-      const { data: messages, error } = await query;
+      const response = await fetch(`/api/messages/emotion-history?${params.toString()}`, {
+        credentials: 'same-origin',
+      });
 
-      if (error) {
-        console.error('Error fetching analytics:', error);
+      if (!response.ok) {
+        console.error('Error fetching analytics:', await response.text());
         return;
       }
+
+      const { messages } = (await response.json()) as { messages: EmotionHistoryMessage[] };
 
       if (!messages || messages.length === 0) {
         setData({

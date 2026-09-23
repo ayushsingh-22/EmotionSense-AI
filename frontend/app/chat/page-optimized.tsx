@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from '@/hooks/use-toast';
 import { getChatMessages } from '@/lib/api';
-import { ChatMessage as ChatMessageType } from '@/lib/supabase';
+import { ChatMessage as ChatMessageType } from '@/lib/types';
 import { debounce, PerformanceMonitor } from '@/lib/performance';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { cn } from '@/lib/utils';

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase';
+import { getEmergencyContact } from '@/lib/api';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { GradientHeader } from '@/components/ui/GradientHeader';
 import { AnimatedIcon } from '@/components/ui/AnimatedIcon';
@@ -26,7 +26,7 @@ interface EmergencyContact {
 }
 
 export default function ProfilePage() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, updateProfile, deleteAccount, deleteAllData } = useAuth();
   const router = useRouter();
   
   const [isEditing, setIsEditing] = useState(false);
@@ -54,21 +54,11 @@ export default function ProfilePage() {
     
     try {
       setEmergencyLoading(true);
-      const { data, error } = await supabase
-        .from('emergency_contacts')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching emergency contact:', error);
-      } else if (data) {
-        setEmergencyContact(data);
-      } else {
-        setEmergencyContact(null);
-      }
+      const data = await getEmergencyContact(user.id);
+      setEmergencyContact(data);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching emergency contact:', error);
+      setEmergencyContact(null);
     } finally {
       setEmergencyLoading(false);
     }
@@ -87,17 +77,7 @@ export default function ProfilePage() {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ full_name: fullName })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Profile updated',
-        description: 'Your profile information has been updated successfully.',
-      });
+      await updateProfile({ full_name: fullName });
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -111,26 +91,19 @@ export default function ProfilePage() {
 
   const handleDeleteAllData = async () => {
     if (!user) return;
-    
+
     try {
       setIsDeletingData(true);
-      
-      // Delete all chat sessions (cascade delete should handle messages and emotion logs)
-      const { error } = await supabase
-        .from('chat_sessions')
-        .delete()
-        .eq('user_id', user.id);
 
-      if (error) throw error;
+      const { error } = await deleteAllData();
+      if (error) throw new Error(error);
 
       toast({
         title: 'Data deleted',
         description: 'All your emotion data and chat history have been permanently deleted.',
       });
       setDeleteDataDialogOpen(false);
-      
-      // Refresh stats
-      // fetchUserStats(); // Removed as it's no longer available
+      router.push('/');
     } catch (error) {
       console.error('Error deleting data:', error);
       toast({
@@ -148,31 +121,11 @@ export default function ProfilePage() {
 
     try {
       setIsDeletingAccount(true);
-      
-      // Call Supabase Edge Function or API route to delete user from Auth
-      // For now, we'll just delete data and sign out as client-side can't delete auth users easily
-      // In a real app, this should call a backend endpoint
-      
-      const { error } = await supabase.rpc('delete_user');
-      
-      if (error) {
-        // Fallback if RPC doesn't exist: just sign out and show message
-        console.error('Account deletion RPC failed:', error);
-        toast({
-            title: 'Account deletion pending',
-            description: 'Please contact support to complete account deletion.',
-            variant: 'destructive'
-        });
-        return;
-      }
 
-      await signOut();
+      const { error } = await deleteAccount();
+      if (error) throw new Error(error);
+
       router.push('/');
-      
-      toast({
-        title: 'Account deleted',
-        description: 'Your account has been permanently deleted.',
-      });
     } catch (error) {
       console.error('Error deleting account:', error);
       toast({

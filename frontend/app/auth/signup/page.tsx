@@ -62,7 +62,7 @@ export default function SignUpPage() {
         });
         router.push('/');
       } else {
-        setError(result.error.message || 'Failed to create account. Please try again.');
+        setError(result.error || 'Failed to create account. Please try again.');
       }
     } catch (error) {
       console.error('Unexpected error during signup:', error);

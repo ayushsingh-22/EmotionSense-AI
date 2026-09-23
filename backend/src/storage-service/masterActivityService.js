@@ -1,13 +1,26 @@
-import { createClient } from '@supabase/supabase-js';
+import prisma from '../lib/prisma.js';
 
-class MasterActivityService {
-  constructor() {
-    this.supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+const normalizeActivityRow = (row) => {
+  if (!row) {
+    return row;
   }
 
+  return {
+    id: row.id,
+    user_id: row.userId,
+    session_id: row.sessionId,
+    activity_type: row.activityType,
+    role: row.role,
+    source: row.source,
+    content: row.content,
+    emotion_data: row.emotionData ?? {},
+    metadata: row.metadata ?? {},
+    local_date: row.localDate,
+    created_at: row.createdAt
+  };
+};
+
+class MasterActivityService {
   /**
    * Insert a new activity into master_user_activity table
    * @param {Object} activityData - Activity data to insert
@@ -26,7 +39,7 @@ class MasterActivityService {
     activity_type,
     content,
     role = 'assistant',
-    source = 'chat', 
+    source = 'chat',
     emotion_data = {},
     metadata = {},
     session_id = null
@@ -36,23 +49,23 @@ class MasterActivityService {
       if (!user_id) {
         throw new Error('user_id is required');
       }
-      
+
       if (!activity_type) {
         throw new Error('activity_type is required');
       }
-      
+
       const validActivityTypes = ['chat_message', 'ai_response'];
       const validRoles = ['user', 'assistant'];
       const validSources = ['chat'];
-      
+
       if (!validActivityTypes.includes(activity_type)) {
         throw new Error(`Invalid activity_type. Must be one of: ${validActivityTypes.join(', ')}`);
       }
-      
+
       if (!validRoles.includes(role)) {
         throw new Error(`Invalid role. Must be one of: ${validRoles.join(', ')}`);
       }
-      
+
       if (!validSources.includes(source)) {
         throw new Error(`Invalid source. Must be one of: ${validSources.join(', ')}`);
       }
@@ -63,32 +76,23 @@ class MasterActivityService {
       const istDate = new Date(now.getTime() + istOffset);
       const local_date = istDate.toISOString().split('T')[0];
 
-      const activityRecord = {
-        user_id,
-        session_id,
-        activity_type,
-        role,
-        source,
-        content,
-        emotion_data: emotion_data || {},
-        metadata: metadata || {},
-        local_date,
-        created_at: now.toISOString()
-      };
-
-      const { data, error } = await this.supabase
-        .from('master_user_activity')
-        .insert(activityRecord)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error inserting activity:', error);
-        throw new Error(`Failed to insert activity: ${error.message}`);
-      }
+      const created = await prisma.masterUserActivity.create({
+        data: {
+          userId: user_id,
+          sessionId: session_id,
+          activityType: activity_type,
+          role,
+          source,
+          content,
+          emotionData: emotion_data || {},
+          metadata: metadata || {},
+          localDate: local_date,
+          createdAt: now
+        }
+      });
 
       console.log(`✅ Inserted ${activity_type} activity for user ${user_id}`);
-      return data;
+      return normalizeActivityRow(created);
 
     } catch (error) {
       console.error('MasterActivityService.insertActivity error:', error);
@@ -120,41 +124,31 @@ class MasterActivityService {
         throw new Error('user_id is required');
       }
 
-      let query = this.supabase
-        .from('master_user_activity')
-        .select('*', { count: 'exact' })
-        .eq('user_id', user_id);
+      const where = { userId: user_id };
 
-      // Apply filters
-      if (startDate) {
-        query = query.gte('local_date', startDate);
+      if (startDate || endDate) {
+        where.localDate = {};
+        if (startDate) where.localDate.gte = startDate;
+        if (endDate) where.localDate.lte = endDate;
       }
-      
-      if (endDate) {
-        query = query.lte('local_date', endDate);
-      }
-      
+
       if (activity_type) {
-        if (Array.isArray(activity_type)) {
-          query = query.in('activity_type', activity_type);
-        } else {
-          query = query.eq('activity_type', activity_type);
-        }
+        where.activityType = Array.isArray(activity_type)
+          ? { in: activity_type }
+          : activity_type;
       }
 
-      // Apply pagination and ordering
-      query = query
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+      const [rows, count] = await Promise.all([
+        prisma.masterUserActivity.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip: offset,
+          take: limit
+        }),
+        prisma.masterUserActivity.count({ where })
+      ]);
 
-      const { data, error, count } = await query;
-
-      if (error) {
-        console.error('Error fetching activities:', error);
-        throw new Error(`Failed to fetch activities: ${error.message}`);
-      }
-
-      return { data: data || [], count: count || 0 };
+      return { data: rows.map(normalizeActivityRow), count };
 
     } catch (error) {
       console.error('MasterActivityService.getActivities error:', error);
@@ -174,19 +168,13 @@ class MasterActivityService {
         throw new Error('session_id is required');
       }
 
-      const { data, error } = await this.supabase
-        .from('master_user_activity')
-        .select('*')
-        .eq('session_id', session_id)
-        .order('created_at', { ascending: true })
-        .limit(limit);
+      const rows = await prisma.masterUserActivity.findMany({
+        where: { sessionId: session_id },
+        orderBy: { createdAt: 'asc' },
+        take: limit
+      });
 
-      if (error) {
-        console.error('Error fetching session activities:', error);
-        throw new Error(`Failed to fetch session activities: ${error.message}`);
-      }
-
-      return data || [];
+      return rows.map(normalizeActivityRow);
 
     } catch (error) {
       console.error('MasterActivityService.getSessionActivities error:', error);
@@ -206,19 +194,13 @@ class MasterActivityService {
         throw new Error('user_id is required');
       }
 
-      const { data, error } = await this.supabase
-        .from('master_user_activity')
-        .select('*')
-        .eq('user_id', user_id)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      const rows = await prisma.masterUserActivity.findMany({
+        where: { userId: user_id },
+        orderBy: { createdAt: 'desc' },
+        take: limit
+      });
 
-      if (error) {
-        console.error('Error fetching latest activities:', error);
-        throw new Error(`Failed to fetch latest activities: ${error.message}`);
-      }
-
-      return data || [];
+      return rows.map(normalizeActivityRow);
 
     } catch (error) {
       console.error('MasterActivityService.getLatestActivitiesForUser error:', error);
@@ -238,32 +220,28 @@ class MasterActivityService {
         throw new Error('session_id is required');
       }
 
-      const { data, error } = await this.supabase
-        .from('master_user_activity')
-        .select('*')
-        .eq('session_id', session_id)
-        .in('activity_type', ['chat_message', 'ai_response'])
-        .order('created_at', { ascending: true })
-        .limit(limit);
-
-      if (error) {
-        console.error('Error fetching session chat messages:', error);
-        throw new Error(`Failed to fetch session chat messages: ${error.message}`);
-      }
+      const rows = await prisma.masterUserActivity.findMany({
+        where: {
+          sessionId: session_id,
+          activityType: { in: ['chat_message', 'ai_response'] }
+        },
+        orderBy: { createdAt: 'asc' },
+        take: limit
+      });
 
       // Format for chat UI
-      const formattedMessages = (data || []).map(activity => ({
+      const formattedMessages = rows.map((activity) => ({
         id: activity.id,
         content: activity.content,
-        role: activity.activity_type === 'chat_message' ? 'user' : 'assistant',
-        emotion: activity.emotion_data?.emotion || null,
-        emotion_confidence: activity.emotion_data?.confidence || null,
+        role: activity.activityType === 'chat_message' ? 'user' : 'assistant',
+        emotion: activity.emotionData?.emotion || null,
+        emotion_confidence: activity.emotionData?.confidence || null,
         metadata: activity.metadata || {},
         audio_url: activity.metadata?.audio_url || null,
-        created_at: activity.created_at,
+        created_at: activity.createdAt,
         // Include original activity data for reference
-        activity_type: activity.activity_type,
-        emotion_data: activity.emotion_data
+        activity_type: activity.activityType,
+        emotion_data: activity.emotionData
       }));
 
       return formattedMessages;
@@ -287,19 +265,15 @@ class MasterActivityService {
         throw new Error('user_id, startDate, and endDate are required');
       }
 
-      const { data, error } = await this.supabase
-        .from('master_user_activity')
-        .select('emotion_data, activity_type, created_at, local_date')
-        .eq('user_id', user_id)
-        .gte('local_date', startDate)
-        .lte('local_date', endDate)
-        .not('emotion_data', 'eq', '{}')
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error('Error fetching emotion insights:', error);
-        throw new Error(`Failed to fetch emotion insights: ${error.message}`);
-      }
+      const rows = await prisma.masterUserActivity.findMany({
+        where: {
+          userId: user_id,
+          localDate: { gte: startDate, lte: endDate },
+          NOT: { emotionData: { equals: {} } }
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { emotionData: true, activityType: true, createdAt: true, localDate: true }
+      });
 
       // Process emotion data
       const emotionCounts = {};
@@ -308,21 +282,22 @@ class MasterActivityService {
       let totalConfidence = 0;
       let confidenceCount = 0;
 
-      (data || []).forEach(activity => {
-        const { emotion_data, local_date } = activity;
-        
+      rows.forEach((activity) => {
+        const emotion_data = activity.emotionData;
+        const local_date = activity.localDate;
+
         if (emotion_data?.emotion) {
           const emotion = emotion_data.emotion;
           emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
-          
+
           // Daily tracking
           if (!dailyEmotions[local_date]) {
             dailyEmotions[local_date] = {};
           }
           dailyEmotions[local_date][emotion] = (dailyEmotions[local_date][emotion] || 0) + 1;
-          
+
           totalActivities++;
-          
+
           if (emotion_data.confidence) {
             totalConfidence += emotion_data.confidence;
             confidenceCount++;
@@ -331,7 +306,7 @@ class MasterActivityService {
       });
 
       // Find dominant emotion
-      const dominantEmotion = Object.keys(emotionCounts).reduce((a, b) => 
+      const dominantEmotion = Object.keys(emotionCounts).reduce((a, b) =>
         emotionCounts[a] > emotionCounts[b] ? a : b, null);
 
       const insights = {
@@ -366,7 +341,7 @@ class MasterActivityService {
 
       const now = new Date();
       let startDate;
-      
+
       switch (period) {
         case 'today':
           startDate = now.toISOString().split('T')[0];
@@ -383,41 +358,38 @@ class MasterActivityService {
           throw new Error('Invalid period. Use "today", "week", or "month"');
       }
 
-      const { data, error } = await this.supabase
-        .from('master_user_activity')
-        .select('activity_type, emotion_data, local_date')
-        .eq('user_id', user_id)
-        .gte('local_date', startDate);
-
-      if (error) {
-        console.error('Error fetching activity stats:', error);
-        throw new Error(`Failed to fetch activity stats: ${error.message}`);
-      }
+      const rows = await prisma.masterUserActivity.findMany({
+        where: {
+          userId: user_id,
+          localDate: { gte: startDate }
+        },
+        select: { activityType: true, emotionData: true, localDate: true }
+      });
 
       // Process statistics
       const stats = {
         period,
-        totalActivities: data.length,
+        totalActivities: rows.length,
         activityTypes: {},
         emotionBreakdown: {},
         dailyActivity: {}
       };
 
-      (data || []).forEach(activity => {
+      rows.forEach((activity) => {
         // Activity type counts
-        stats.activityTypes[activity.activity_type] = 
-          (stats.activityTypes[activity.activity_type] || 0) + 1;
+        stats.activityTypes[activity.activityType] =
+          (stats.activityTypes[activity.activityType] || 0) + 1;
 
         // Emotion counts
-        if (activity.emotion_data?.emotion) {
-          const emotion = activity.emotion_data.emotion;
-          stats.emotionBreakdown[emotion] = 
+        if (activity.emotionData?.emotion) {
+          const emotion = activity.emotionData.emotion;
+          stats.emotionBreakdown[emotion] =
             (stats.emotionBreakdown[emotion] || 0) + 1;
         }
 
         // Daily activity counts
-        stats.dailyActivity[activity.local_date] = 
-          (stats.dailyActivity[activity.local_date] || 0) + 1;
+        stats.dailyActivity[activity.localDate] =
+          (stats.dailyActivity[activity.localDate] || 0) + 1;
       });
 
       return stats;
@@ -451,7 +423,7 @@ export async function saveActivity({
   try {
     // Map the parameters to the expected format
     const activityType = role === 'user' ? 'chat_message' : 'ai_response';
-    
+
     // CRITICAL FIX: Use correct emotion_data keys that match what insights API expects
     // Insights queries for: emotion_data.emotion, emotion_data.confidence
     const result = await masterActivityService.insertActivity({
@@ -473,7 +445,7 @@ export async function saveActivity({
       },
       session_id: sessionId
     });
-    
+
     return result;
   } catch (error) {
     console.error('saveActivity wrapper error:', error);

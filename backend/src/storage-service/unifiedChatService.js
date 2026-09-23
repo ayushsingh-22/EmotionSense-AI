@@ -5,14 +5,8 @@
  */
 
 import * as masterActivity from './masterActivityService.js';
-import { createClient } from '@supabase/supabase-js';
-import config from '../config/index.js';
+import prisma from '../lib/prisma.js';
 import logger from '../utils/logger.js';
-
-const supabase = createClient(
-  config.database.supabase.url,
-  config.database.supabase.serviceRoleKey || config.database.supabase.anonKey
-);
 
 /**
  * Get chat sessions for a user from master_user_activity
@@ -21,14 +15,25 @@ const supabase = createClient(
 export async function getUserChatSessionsUnified(userId) {
   try {
     // Get all activities for user without date restrictions
-    const { data: activities, error } = await supabase
-      .from('master_user_activity')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    const rows = await prisma.masterUserActivity.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' }
+    });
 
-    if (error) throw error;
-    
+    const activities = rows.map((row) => ({
+      id: row.id,
+      user_id: row.userId,
+      session_id: row.sessionId,
+      activity_type: row.activityType,
+      role: row.role,
+      source: row.source,
+      content: row.content,
+      emotion_data: row.emotionData ?? {},
+      metadata: row.metadata ?? {},
+      local_date: row.localDate,
+      created_at: row.createdAt
+    }));
+
     if (!activities || activities.length === 0) {
       return { sessions: [], total: 0 };
     }
@@ -107,14 +112,32 @@ export async function getUserChatSessionsUnified(userId) {
 export async function getChatMessagesUnified(sessionId, userId) {
   try {
     // Get all activities for this session
-    const { data: activities, error } = await supabase
-      .from('master_user_activity')
-      .select('*')
-      .eq('session_id', sessionId)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true });
+    const rows = await prisma.masterUserActivity.findMany({
+      where: { sessionId, userId },
+      orderBy: { createdAt: 'asc' }
+    });
 
-    if (error) throw error;
+    const activities = rows.map((row) => ({
+      id: row.id,
+      message_id: row.metadata?.message_id,
+      user_id: row.userId,
+      session_id: row.sessionId,
+      activity_type: row.activityType,
+      role: row.role,
+      source: row.source,
+      content: row.content,
+      primary_emotion: row.emotionData?.emotion,
+      emotion_confidence: row.emotionData?.confidence,
+      mood_score: row.emotionData?.moodScore,
+      primary_emotion_emoji: row.emotionData?.emoji,
+      emotion_scores: row.emotionData?.scores,
+      local_date: row.localDate,
+      belongs_to_journal: row.metadata?.belongs_to_journal,
+      journal_id: row.metadata?.journal_id,
+      voice_transcript: row.emotionData?.transcript,
+      meta: row.metadata ?? {},
+      created_at: row.createdAt
+    }));
 
     if (!activities || activities.length === 0) {
       return { messages: [], total: 0 };

@@ -12,7 +12,7 @@ import {
   updateChatSessionTitle,
   deleteChatSession,
 } from '@/lib/api';
-import { ChatSession } from '@/lib/supabase';
+import { ChatSession } from '@/lib/types';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 import {

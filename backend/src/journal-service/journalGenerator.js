@@ -5,21 +5,27 @@
  */
 
 import masterActivityService from '../storage-service/masterActivityService.js';
-import { createClient } from '@supabase/supabase-js';
+import prisma from '../lib/prisma.js';
+import * as storageService from '../storage-service/index.js';
 import config from '../config/index.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 import logger from '../utils/logger.js';
 import * as unifiedEmotion from '../storage-service/unifiedEmotionService.js';
 
+// NOTE ON SCHEMA GAP: the original Supabase schema had a dedicated
+// `journal_entries` table. The finalized Neon/Prisma schema
+// (prisma/schema.prisma) does not include that table - it was
+// consolidated into `DailyEmotionSummary` (see storage-service/index.js's
+// getDailyEmotionSummary/upsertDailyEmotionSummary). This class now stores
+// journal content in DailyEmotionSummary, bagging the journal-specific
+// sections (overview/analysis/closing/title/etc.) inside its JSON
+// `segmentSummary` column, and reshapes reads back into a
+// journal-entry-shaped object so callers (journalRoutes.js etc.) don't
+// need to change. Flag this mapping for review by whoever owns the schema.
+
 class JournalGenerator {
   constructor() {
-    // Initialize Supabase client
-    this.supabase = createClient(
-      config.database.supabase.url,
-      config.database.supabase.serviceRoleKey || config.database.supabase.anonKey
-    );
-
     // Initialize Gemini
     const geminiApiKey = config.gemini?.apiKey1 || config.gemini?.apiKey;
     if (geminiApiKey) {
@@ -60,34 +66,44 @@ class JournalGenerator {
       const { startTime, endTime } = this.getDateRangeIST(date);
       
       // Step 2: Query messages for this user on this date
-      const { data: messages, error: msgError } = await this.supabase
-        .from('messages')
-        .select('id, role, content, emotion, emotion_confidence, metadata, created_at')
-        .eq('user_id', userId)
-        .gte('created_at', startTime)
-        .lte('created_at', endTime)
-        .eq('role', 'user') // Only user messages for journal source
-        .order('created_at', { ascending: true });
-      
-      if (msgError) {
-        logger.error(`❌ Error fetching messages: ${msgError.message}`);
-        throw msgError;
-      }
-      
+      const messageRows = await prisma.message.findMany({
+        where: {
+          userId,
+          role: 'user', // Only user messages for journal source
+          createdAt: { gte: new Date(startTime), lte: new Date(endTime) }
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          emotion: true,
+          emotionConfidence: true,
+          metadata: true,
+          createdAt: true
+        }
+      });
+
+      const messages = messageRows.map((row) => ({
+        id: row.id,
+        role: row.role,
+        content: row.content,
+        emotion: row.emotion,
+        emotion_confidence: row.emotionConfidence,
+        metadata: row.metadata,
+        created_at: row.createdAt
+      }));
+
       // Step 3: Check if we have enough data
       if (!messages || messages.length === 0) {
         logger.info(`⏭️ No messages for ${date}, skipping journal`);
         return { success: true, skipped: true, reason: 'no_messages', messageCount: 0 };
       }
       
-      // Step 4: Check if journal already exists
-      const { data: existingJournal } = await this.supabase
-        .from('journal_entries')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('date', date)
-        .maybeSingle();
-      
+      // Step 4: Check if journal already exists (stored as a DailyEmotionSummary)
+      const existingSummary = await storageService.getDailyEmotionSummary(userId, date);
+      const existingJournal = existingSummary ? this._toJournalShape(userId, date, existingSummary) : null;
+
       // Step 5: Aggregate emotion data
       const emotionSummary = this.aggregateEmotions(messages);
       
@@ -103,11 +119,8 @@ class JournalGenerator {
       // Step 7: Parse journal sections for structured storage
       const parsedSections = this.parseJournalSections(journalContent);
       
-      // Step 8: Save to database
-      const journalData = {
-        user_id: userId,
-        date: date,
-        content: journalContent,
+      // Step 8: Save to database (stored as a DailyEmotionSummary - see note at top of file)
+      const segmentSummaryBag = {
         overview: parsedSections.overview,
         key_moments: parsedSections.key_moments,
         analysis: parsedSections.analysis,
@@ -120,70 +133,27 @@ class JournalGenerator {
         emotions_text: parsedSections.emotions_text,
         insights: parsedSections.insights,
         plans: parsedSections.plans,
-        // Emotion summary
-        emotion_summary: {
-          primaryEmotion: emotionSummary.primaryEmotion,
-          primaryEmoji: emotionSummary.primaryEmoji,
-          mood_score: emotionSummary.moodScore,
-          dominant_emotion: emotionSummary.primaryEmotion,
-          emotion_counts: emotionSummary.emotionCounts,
-          total_messages: emotionSummary.totalMessages,
-          time_segments: emotionSummary.timeSegments || []
-        },
-        source: manual ? 'manual' : 'auto',
-        generated_at: new Date().toISOString()
+        primaryEmoji: emotionSummary.primaryEmoji,
+        source: manual ? 'manual' : 'auto'
       };
-      
-      let savedJournal;
-      
-      // Handle force regenerate (used by refresh endpoint)
-      const shouldForce = force || forceRegenerate;
-      
-      if (existingJournal && !shouldForce) {
-        // Update existing journal
-        logger.info(`📝 Updating existing journal for ${date}`);
-        const { data, error } = await this.supabase
-          .from('journal_entries')
-          .update({
-            ...journalData,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingJournal.id)
-          .select()
-          .single();
-        
-        if (error) {
-          logger.error(`❌ Error updating journal: ${error.message}`);
-          throw error;
-        }
-        
-        savedJournal = data;
-      } else {
-        // Insert new journal or force regenerate
-        if (existingJournal && shouldForce) {
-          logger.info(`🔄 Force regenerating journal for ${date}`);
-          // Delete existing and insert new
-          await this.supabase
-            .from('journal_entries')
-            .delete()
-            .eq('id', existingJournal.id);
-        }
-        
-        logger.info(`✨ Creating new journal entry for ${date}`);
-        const { data, error } = await this.supabase
-          .from('journal_entries')
-          .insert(journalData)
-          .select()
-          .single();
-        
-        if (error) {
-          logger.error(`❌ Error inserting journal: ${error.message}`);
-          throw error;
-        }
-        
-        savedJournal = data;
-      }
-      
+
+      // Force regenerate (used by refresh endpoint) just overwrites via upsert
+      const savedSummary = await storageService.upsertDailyEmotionSummary({
+        userId,
+        date,
+        dominantEmotion: emotionSummary.primaryEmotion,
+        emotionDistribution: emotionSummary.emotionCounts,
+        moodScore: emotionSummary.moodScore,
+        totalEntries: emotionSummary.totalMessages,
+        timeSegments: emotionSummary.timeSegments || [],
+        keyMoments: parsedSections.insights || [],
+        segmentSummary: segmentSummaryBag,
+        summaryText: journalContent,
+        eJournalEntry: journalContent
+      });
+
+      const savedJournal = this._toJournalShape(userId, date, savedSummary);
+
       logger.info(`✅ Journal successfully saved for ${date}`);
       
       return {
@@ -198,6 +168,64 @@ class JournalGenerator {
       logger.error(`❌ Error generating journal for ${userId} on ${date}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Reshape a DailyEmotionSummary (as returned by storageService.getDailyEmotionSummary
+   * / upsertDailyEmotionSummary) back into the journal_entries-row shape that
+   * journalRoutes.js / insightsRoutes.js expect, since the dedicated journal_entries
+   * table doesn't exist in the Neon/Prisma schema. See note at top of file.
+   */
+  _toJournalShape(userId, date, summary) {
+    const bag = summary.segmentSummary && typeof summary.segmentSummary === 'object'
+      ? summary.segmentSummary
+      : {};
+
+    return {
+      id: summary.id,
+      user_id: userId,
+      date: summary.date || date,
+      content: summary.eJournalEntry,
+      overview: bag.overview ?? null,
+      key_moments: bag.key_moments ?? [],
+      analysis: bag.analysis ?? null,
+      closing: bag.closing ?? null,
+      date_time: bag.date_time ?? null,
+      title: bag.title ?? null,
+      context: bag.context ?? null,
+      reflections: bag.reflections ?? null,
+      emotions_text: bag.emotions_text ?? null,
+      insights: bag.insights ?? [],
+      plans: bag.plans ?? null,
+      emotion_summary: {
+        primaryEmotion: summary.dominantEmotion,
+        primaryEmoji: bag.primaryEmoji,
+        mood_score: summary.moodScore,
+        dominant_emotion: summary.dominantEmotion,
+        emotion_counts: summary.emotionDistribution,
+        total_messages: summary.totalEntries,
+        time_segments: summary.timeSegments || []
+      },
+      source: bag.source || 'auto',
+      generated_at: summary.createdAt,
+      updated_at: summary.updatedAt
+    };
+  }
+
+  /**
+   * Fetch a single journal entry (journal-shaped) for a user/date, or null.
+   */
+  async getJournalEntry(userId, date) {
+    const summary = await storageService.getDailyEmotionSummary(userId, date);
+    return summary ? this._toJournalShape(userId, date, summary) : null;
+  }
+
+  /**
+   * List journal entries (journal-shaped) for a user, most recent first.
+   */
+  async listJournalEntries(userId, limit = 30) {
+    const summaries = await storageService.listDailyEmotionSummaries(userId, limit);
+    return summaries.map((summary) => this._toJournalShape(userId, summary.date, summary));
   }
 
   getDateRangeIST(dateStr) {

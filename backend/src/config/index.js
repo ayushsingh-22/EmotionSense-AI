@@ -102,17 +102,17 @@ const config = {
     maxLength: parseInt(process.env.BILSTM_MAX_LENGTH) || 80
   },
 
-  // Database Configuration
+  // Database Configuration (Neon Postgres via Prisma)
   database: {
-    type: process.env.DATABASE_TYPE || 'supabase',
-    supabase: {
-      url: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY,
-      serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY
-    },
-    sqlite: {
-      dbPath: process.env.SQLITE_DB_PATH || './data/emotions.db'
-    }
+    type: process.env.DATABASE_TYPE || 'neon',
+    url: process.env.DATABASE_URL
+  },
+
+  // Auth Configuration
+  // NEXTAUTH_SECRET must match the frontend's NextAuth secret so this backend
+  // can verify the JWT session token issued by NextAuth on incoming requests.
+  auth: {
+    nextAuthSecret: process.env.NEXTAUTH_SECRET
   },
 
   // Storage Configuration
@@ -191,7 +191,9 @@ const config = {
  */
 export const validateConfig = () => {
   const requiredFields = [
-    { key: 'gemini.apiKey', value: config.gemini.apiKey, name: 'GEMINI_API_KEY' }
+    { key: 'gemini.apiKey', value: config.gemini.apiKey, name: 'GEMINI_API_KEY' },
+    { key: 'database.url', value: config.database.url, name: 'DATABASE_URL' },
+    { key: 'auth.nextAuthSecret', value: config.auth.nextAuthSecret, name: 'NEXTAUTH_SECRET' }
   ];
 
   const missing = requiredFields.filter(field => !field.value);

@@ -5,22 +5,43 @@
  */
 
 import express from "express";
-import { createClient } from "@supabase/supabase-js";
+import prisma from "../lib/prisma.js";
 import masterActivityService from "../storage-service/masterActivityService.js";
 import * as insightsStorage from "../storage-service/insights.js";
 import * as unifiedEmotion from "../storage-service/unifiedEmotionService.js";
 import * as llmService from "../llm-service/index.js";
-import config from "../config/index.js";
 import logger from "../utils/logger.js";
 import { DateTime } from "luxon";
 
 const router = express.Router();
 
-// Initialize Supabase client
-const supabase = createClient(
-  config.database.supabase.url,
-  config.database.supabase.serviceRoleKey || config.database.supabase.anonKey
-);
+// SCHEMA NOTE: `journal_entries` doesn't exist in the Neon/Prisma schema -
+// journal data is stored in DailyEmotionSummary (see storage-service/insights.js
+// and journal-service/journalGenerator.js). We read it here directly via
+// Prisma since we only need `date` + a synthesized `emotion_summary` shape.
+const fetchJournalEntriesForRange = async (userId, start, end) => {
+  const rows = await prisma.dailyEmotionSummary.findMany({
+    where: { userId, date: { gte: start, lte: end } },
+    select: {
+      date: true,
+      dominantEmotion: true,
+      moodScore: true,
+      emotionDistribution: true,
+      timeSegments: true
+    }
+  });
+
+  return rows.map((row) => ({
+    date: row.date,
+    emotion: row.dominantEmotion,
+    emotion_summary: {
+      dominant_emotion: row.dominantEmotion,
+      mood_score: row.moodScore,
+      emotion_counts: row.emotionDistribution ?? {},
+      time_segments: row.timeSegments ?? []
+    }
+  }));
+};
 
 // Helper function to get emotion emoji (STRICT 7 EMOTIONS)
 function getEmotionEmoji(emotion) {
@@ -381,12 +402,7 @@ router.get("/daily", async (req, res) => {
     const activities = activitiesResult.data || [];
 
     // Get journal entries for the same date range to ensure consistent mood scores
-    const { data: journalEntries } = await supabase
-      .from("journal_entries")
-      .select("date, emotion_summary")
-      .eq("user_id", userId)
-      .gte("date", start)
-      .lte("date", end);
+    const journalEntries = await fetchJournalEntriesForRange(userId, start, end);
 
     // Group by date and create daily summaries
     const dailyMap = {};
@@ -637,12 +653,11 @@ router.get("/weekly", async (req, res) => {
         const weekActivities = activitiesResult.data || [];
 
         // Get journal entries for this week to ensure consistent mood scores
-        const { data: journalEntries } = await supabase
-          .from("journal_entries")
-          .select("date, emotion, emotion_summary")
-          .eq("user_id", userId)
-          .gte("date", weekStart.toFormat("yyyy-MM-dd"))
-          .lte("date", weekEnd.toFormat("yyyy-MM-dd"));
+        const journalEntries = await fetchJournalEntriesForRange(
+          userId,
+          weekStart.toFormat("yyyy-MM-dd"),
+          weekEnd.toFormat("yyyy-MM-dd")
+        );
 
         // Calculate weekly summary and daily arc
         const emotions = {};
