@@ -450,8 +450,19 @@ export const generateWithGemini = async (prompt) => {
 
   let error;
 
-  // Best-suited models available right now (daily-refreshed; see modelCatalog.js)
-  const models = await getGeminiModelList();
+  // Best-suited models available right now (daily-refreshed; see modelCatalog.js).
+  // Cap how many we try per key: the list can contain a dozen+ live Gemini
+  // models, and with no cap a single rate-limited/hanging model can push the
+  // whole chain past the frontend's 60s axios timeout before we ever fall
+  // back to LLaMA. Top 2 (already sorted best-first) keeps worst case bounded.
+  const models = (await getGeminiModelList()).slice(0, 2);
+
+  // Per-attempt timeout so one slow/hanging model can't eat the whole budget.
+  const GEMINI_ATTEMPT_TIMEOUT_MS = 12000;
+  const withTimeout = (promise, ms, label) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms))
+  ]);
 
   for (const [keyIndex, apiKey] of apiKeys.entries()) {
     for (const modelName of models) {
@@ -463,7 +474,11 @@ export const generateWithGemini = async (prompt) => {
           generationConfig,
           safetySettings
         });
-        const result = await model.generateContent(prompt);
+        const result = await withTimeout(
+          model.generateContent(prompt),
+          GEMINI_ATTEMPT_TIMEOUT_MS,
+          `Gemini ${modelName}`
+        );
         const response = result.response;
 
         // Check if response was blocked by safety filters
@@ -496,6 +511,112 @@ export const generateWithGemini = async (prompt) => {
 
   // If every key/model combination failed, throw the last error
   throw new Error(`All Gemini API keys failed. Last error: ${error?.message || 'Unknown error'}`);
+};
+
+/**
+ * Call Gemini API to generate response as a token stream.
+ * Mirrors generateWithGemini's key/model fallback chain, but calls
+ * generateContentStream(...) and invokes onToken(chunkText) as chunks arrive.
+ * Resolves with the full accumulated text + model name on success.
+ * If a model/key attempt fails BEFORE emitting any tokens, it moves on to the
+ * next one transparently (same as the non-streaming version). If a stream
+ * fails PARTWAY THROUGH (after some tokens were already sent to the client),
+ * we cannot silently retry with a different model — the caller (generateResponse)
+ * is responsible for falling back to LLaMA/static and treating that as
+ * continuation text, since some tokens have already been streamed out.
+ */
+export const generateWithGeminiStream = async (prompt, onToken) => {
+  const apiKeys = config.gemini.apiKeys;
+
+  if (apiKeys.length === 0) {
+    throw new Error('No Gemini API keys configured');
+  }
+
+  const generationConfig = {
+    temperature: config.gemini.temperature,
+    topK: config.gemini.topK,
+    topP: config.gemini.topP,
+    maxOutputTokens: config.gemini.maxTokens
+  };
+
+  const safetySettings = [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  ];
+
+  let error;
+  const models = (await getGeminiModelList()).slice(0, 2);
+  const GEMINI_ATTEMPT_TIMEOUT_MS = 12000;
+
+  for (const [keyIndex, apiKey] of apiKeys.entries()) {
+    for (const modelName of models) {
+      let accumulated = '';
+      let emittedAnyToken = false;
+      try {
+        console.log(`🤖 [stream] Attempting Gemini API Key ${keyIndex + 1} with model: ${modelName}`);
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig,
+          safetySettings
+        });
+
+        // Start the stream, with a timeout guarding only the initial connect —
+        // once chunks start flowing we let them keep flowing rather than
+        // aborting a partially-streamed response.
+        const streamResultPromise = model.generateContentStream(prompt);
+        const streamResult = await Promise.race([
+          streamResultPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`Gemini ${modelName} stream start timed out after ${GEMINI_ATTEMPT_TIMEOUT_MS}ms`)), GEMINI_ATTEMPT_TIMEOUT_MS))
+        ]);
+
+        for await (const chunk of streamResult.stream) {
+          const chunkText = chunk.text();
+          if (chunkText) {
+            accumulated += chunkText;
+            emittedAnyToken = true;
+            onToken(chunkText);
+          }
+        }
+
+        // Confirm the aggregated response wasn't blocked by safety filters
+        const finalResponse = await streamResult.response;
+        if (finalResponse?.promptFeedback?.blockReason && !accumulated) {
+          throw new Error(`Response blocked: ${finalResponse.promptFeedback.blockReason}`);
+        }
+
+        if (!accumulated || accumulated.trim().length === 0) {
+          console.warn(`⚠️ Empty streamed response received from Gemini model: ${modelName}`);
+          throw new Error('Empty response received from Gemini stream');
+        }
+
+        console.log(`✅ Gemini stream completed with ${modelName} (API Key ${keyIndex + 1})`);
+        return {
+          text: accumulated.trim(),
+          model: `gemini-${modelName}`,
+          success: true
+        };
+      } catch (err) {
+        console.warn(`[stream] API Key ${keyIndex + 1} with ${modelName} failed:`, err.message);
+        error = err;
+
+        // If we already streamed some tokens to the client before failing,
+        // we can't pretend this attempt didn't happen — surface it as a
+        // partial-stream error so the caller knows not to re-emit from scratch.
+        if (emittedAnyToken) {
+          const partialErr = new Error(`Gemini stream failed mid-response: ${err.message}`);
+          partialErr.partialText = accumulated;
+          partialErr.isPartialStreamFailure = true;
+          throw partialErr;
+        }
+        // Otherwise fall through and try the next model/key.
+      }
+    }
+  }
+
+  throw new Error(`All Gemini API keys failed (stream). Last error: ${error?.message || 'Unknown error'}`);
 };
 
 /**
@@ -635,6 +756,78 @@ export const generateResponse = async ({ emotion, confidence, context, transcrip
     console.log('📝 Using static fallback response with Indian context awareness...');
     const fallbackResponse = generateFallbackResponse(emotion);
     return fallbackResponse;
+  }
+};
+
+/**
+ * Streaming counterpart to generateResponse, used by the SSE chat endpoint.
+ * Same guardrail + fallback chain (scope-guard -> Gemini -> LLaMA -> static),
+ * but streams Gemini tokens out via onToken(text) as they arrive instead of
+ * waiting for the full response. Non-streaming fallback paths (scope-guard,
+ * LLaMA, static) have no real "streaming" content, so their whole text is
+ * simply passed to onToken once, as one chunk.
+ *
+ * Returns the same shape as generateResponse: { text, model, success, ... }
+ */
+export const generateResponseStream = async ({ emotion, confidence, context, transcript, conversationHistory = [] }, onToken) => {
+  console.log(`💬 [stream] Generating empathetic response for emotion: ${emotion}`);
+
+  // Guardrail: block non-emotional requests
+  const scopeCheck = detectNonEmotionalIntent(transcript, conversationHistory);
+  if (scopeCheck.blocked) {
+    console.log(`🚧 [stream] Message appears outside emotional support scope (category: ${scopeCheck.category}, keyword: ${scopeCheck.keyword})`);
+    const text = buildScopeBoundaryMessage(scopeCheck.category);
+    onToken(text);
+    return {
+      text,
+      model: 'scope-guard',
+      success: true,
+      policyNotice: true,
+      boundaryCategory: scopeCheck.category,
+      boundaryKeyword: scopeCheck.keyword
+    };
+  }
+
+  const prompt = createEmpatheticPrompt(emotion, { confidence, context }, transcript, conversationHistory);
+
+  // Try Gemini streaming first
+  try {
+    const geminiResponse = await generateWithGeminiStream(prompt, onToken);
+    console.log(`✅ [stream] Response generated with Indian context awareness (Gemini)`);
+    return geminiResponse;
+  } catch (geminiError) {
+    console.warn(`⚠️  [stream] Gemini failed: ${geminiError.message}`);
+
+    // If tokens were already streamed to the client before the failure, we
+    // can't cleanly retry as if nothing happened — but we can still append
+    // fallback continuation text as one more token event so the user gets a
+    // complete-feeling response rather than a cut-off one.
+    const alreadyStreamedText = geminiError.isPartialStreamFailure ? (geminiError.partialText || '') : '';
+
+    if (config.llama.enabled) {
+      console.log('🔄 [stream] Attempting LLaMA fallback with Indian context...');
+      try {
+        const llamaResponse = await generateWithLLaMA(prompt);
+        console.log(`✅ [stream] Response generated with Indian context awareness (LLaMA)`);
+        onToken(llamaResponse.text);
+        return {
+          ...llamaResponse,
+          text: alreadyStreamedText + llamaResponse.text
+        };
+      } catch (llamaError) {
+        console.warn(`⚠️  [stream] LLaMA fallback failed: ${llamaError.message}`);
+      }
+    } else {
+      console.log('⚠️  [stream] LLaMA is disabled, skipping fallback...');
+    }
+
+    console.log('📝 [stream] Using static fallback response with Indian context awareness...');
+    const fallbackResponse = generateFallbackResponse(emotion);
+    onToken(fallbackResponse.text);
+    return {
+      ...fallbackResponse,
+      text: alreadyStreamedText + fallbackResponse.text
+    };
   }
 };
 

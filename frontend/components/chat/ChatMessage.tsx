@@ -3,6 +3,9 @@
 import { memo, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Bot, User, Copy, Edit3, RefreshCw } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -120,10 +123,12 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
         ) : (
           <>
-            <p className="whitespace-pre-wrap break-words text-base text-foreground/95 leading-relaxed">
-              {message}
-            </p>
-            
+            <div className="prose prose-sm dark:prose-invert max-w-none break-words text-base text-foreground/95 leading-relaxed [&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:my-2 [&>ol]:my-2 [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:pl-5 [&>ol]:pl-5 [&>li]:mb-1 [&_strong]:font-bold [&_strong]:text-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-sm">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                {message}
+              </ReactMarkdown>
+            </div>
+
             {/* Emotion detected badge - only for user messages */}
             {isUser && emotion && (
               <motion.div

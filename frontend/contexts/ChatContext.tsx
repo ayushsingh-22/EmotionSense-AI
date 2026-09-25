@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { ChatMessage } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { sendChatMessage, regenerateResponse, textToSpeech, createChatSession, hasEmergencyContact } from '@/lib/api';
+import { sendChatMessageStream, regenerateResponse, textToSpeech, createChatSession, hasEmergencyContact } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface ChatContextType {
@@ -181,68 +181,101 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     setIsTyping(true);
 
+    // Add user message to state immediately
+    const now = new Date().toISOString();
+    const userMessage: ChatMessage = {
+      id: `temp_${Date.now()}`,
+      session_id: sessionId!,
+      user_id: user.id,
+      role: 'user',
+      content,
+      message: content,
+      created_at: now,
+    };
+
+    // Placeholder assistant message that fills in progressively as tokens
+    // stream in. Kept in state (with isStreaming: true) so the message list
+    // can render it like any other assistant bubble, just still-in-progress.
+    const assistantMessageId = `ai_${Date.now()}`;
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      session_id: sessionId!,
+      user_id: user.id,
+      role: 'assistant',
+      content: '',
+      message: '',
+      created_at: new Date().toISOString(),
+      isStreaming: true,
+    };
+
+    setMessages(prev => [...prev, userMessage, assistantMessage]);
+
     try {
-      // Add user message to state immediately
-      const now = new Date().toISOString();
-      const userMessage: ChatMessage = {
-        id: `temp_${Date.now()}`,
-        session_id: sessionId!,
-        user_id: user.id,
-        role: 'user',
-        content,
-        message: content,
-        created_at: now,
-      };
+      console.log('🚀 Streaming chat message from backend...');
 
-      setMessages(prev => [...prev, userMessage]);
+      await sendChatMessageStream(content, user.id, sessionId!, false, {
+        onToken: (text) => {
+          setMessages(prev => prev.map(msg =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: msg.content + text, message: (msg.message || '') + text }
+              : msg
+          ));
+        },
+        onDone: (chatResult) => {
+          console.log('✅ Stream done, finalizing messages:', chatResult);
 
-      // Call the chat API that handles everything (emotion analysis + AI response + database save)
-      console.log('🚀 Sending chat message to backend...');
-      const chatResult = await sendChatMessage(content, user.id, sessionId!);
-      console.log('✅ Chat API response received:', chatResult);
+          const updatedUserMessage: ChatMessage = {
+            ...userMessage,
+            id: chatResult.userMessage.id || userMessage.id,
+            emotion: chatResult.userMessage.emotion,
+            emotion_detected: chatResult.userMessage.emotion,
+            emotion_confidence: chatResult.userMessage.confidence,
+            confidence_score: chatResult.userMessage.confidence,
+            metadata: chatResult.userMessage.metadata,
+          };
 
-      // Update user message with emotion data from backend
-      const updatedUserMessage: ChatMessage = {
-        ...userMessage,
-        id: chatResult.userMessage.id || userMessage.id, // Use backend record ID if available
-        emotion: chatResult.userMessage.emotion,
-        emotion_detected: chatResult.userMessage.emotion,
-        emotion_confidence: chatResult.userMessage.confidence,
-        confidence_score: chatResult.userMessage.confidence,
-        metadata: chatResult.userMessage.metadata,
-      };
+          const finalAssistantMessage: ChatMessage = {
+            id: chatResult.aiResponse.id || assistantMessageId,
+            session_id: sessionId!,
+            user_id: user.id,
+            role: 'assistant',
+            content: chatResult.aiResponse.message,
+            message: chatResult.aiResponse.message,
+            emotion: chatResult.userMessage.emotion,
+            emotion_detected: chatResult.userMessage.emotion,
+            emotion_confidence: chatResult.userMessage.confidence,
+            confidence_score: chatResult.userMessage.confidence,
+            metadata: chatResult.aiResponse.metadata,
+            created_at: chatResult.aiResponse.timestamp || new Date().toISOString(),
+            isStreaming: false,
+          };
 
-      // Add assistant response
-      const assistantMessage: ChatMessage = {
-        id: `ai_${Date.now()}`,
-        session_id: sessionId!,
-        user_id: user.id,
-        role: 'assistant',
-        content: chatResult.aiResponse.message,
-        message: chatResult.aiResponse.message,
-        emotion: chatResult.userMessage.emotion,
-        emotion_detected: chatResult.userMessage.emotion,
-        emotion_confidence: chatResult.userMessage.confidence,
-        confidence_score: chatResult.userMessage.confidence,
-        metadata: chatResult.aiResponse.metadata,
-        created_at: new Date().toISOString(),
-      };
-
-      // Update messages with both user (with emotion) and assistant response
-      setMessages(prev => [
-        ...prev.filter(msg => msg.id !== userMessage.id), // Remove temp user message
-        updatedUserMessage, // Add updated user message with emotion
-        assistantMessage // Add AI response
-      ]);
+          setMessages(prev => [
+            ...prev.filter(msg => msg.id !== userMessage.id && msg.id !== assistantMessageId),
+            updatedUserMessage,
+            finalAssistantMessage,
+          ]);
+        },
+        onError: (errorMessage) => {
+          console.error('❌ Streaming error:', errorMessage);
+          // Remove the temp user + in-progress assistant bubbles on failure
+          setMessages(prev => prev.filter(msg => msg.id !== userMessage.id && msg.id !== assistantMessageId));
+          toast({
+            title: 'Error',
+            description: 'Failed to send message. Please try again.',
+            variant: 'destructive',
+          });
+        },
+      });
 
       console.log('✅ Messages updated in frontend state');
 
     } catch (error) {
       console.error('❌ Error sending message:', error);
-      
-      // Remove the temporary user message on error
-      setMessages(prev => prev.filter(msg => msg.id !== `temp_${Date.now()}`));
-      
+
+      // Remove the temporary user + assistant messages on error
+      setMessages(prev => prev.filter(msg => msg.id !== userMessage.id && msg.id !== assistantMessageId));
+
       toast({
         title: 'Error',
         description: 'Failed to send message. Please try again.',

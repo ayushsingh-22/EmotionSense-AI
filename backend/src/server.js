@@ -70,7 +70,17 @@ const createRequiredDirectories = () => {
  */
 const configureMiddleware = () => {
 
-  app.use(compression());
+  // Skip compression for the SSE streaming route: compression buffers output
+  // to build gzip chunks, which defeats real-time token-by-token streaming
+  // (the client would receive nothing until the whole response was ready).
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.path === '/api/chat/message/stream') {
+        return false;
+      }
+      return compression.filter(req, res);
+    }
+  }));
 
   /* ===================== SIMPLE CORS ===================== */
   // CORS_ORIGIN is a comma-separated allow-list, e.g.:

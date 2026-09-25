@@ -10,7 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { analyzeTextEmotion } from '../text-service/index.js';
-import { generateResponse } from '../llm-service/index.js';
+import { generateResponse, generateResponseStream } from '../llm-service/index.js';
 import { generateSpeech } from '../tts-service/index.js';
 import { 
   saveAnalysisResult, 
@@ -426,6 +426,345 @@ router.post('/message', asyncHandler(async (req, res) => {
       error: 'Failed to process chat message',
       details: error.message
     });
+  }
+}));
+
+/**
+ * POST /api/chat/message/stream
+ * Same pipeline as POST /message, but streams the AI reply token-by-token
+ * over Server-Sent Events (SSE) so the user sees text appear incrementally
+ * instead of waiting for the entire ~10-40s LLM round trip.
+ *
+ * Steps 1-6 (language detection/translation, session, history, emotion,
+ * risk/safety-alert, save user message) run exactly as in /message BEFORE
+ * we start streaming. Then the LLM call streams `event: token` frames as
+ * text arrives. Once the stream ends, translation-back, DB save, session
+ * title update, and optional TTS all run, and the full final payload
+ * (matching the shape of POST /message's response.data) is sent as a single
+ * `event: done` frame so the frontend has one code path for final state.
+ *
+ * SSE frame format:
+ *   event: token
+ *   data: {"text": "..."}
+ *
+ *   event: done
+ *   data: { ...same shape as POST /message's `data` field... }
+ *
+ *   event: error
+ *   data: {"error": "..."}
+ *
+ * Request body: identical to POST /message.
+ */
+router.post('/message/stream', asyncHandler(async (req, res) => {
+  const { message, userId, sessionId, includeAudio = false } = req.body;
+
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ success: false, error: 'Message is required and must be a string' });
+  }
+  if (!userId) {
+    return res.status(400).json({ success: false, error: 'User ID is required' });
+  }
+  if (message.trim().length === 0) {
+    return res.status(400).json({ success: false, error: 'Message cannot be empty' });
+  }
+
+  console.log(`💬 [stream] Processing chat message for user: ${userId}`);
+  console.log(`📝 [stream] Message: "${message}"`);
+
+  // Set up SSE headers up front so we can stream errors too, not just success.
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no' // disable proxy buffering (nginx etc.)
+  });
+  // Disable Nagle's algorithm — without this, small SSE frames written in
+  // quick succession can sit in the TCP send buffer instead of going out
+  // immediately, defeating the point of token-by-token streaming.
+  req.socket?.setNoDelay?.(true);
+  res.flushHeaders?.();
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // IMPORTANT: listen on the *response*'s close event, not the request's.
+  // req.on('close') fires as soon as the request body has been fully read
+  // (i.e. almost immediately for a small POST body) — NOT when the client
+  // actually disconnects. Using it here was making clientClosed flip true
+  // right at the start of the handler, silently no-op'ing every sendEvent()
+  // call for the rest of the request. res.on('close') only fires when the
+  // underlying connection is actually torn down (client navigated away,
+  // aborted, etc.), which is what we actually want to guard against.
+  let clientClosed = false;
+  res.on('close', () => { clientClosed = true; });
+
+  try {
+    // Step 1: Language Detection & Translation to English
+    console.log(`🌐 [stream] Detecting language and translating if needed...`);
+    const translationResult = await translateToEnglishIfNeeded(message);
+
+    const {
+      translatedText: englishText,
+      sourceLang: detectedLanguageRaw,
+      needsTranslation,
+      usedFallback: usedTranslationFallback,
+      translationFailed
+    } = translationResult;
+
+    const detectedLanguage = normalizeIndianLanguageCode(detectedLanguageRaw);
+    const isIndianLang = isIndianLanguageSupported(detectedLanguage);
+
+    console.log(`✅ [stream] Language detection: ${detectedLanguageRaw} → ${detectedLanguage}`);
+    console.log(`🇮🇳 [stream] Indian Language: ${getIndianLanguageName(detectedLanguage)} ${isIndianLang ? '✓' : '(defaulted to English)'}`);
+
+    // Step 2: Get or create session
+    let currentSessionId = sessionId;
+    let isNewSession = false;
+
+    if (!currentSessionId) {
+      console.log(`🆕 [stream] Creating new chat session with user message...`);
+      const sessionTitle = message.length > 40 ? message.substring(0, 40).trim() + '...' : message.trim();
+      const newSession = await createChatSession(userId, sessionTitle);
+      currentSessionId = newSession.id;
+      isNewSession = true;
+      console.log(`✅ [stream] Created new session "${sessionTitle}" for first user message`);
+    }
+
+    // Step 3: Get recent messages for context
+    const memoryLength = parseInt(process.env.CHAT_MEMORY_LENGTH || 10);
+    console.log(`🧠 [stream] Fetching last ${memoryLength} messages for context...`);
+    const conversationHistory = await getRecentChatMessages(userId, currentSessionId, memoryLength);
+
+    // Step 4: Analyze emotion from the English text
+    console.log(`🔤 [stream] Analyzing emotion from processed text...`);
+    const emotionResult = await analyzeTextEmotion(englishText);
+    console.log(`✅ [stream] Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
+
+    // Step 4.5: Check for high-risk messages and trigger emergency alert if needed
+    console.log(`🚨 [stream] Checking for high-risk indicators...`);
+    const riskAnalysis = detectRiskLevel(englishText);
+    console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
+
+    if (riskAnalysis.riskLevel) {
+      try {
+        const emergencyContact = await getEmergencyContact(userId);
+        let alertSent = false;
+
+        if (emergencyContact && emergencyContact.notify_enabled) {
+          if (shouldTriggerEmergencyAlert(emotionResult.emotion, riskAnalysis.riskLevel)) {
+            const userProfile = await getUserProfile(userId);
+            let userData = {
+              id: userId,
+              full_name: userProfile?.full_name || userProfile?.name || req.user?.full_name || 'User',
+              email: userProfile?.email || userProfile?.user_email || userProfile?.auth_email || req.user?.email || 'Not available'
+            };
+
+            alertSent = await sendEmergencyAlert(
+              userData,
+              emergencyContact,
+              emotionResult.emotion,
+              englishText,
+              riskAnalysis.riskLevel
+            );
+
+            if (alertSent) {
+              console.log(`✅ [stream] Emergency alert email sent successfully to ${emergencyContact.contact_email}`);
+            } else {
+              console.warn(`⚠️ [stream] Failed to send emergency alert email to ${emergencyContact.contact_email}`);
+            }
+          }
+        }
+
+        await logSafetyAlert(
+          userId,
+          emotionResult.emotion,
+          englishText,
+          emergencyContact?.id || null,
+          alertSent
+        );
+      } catch (alertError) {
+        console.error(`⚠️ [stream] Error handling emergency alert:`, alertError.message);
+      }
+    }
+
+    // Step 5: Save user message to database
+    console.log(`💾 [stream] Saving user message...`);
+    const userMessage = await saveChatMessage(
+      userId,
+      currentSessionId,
+      'user',
+      message,
+      {
+        emotion: emotionResult.emotion,
+        confidence: emotionResult.confidence,
+        detectedLanguage: detectedLanguage,
+        languageName: getLanguageName(detectedLanguage),
+        wasTranslated: needsTranslation,
+        translatedText: needsTranslation ? englishText : null
+      }
+    );
+
+    // Step 6: Stream the AI response token-by-token
+    console.log(`🤖 [stream] Generating AI response with conversation context...`);
+    const llmResponse = await generateResponseStream({
+      emotion: emotionResult.emotion,
+      confidence: emotionResult.confidence,
+      context: {
+        userMessage: englishText,
+        processedText: emotionResult.processedText,
+        originalMessage: message,
+        userLanguage: detectedLanguage
+      },
+      transcript: englishText,
+      conversationHistory: conversationHistory
+    }, (tokenText) => {
+      if (!clientClosed) {
+        sendEvent('token', { text: tokenText });
+      }
+    });
+
+    console.log(`✅ [stream] AI response generated: "${llmResponse.text ? llmResponse.text.substring(0, 100) : 'No response'}..."`);
+
+    if (!llmResponse.text || llmResponse.text.trim().length === 0) {
+      throw new Error('AI response is empty. This may be due to safety filters or API issues.');
+    }
+
+    // Step 7: Translate AI response back to user's language
+    let finalResponse = llmResponse.text;
+    let responseTranslated = false;
+    let responseTranslationFailed = false;
+
+    if (needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown') {
+      console.log(`🔄 [stream] Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
+      try {
+        finalResponse = await translateBackToUserLanguage(llmResponse.text, detectedLanguage);
+        responseTranslated = true;
+      } catch (error) {
+        console.error(`❌ [stream] Failed to translate response back to user language:`, error.message);
+        finalResponse = llmResponse.text;
+        responseTranslationFailed = true;
+      }
+    }
+
+    // Step 8: Save AI response to database
+    console.log(`💾 [stream] Saving AI response...`);
+    const assistantMessage = await saveChatMessage(
+      userId,
+      currentSessionId,
+      'assistant',
+      finalResponse,
+      {
+        originalEnglishText: responseTranslated ? llmResponse.text : null,
+        targetLanguage: detectedLanguage,
+        wasTranslated: responseTranslated,
+        translationFailed: responseTranslationFailed
+      }
+    );
+
+    // Step 8.5: Update session title for new sessions
+    if (isNewSession) {
+      try {
+        const titleText = message.length > 60 ? message.substring(0, 60).trim() + '...' : message.trim();
+        let betterTitle = titleText;
+
+        if (message.trim().length <= 10) {
+          const emotionContext = emotionResult.emotion === 'neutral' ? 'Chat' : `${emotionResult.emotion} conversation`;
+          const languageContext = detectedLanguage !== 'en' ? ` (${getLanguageName(detectedLanguage)})` : '';
+          betterTitle = `${emotionContext}${languageContext}`;
+        }
+
+        await updateChatSessionTitle(userId, currentSessionId, betterTitle);
+        console.log(`✅ [stream] Updated session title to: "${betterTitle}"`);
+      } catch (error) {
+        console.warn(`⚠️ [stream] Failed to update session title:`, error.message);
+      }
+    }
+
+    // Step 9: Generate audio response if requested
+    let audioResponse = null;
+    if (includeAudio && finalResponse) {
+      console.log(`🔊 [stream] Generating audio response...`);
+      try {
+        audioResponse = await generateSpeech(finalResponse);
+        console.log(`✅ [stream] Audio response generated`);
+      } catch (audioError) {
+        console.warn(`⚠️ [stream] Audio generation failed:`, audioError.message);
+      }
+    }
+
+    // Step 10: Build the same shaped payload as POST /message's `data` field
+    const donePayload = {
+      sessionId: currentSessionId,
+      userMessage: {
+        id: userMessage.id,
+        content: userMessage.content || message,
+        message: message,
+        emotion: userMessage.emotion || emotionResult.emotion,
+        emotionConfidence: userMessage.emotion_confidence ?? emotionResult.confidence,
+        confidence: userMessage.emotion_confidence ?? emotionResult.confidence,
+        metadata: userMessage.metadata,
+        audioUrl: userMessage.audio_url,
+        timestamp: userMessage.created_at,
+        detectedLanguage: detectedLanguage,
+        languageName: getLanguageName(detectedLanguage),
+        wasTranslated: needsTranslation,
+        translatedText: needsTranslation ? englishText : null,
+        translationMethod: usedTranslationFallback ? 'gemini_fallback' : 'google_translate'
+      },
+      aiResponse: {
+        id: assistantMessage.id,
+        content: assistantMessage.content || finalResponse,
+        message: finalResponse,
+        model: llmResponse.model,
+        metadata: assistantMessage.metadata,
+        audioUrl: assistantMessage.audio_url,
+        timestamp: assistantMessage.created_at,
+        originalEnglishText: responseTranslated ? llmResponse.text : null,
+        wasTranslated: responseTranslated,
+        translationFailed: responseTranslationFailed,
+        targetLanguage: detectedLanguage
+      },
+      emotion: {
+        detected: emotionResult.emotion,
+        confidence: emotionResult.confidence,
+        scores: emotionResult.scores
+      },
+      language: {
+        detected: detectedLanguage,
+        name: getLanguageName(detectedLanguage),
+        supported: isLanguageSupported(detectedLanguage),
+        inputTranslated: needsTranslation,
+        outputTranslated: responseTranslated,
+        translationFailed: translationFailed || responseTranslationFailed
+      },
+      hasContext: conversationHistory.length > 0,
+      contextLength: conversationHistory.length
+    };
+
+    if (audioResponse) {
+      donePayload.audio = {
+        url: audioResponse.url,
+        duration: audioResponse.duration
+      };
+    }
+
+    console.log(`🎉 [stream] Chat processing completed successfully`);
+    if (!clientClosed) {
+      sendEvent('done', donePayload);
+    }
+    res.end();
+
+  } catch (error) {
+    console.error('❌ [stream] Error processing chat message:', error);
+    if (!clientClosed) {
+      sendEvent('error', {
+        error: 'Failed to process chat message',
+        details: error.message
+      });
+    }
+    res.end();
   }
 }));
 

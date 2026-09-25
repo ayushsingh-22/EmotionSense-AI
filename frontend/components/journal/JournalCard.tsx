@@ -7,7 +7,7 @@ import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Calendar, TrendingUp, Heart } from 'lucide-react';
 import { JournalEntry } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, stripMarkdown } from '@/lib/utils';
 import { getEmotionConfig, getEmotionEmoji } from '@/components/insights/emotionConfig';
 
 interface JournalCardProps {
@@ -66,8 +66,9 @@ export function JournalCard({ journal, onClick }: JournalCardProps) {
   const moodScore = journal.emotion_summary?.mood_score || 50;
   const timeSegments = journal.emotion_summary?.time_segments || [];
 
-  // Extract first line as preview (up to 150 chars)
-  const previewText = journal.content.split('\n').slice(2, 4).join(' ').substring(0, 150) + '...';
+  // Extract first line as preview (up to 150 chars) — strip markdown syntax
+  // first so raw **bold**/list markers don't leak into the plain-text card.
+  const previewText = stripMarkdown(journal.content.split('\n').slice(2, 4).join(' ')).substring(0, 150) + '...';
 
   return (
     <Card

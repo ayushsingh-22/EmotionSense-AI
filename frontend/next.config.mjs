@@ -29,21 +29,6 @@ const nextConfig = {
     serverComponentsExternalPackages: ['@prisma/client', '.prisma/client'],
   },
 
-  // Preload critical fonts
-  headers: async () => {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'Link',
-            value: '</fonts/inter-var.woff2>; rel=preload; as=font; type=font/woff2; crossorigin',
-          },
-        ],
-      },
-    ];
-  },
-
   // Bundle analysis for optimization insights
   webpack: (config, { isServer }) => {
     if (!isServer) {

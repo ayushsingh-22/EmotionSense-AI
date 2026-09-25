@@ -12,7 +12,7 @@ import { ChatSession, ChatMessage } from '@/lib/types';
 import { Search, MessageCircle, Calendar, ChevronRight, Sparkles, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { cn, stripMarkdown } from '@/lib/utils';
 
 import { useRouter } from 'next/navigation';
 import { ChatMessage as ChatMessageComponent } from '@/components/chat/ChatMessage';
@@ -51,9 +51,11 @@ export default function HistoryPage() {
             const sessionMessages = messagesData.messages || [];
             const lastEntry = sessionMessages[sessionMessages.length - 1];
 
+            const rawLastMessage = lastEntry?.message || lastEntry?.content;
+
             return {
               ...session,
-              lastMessage: lastEntry?.message || lastEntry?.content || 'No messages',
+              lastMessage: rawLastMessage ? stripMarkdown(rawLastMessage) : 'No messages',
               messageCount: sessionMessages.length
             };
           } catch (error) {

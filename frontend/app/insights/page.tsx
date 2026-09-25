@@ -5,6 +5,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Activity, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import { 
   getDailyInsights, 
   getWeeklyInsights,
@@ -159,9 +162,11 @@ function CollapsibleWeekCard({ week, index }: { week: WeeklyInsight; index: numb
               {/* Reflection Text */}
               {week.reflection_text && (
                 <div className="bg-muted/30 rounded-lg p-4 border-l-4 border-primary">
-                  <p className="text-sm text-foreground/90 italic">
-                    &quot;{week.reflection_text}&quot;
-                  </p>
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-foreground/90 italic [&>p]:mb-2 [&>p:last-child]:mb-0 [&_strong]:font-bold [&_strong]:text-foreground">
+                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                      {`"${week.reflection_text}"`}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               )}
 

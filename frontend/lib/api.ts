@@ -177,6 +177,103 @@ export const sendChatMessage = async (
 };
 
 /**
+ * Send chat message and consume the streamed SSE response token-by-token.
+ *
+ * Uses `fetch` + `response.body.getReader()` (not `EventSource`, which can't
+ * send POST bodies/custom headers) against POST /api/chat/message/stream.
+ * Frame format sent by the backend:
+ *   event: token   data: {"text": "..."}
+ *   event: done    data: <same shape as sendChatMessage's return value>
+ *   event: error   data: {"error": "...", "details": "..."}
+ *
+ * Callbacks:
+ *   onToken(text)       - called for each incremental chunk of AI reply text
+ *   onDone(result)       - called once with the final ChatMessageResult payload
+ *   onError(message)     - called if the stream reports/ends in an error
+ */
+export const sendChatMessageStream = async (
+  message: string,
+  userId: string,
+  sessionId: string | undefined,
+  includeAudio: boolean,
+  callbacks: {
+    onToken: (text: string) => void;
+    onDone: (result: ChatMessageResult) => void;
+    onError: (message: string) => void;
+  }
+): Promise<void> => {
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+  const response = await fetch(`${baseURL}/api/chat/message/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, userId, sessionId, includeAudio, memoryLength: 10 }),
+  });
+
+  if (!response.ok || !response.body) {
+    callbacks.onError(`Request failed with status ${response.status}`);
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const handleFrame = (rawFrame: string) => {
+    // A frame looks like:
+    //   event: token
+    //   data: {"text":"..."}
+    let eventName = 'message';
+    const dataLines: string[] = [];
+
+    for (const line of rawFrame.split('\n')) {
+      if (line.startsWith('event:')) {
+        eventName = line.slice('event:'.length).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice('data:'.length).trim());
+      }
+    }
+
+    if (dataLines.length === 0) return;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dataLines.join('\n'));
+    } catch {
+      return;
+    }
+
+    if (eventName === 'token') {
+      const text = (parsed as { text?: string })?.text;
+      if (typeof text === 'string') callbacks.onToken(text);
+    } else if (eventName === 'done') {
+      callbacks.onDone(parsed as ChatMessageResult);
+    } else if (eventName === 'error') {
+      const err = parsed as { error?: string; details?: string };
+      callbacks.onError(err.details || err.error || 'Unknown streaming error');
+    }
+  };
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE frames are separated by a blank line ("\n\n")
+    let separatorIndex: number;
+    while ((separatorIndex = buffer.indexOf('\n\n')) !== -1) {
+      const rawFrame = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+      if (rawFrame.trim().length > 0) {
+        handleFrame(rawFrame);
+      }
+    }
+  }
+};
+
+/**
  * Get chat sessions for a user
  */
 export const getChatSessions = async (userId: string) => {

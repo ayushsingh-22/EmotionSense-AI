@@ -85,7 +85,10 @@ export default function ChatPage() {
   useEffect(() => {
     const extendedMessages: ExtendedChatMessage[] = messages.map(msg => ({
       ...msg,
-      isLoading: false,
+      // Show typing dots only until the first token arrives; once streamed
+      // text starts filling in, isStreaming stays true but there's content
+      // to render instead of the placeholder dots.
+      isLoading: Boolean(msg.isStreaming) && !(msg.content || msg.message),
       hasContext: false,
       contextLength: 0,
       editedFrom: null,
@@ -345,14 +348,6 @@ export default function ChatPage() {
               isHighlighted={editingState?.messageId === message.id}
             />
           ))}
-          {isLoading && (
-            <ChatMessage
-              id="typing"
-              message=""
-              role="assistant"
-              isLoading
-            />
-          )}
           <div ref={messagesEndRef} />
         </div>
       )}

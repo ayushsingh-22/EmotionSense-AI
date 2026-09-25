@@ -56,4 +56,7 @@ export interface ChatMessage {
   message?: string;
   emotion_detected?: string | null;
   confidence_score?: number | null;
+  // True while an assistant message is still receiving streamed tokens.
+  // Absent/false once the reply is finalized.
+  isStreaming?: boolean;
 }

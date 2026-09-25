@@ -5,6 +5,9 @@ import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Copy, Volume2, RefreshCw, Check } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import { useToast } from '@/hooks/use-toast';
 import { regenerateResponse, textToSpeech } from '@/lib/api';
 
@@ -140,10 +143,10 @@ export function AIResponseBox({ response, emotion, context }: AIResponseBoxProps
             </div>
           </div>
 
-          <div className="prose dark:prose-invert max-w-none">
-            <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+          <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed text-muted-foreground [&>p]:mb-2 [&>p:last-child]:mb-0 [&_strong]:font-bold [&_strong]:text-foreground">
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
               {currentResponse}
-            </p>
+            </ReactMarkdown>
           </div>
         </div>
       </Card>

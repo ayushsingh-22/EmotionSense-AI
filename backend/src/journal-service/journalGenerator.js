@@ -422,7 +422,7 @@ Generate EXACTLY this 7-section format with bold markdown headings (**text:**):
 
 **Emotions / Mood Check**
 Primary: ${emotionSummary.primaryEmoji} ${emotionSummary.primaryEmotion}
-Mood Score: ${emotionSummary.moodScore}/10
+Mood Score: ${emotionSummary.moodScore}/100
 Pattern: [1-2 sentences describing how emotions evolved through the day - was there a shift? What triggered different feelings?]
 
 **Insights / Takeaways**

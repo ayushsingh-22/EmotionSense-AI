@@ -14,6 +14,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { WeeklyArcChart } from './WeeklyArcChart';
 import { getEmotionConfig, getEmotionEmoji } from './emotionConfig';
 import type { WeeklyInsight, KeyHighlight } from '@/lib/insightsApi';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 
 interface WeeklyViewProps {
   insights: WeeklyInsight[];
@@ -163,9 +166,11 @@ const CollapsibleWeekCard = React.memo(React.forwardRef<HTMLDivElement, Collapsi
                     <h4 className="text-xs font-semibold text-primary mb-2 uppercase tracking-wider">
                       Weekly Reflection
                     </h4>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      {insight.reflection_text}
-                    </p>
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed text-muted-foreground [&>p]:mb-2 [&>p:last-child]:mb-0 [&_strong]:font-bold [&_strong]:text-foreground">
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                        {insight.reflection_text}
+                      </ReactMarkdown>
+                    </div>
                   </motion.div>
                 )}
 
