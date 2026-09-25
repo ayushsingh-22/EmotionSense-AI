@@ -6,6 +6,7 @@ import { BarChart3, TrendingUp, Filter } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { EMOTION_CONFIG } from '@/types';
 import type { EmotionHistoryMessage } from '@/lib/types';
+import { normalizeEmotion, getDominantEmotion } from '@/lib/emotionScoring';
 import {
   Select,
   SelectContent,
@@ -111,19 +112,25 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
         messagesByDate[dateKey].push(msg);
       });
 
-      // Create timeline data
+      // Create timeline data — normalize labels first (e.g. "happy" -> "joy")
+      // so variant raw model outputs don't split votes or fail to map to an
+      // emoji/color, then pick the dominant emotion by confidence-weighted
+      // vote (not raw frequency) — matching Insights/Journal's algorithm so
+      // the same day's data can't disagree between screens.
       const timelineData = Object.entries(messagesByDate)
         .map(([date, msgs]) => {
           const emotionCounts: { [key: string]: number } = {};
           let totalConfidence = 0;
 
           msgs.forEach((msg) => {
-            const emotion = msg.emotion;
+            const emotion = normalizeEmotion(msg.emotion);
             emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
             totalConfidence += msg.emotion_confidence || 0;
           });
 
-          const dominantEmotion = Object.entries(emotionCounts).sort(([, a], [, b]) => b - a)[0]?.[0] || 'neutral';
+          const dominantEmotion = getDominantEmotion(
+            msgs.map((msg) => ({ emotion: msg.emotion, confidence: msg.emotion_confidence }))
+          );
 
           return {
             date,
@@ -137,7 +144,7 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
       // Calculate emotion breakdown
       const emotionCounts: { [key: string]: { count: number; totalConfidence: number } } = {};
       messages.forEach((msg) => {
-        const emotion = msg.emotion;
+        const emotion = normalizeEmotion(msg.emotion);
         if (!emotionCounts[emotion]) {
           emotionCounts[emotion] = { count: 0, totalConfidence: 0 };
         }
@@ -157,12 +164,16 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
       const averageConfidence =
         messages.reduce((sum, msg) => sum + (msg.emotion_confidence || 0), 0) / messages.length;
 
+      const mostFrequentEmotion = getDominantEmotion(
+        messages.map((msg) => ({ emotion: msg.emotion, confidence: msg.emotion_confidence }))
+      );
+
       const firstMessageDate = messages.length > 0 ? new Date(messages[messages.length - 1].created_at) : null;
 
       setData({
         totalSessions: messages.length,
         averageConfidence,
-        mostFrequentEmotion: emotionBreakdown[0]?.emotion || 'neutral',
+        mostFrequentEmotion,
         emotionBreakdown,
         timelineData,
         dateRange: {
@@ -186,7 +197,8 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
   };
 
   const getEmotionEmoji = (emotion: string) => {
-    return EMOTION_CONFIG[emotion as keyof typeof EMOTION_CONFIG]?.emoji || '😐';
+    const normalized = normalizeEmotion(emotion);
+    return EMOTION_CONFIG[normalized as keyof typeof EMOTION_CONFIG]?.emoji || '😐';
   };
 
   return (

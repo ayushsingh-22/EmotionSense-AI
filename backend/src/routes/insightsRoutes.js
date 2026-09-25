@@ -449,35 +449,27 @@ router.get("/daily", async (req, res) => {
               `✅ Using journal data for ${date}: ${dominantEmotion}, mood: ${moodScore}`
             );
           } else {
-            // FALLBACK: Calculate from activities if no journal exists
+            // FALLBACK: no journal exists yet for this date (e.g. today,
+            // before the nightly cron or a manual generate has run) — use
+            // the SAME canonical computation Journal generation itself uses
+            // (unifiedEmotionService, over user messages only), instead of a
+            // separate master_user_activity-based calculation. That older
+            // fallback counted raw (unweighted, unnormalized) emotion_data
+            // frequency across ALL activities including assistant replies
+            // (which default to "neutral" when untagged) — diluting the
+            // result toward "neutral" and picking a different dominant
+            // emotion than Journal would for the identical day.
             logger.info(
-              `⚠️ No journal for ${date}, calculating from activities`
+              `⚠️ No journal for ${date}, calculating from messages (unified)`
             );
 
-            const insights = await masterActivityService.getEmotionInsights(
-              userId,
-              date,
-              date
-            );
-            dominantEmotion = unifiedEmotion.normalizeEmotion(
-              insights.dominantEmotion || "neutral"
-            );
-            emotionCounts = insights.emotionDistribution || {};
-            timeSegments = generateTimeSegments(dailyMap[date] || []);
-
-            // Calculate mood score from activities
-            const activities = dailyMap[date] || [];
-            const emotionList = activities
-              .map((a) => ({
-                emotion: a.emotion_data?.emotion || a.primary_emotion,
-                confidence:
-                  a.emotion_data?.confidence ||
-                  a.emotion_data?.emotion_confidence ||
-                  a.confidence,
-              }))
-              .filter((e) => e.emotion);
-
-            moodScore = unifiedEmotion.calculateAverageMoodScore(emotionList);
+            const summary = await unifiedEmotion.getDailyEmotionSummary(userId, date);
+            dominantEmotion = summary.dominantEmotion;
+            emotionCounts = summary.emotionCounts || {};
+            moodScore = summary.moodScore;
+            timeSegments = summary.timeSegments?.length
+              ? summary.timeSegments
+              : generateTimeSegments(dailyMap[date] || []);
           }
 
           // Generate journal text
@@ -544,25 +536,14 @@ router.get("/daily", async (req, res) => {
               `✅ Fallback using journal data for ${date}: ${dominantEmotion}`
             );
           } else {
-            // Calculate from activities
-            dominantEmotion =
-              Object.entries(emotions).sort(([, a], [, b]) => b - a)[0]?.[0] ||
-              "neutral";
-            dominantEmotion = unifiedEmotion.normalizeEmotion(dominantEmotion);
-
-            const emotionList = dayActivities
-              .map((a) => ({
-                emotion: a.emotion_data?.emotion || a.primary_emotion,
-                confidence:
-                  a.emotion_data?.confidence ||
-                  a.emotion_data?.emotion_confidence ||
-                  a.confidence,
-              }))
-              .filter((e) => e.emotion);
-
-            moodScore = unifiedEmotion.calculateAverageMoodScore(emotionList);
+            // Same canonical computation as the primary path above and as
+            // Journal generation — see comment there for why this replaces
+            // the old master_user_activity-based calculation.
+            const summary = await unifiedEmotion.getDailyEmotionSummary(userId, date);
+            dominantEmotion = summary.dominantEmotion;
+            moodScore = summary.moodScore;
             logger.info(
-              `⚠️ Fallback calculating from activities for ${date}: ${dominantEmotion}`
+              `⚠️ Fallback (unified) calculating from messages for ${date}: ${dominantEmotion}`
             );
           }
 
@@ -661,30 +642,38 @@ router.get("/weekly", async (req, res) => {
 
         // Calculate weekly summary and daily arc
         const emotions = {};
-        let totalMoodScore = 0;
-        let moodCount = 0;
 
-        // Group activities by day for daily arc
+        // Group ALL activities by day for the daily arc — previously this
+        // grouping only included activities with emotion_data.emotion set,
+        // while total_activities below counts every activity unconditionally.
+        // Any activity missing emotion_data (partial/legacy rows, or any
+        // write path that doesn't tag emotion) made active_days silently
+        // collapse to 0 while total_activities stayed real — exactly the
+        // "21 activities, 0 active days, quiet week" contradiction reported.
+        // "Is this day active" and "what's the day's mood" are now tracked
+        // separately: every activity counts toward activity_count/active_days;
+        // only user-authored, emotion-tagged ones feed the mood computation
+        // (assistant replies default to "neutral" when untagged and would
+        // otherwise dilute the real, user-felt mood toward neutral).
         const dailyActivities = {};
 
         weekActivities.forEach((activity) => {
-          if (activity.emotion_data?.emotion) {
-            const emotion = activity.emotion_data.emotion;
-            emotions[emotion] = (emotions[emotion] || 0) + 1;
+          const activityDate = DateTime.fromISO(activity.created_at).toFormat(
+            "yyyy-MM-dd"
+          );
+          if (!dailyActivities[activityDate]) {
+            dailyActivities[activityDate] = [];
+          }
+          dailyActivities[activityDate].push(activity);
 
-            if (activity.emotion_data.confidence) {
-              totalMoodScore += activity.emotion_data.confidence * 100;
-              moodCount++;
-            }
-
-            // Group by day for daily arc
-            const activityDate = DateTime.fromISO(activity.created_at).toFormat(
-              "yyyy-MM-dd"
+          if (
+            activity.activity_type === "chat_message" &&
+            activity.emotion_data?.emotion
+          ) {
+            const emotion = unifiedEmotion.normalizeEmotion(
+              activity.emotion_data.emotion
             );
-            if (!dailyActivities[activityDate]) {
-              dailyActivities[activityDate] = [];
-            }
-            dailyActivities[activityDate].push(activity);
+            emotions[emotion] = (emotions[emotion] || 0) + 1;
           }
         });
 
@@ -695,55 +684,40 @@ router.get("/weekly", async (req, res) => {
           const dateKey = currentDay.toFormat("yyyy-MM-dd");
           const dayActivities = dailyActivities[dateKey] || [];
 
-          if (dayActivities.length > 0) {
-            // Calculate average mood score for this day - prioritize journal entry for consistency
-            let avgDayMoodScore;
-            let dominantDayEmotion;
+          // "Has activity" (any type) vs "has mood data" (user-authored,
+          // emotion-tagged) are different questions — a day with only
+          // assistant replies is active but has no user mood to report.
+          const journalEntry = journalEntries?.find((j) => j.date === dateKey);
+          let avgDayMoodScore = null;
+          let dominantDayEmotion = "neutral";
+          let hasMoodData = false;
 
-            // Check if journal entry exists for this day
-            const journalEntry = journalEntries?.find(
-              (j) => j.date === dateKey
-            );
-            if (journalEntry?.emotion_summary?.mood_score) {
-              avgDayMoodScore = journalEntry.emotion_summary.mood_score;
-              dominantDayEmotion =
-                journalEntry.emotion ||
-                journalEntry.emotion_summary?.dominant_emotion ||
-                "neutral";
-            } else {
-              // Fallback: Calculate from activities using unified service
-              const emotionList = dayActivities
-                .map((a) => ({
-                  emotion: a.emotion_data?.emotion,
-                  confidence:
-                    a.emotion_data?.confidence ||
-                    a.emotion_data?.emotion_confidence,
-                }))
-                .filter((e) => e.emotion);
-
-              avgDayMoodScore =
-                unifiedEmotion.calculateAverageMoodScore(emotionList);
-              dominantDayEmotion =
-                unifiedEmotion.getDominantEmotion(emotionList);
-            }
-
-            dailyArc.push({
-              date: dateKey,
-              emotion: dominantDayEmotion,
-              mood_score: avgDayMoodScore,
-              activity_count: dayActivities.length,
-              has_data: true,
-            });
+          if (journalEntry?.emotion_summary?.mood_score) {
+            avgDayMoodScore = journalEntry.emotion_summary.mood_score;
+            dominantDayEmotion =
+              journalEntry.emotion ||
+              journalEntry.emotion_summary?.dominant_emotion ||
+              "neutral";
+            hasMoodData = true;
           } else {
-            // No activities for this day - mark as no data available
-            dailyArc.push({
-              date: dateKey,
-              emotion: "neutral",
-              mood_score: null, // null indicates no data available
-              activity_count: 0,
-              has_data: false,
-            });
+            // Same canonical computation as Insights-daily and Journal
+            // generation (unifiedEmotionService, user messages only) —
+            // guarantees this matches what Journal would show for this date.
+            const summary = await unifiedEmotion.getDailyEmotionSummary(userId, dateKey);
+            if (summary.messageCount > 0) {
+              avgDayMoodScore = summary.moodScore;
+              dominantDayEmotion = summary.dominantEmotion;
+              hasMoodData = true;
+            }
           }
+
+          dailyArc.push({
+            date: dateKey,
+            emotion: dominantDayEmotion,
+            mood_score: avgDayMoodScore,
+            activity_count: dayActivities.length,
+            has_data: hasMoodData,
+          });
         }
 
         // Calculate weekly dominant emotion and mood score
@@ -780,18 +754,21 @@ router.get("/weekly", async (req, res) => {
             avgMoodScore = Math.round(totalJournalMood / journalCount);
           }
         } else {
-          // FALLBACK: Use activities if no journals
-          dominantEmotion = Object.entries(emotions)
-            .sort(([, a], [, b]) => b - a)[0]?.[0] || 'neutral';
-
-          // Calculate weekly average mood score using unified service
+          // FALLBACK: use activities if no journals — user-authored only
+          // (assistant replies default to "neutral" when untagged and would
+          // dilute this toward neutral), confidence-weighted the same way
+          // getDominantEmotion computes it everywhere else (previously this
+          // picked the raw most-frequent label, unweighted).
           const weeklyEmotionList = weekActivities
+            .filter((a) => a.activity_type === "chat_message")
             .map((a) => ({
               emotion: a.emotion_data?.emotion,
               confidence:
                 a.emotion_data?.confidence || a.emotion_data?.emotion_confidence,
             }))
             .filter((e) => e.emotion);
+
+          dominantEmotion = unifiedEmotion.getDominantEmotion(weeklyEmotionList);
 
           avgMoodScore = unifiedEmotion.calculateAverageMoodScore(weeklyEmotionList);
         }

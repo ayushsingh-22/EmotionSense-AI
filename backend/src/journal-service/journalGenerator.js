@@ -263,26 +263,33 @@ class JournalGenerator {
   aggregateEmotions(messages) {
     const emotionCounts = {};
     const emotionList = [];
-    
+
     messages.forEach(msg => {
       if (msg.emotion) {
-        const emotion = msg.emotion.toLowerCase();
+        // Normalize BEFORE counting/collecting — otherwise variant raw labels
+        // (e.g. "happy" vs "joy") split votes instead of merging, and the
+        // dominant-emotion pick below would disagree with any other consumer
+        // (e.g. Insights) that normalizes first.
+        const emotion = unifiedEmotion.normalizeEmotion(msg.emotion);
         emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
-        
+
         emotionList.push({
           emotion: emotion,
           confidence: msg.emotion_confidence || 0.5
         });
       }
     });
-    
-    // Find primary emotion (NORMALIZE LABEL)
-    const rawPrimary = Object.entries(emotionCounts)
-      .sort(([, a], [, b]) => b - a)[0]?.[0] || 'neutral';
-    const primaryEmotion = unifiedEmotion.normalizeEmotion(rawPrimary);
-    
+
+    // Confidence-weighted dominant emotion — same algorithm (and now the same
+    // normalized input) as unifiedEmotionService.getDominantEmotion, used by
+    // Insights. Previously this picked the RAW most-frequent label (unweighted,
+    // normalized only after the fact), which could pick a different emotion
+    // than the mood score below implies, and could disagree with Insights for
+    // the same day's data.
+    const primaryEmotion = unifiedEmotion.getDominantEmotion(emotionList);
+
     const primaryEmoji = this.emotionEmojis[primaryEmotion] || '😐';
-    
+
     // Calculate mood score using unified service (consistent with insights)
     // This uses valence (happy=high, sad=low) instead of just confidence
     const moodScore = unifiedEmotion.calculateAverageMoodScore(emotionList);

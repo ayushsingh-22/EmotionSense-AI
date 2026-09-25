@@ -267,11 +267,16 @@ export async function getDailyEmotionSummary(userId, date) {
       };
     }
 
-    // Calculate emotion counts
+    // Calculate emotion counts — normalize labels first (e.g. "happy" and
+    // "joy" must merge into one bucket), otherwise this distribution can show
+    // different buckets than the normalized dominantEmotion/moodScore below,
+    // which is exactly the kind of mismatch that made different screens of
+    // the app disagree about the same day's mood.
     const emotionCounts = {};
     messages.forEach(m => {
       if (m.emotion) {
-        emotionCounts[m.emotion] = (emotionCounts[m.emotion] || 0) + 1;
+        const normalized = normalizeEmotion(m.emotion);
+        emotionCounts[normalized] = (emotionCounts[normalized] || 0) + 1;
       }
     });
 

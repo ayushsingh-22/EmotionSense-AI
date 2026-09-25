@@ -16,7 +16,12 @@ const normalizeActivityRow = (row) => {
     emotion_data: row.emotionData ?? {},
     metadata: row.metadata ?? {},
     local_date: row.localDate,
-    created_at: row.createdAt
+    // Serialize to an ISO string — Prisma returns a native Date object here,
+    // but every consumer (e.g. insightsRoutes.js's DateTime.fromISO calls)
+    // expects a string, matching what the pre-Prisma Supabase client used to
+    // return. Passing a Date object to DateTime.fromISO silently produces an
+    // Invalid DateTime, breaking date-keyed grouping without ever throwing.
+    created_at: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt
   };
 };
 

@@ -7,15 +7,37 @@
   - Environments: .env.local
 
  [32m[1m✓[22m[39m Starting...
- [32m[1m✓[22m[39m Ready in 3.3s
- [37m[1m○[22m[39m Compiling /api/auth/register ...
- [32m[1m✓[22m[39m Compiled /api/auth/register in 1268ms (62 modules)
- POST /api/auth/register [32m201[39m in 3949ms
+ [32m[1m✓[22m[39m Ready in 2.1s
  [37m[1m○[22m[39m Compiling /api/auth/[...nextauth] ...
- [32m[1m✓[22m[39m Compiled /api/auth/[...nextauth] in 2.6s (386 modules)
- GET /api/auth/csrf [32m200[39m in 3794ms
- POST /api/auth/callback/credentials [32m200[39m in 435ms
- GET /api/auth/session [32m200[39m in 18ms
- [32m[1m✓[22m[39m Compiled /api/account in 173ms (388 modules)
- DELETE /api/account [32m200[39m in 660ms
-[31mprisma:error[39m Error in PostgreSQL connection: Error { kind: Closed, cause: None }
+ [32m[1m✓[22m[39m Compiled /api/auth/[...nextauth] in 629ms (360 modules)
+ GET /api/auth/session [32m200[39m in 1345ms
+ [37m[1m○[22m[39m Compiling /journal ...
+ [32m[1m✓[22m[39m Compiled /journal in 4s (1949 modules)
+ GET /journal [32m200[39m in 4840ms
+ [37m[1m○[22m[39m Compiling /profile ...
+ [32m[1m✓[22m[39m Compiled /profile in 6.3s (4205 modules)
+ GET /api/auth/session [32m200[39m in 5310ms
+ GET /fonts/inter-var.woff2 [33m404[39m in 6058ms
+ GET /chat [32m200[39m in 5719ms
+ GET /profile [32m200[39m in 5668ms
+ GET /api/auth/session [32m200[39m in 51ms
+ GET /chat [32m200[39m in 101ms
+ [37m[1m○[22m[39m Compiling /favicon.ico ...
+ [32m[1m✓[22m[39m Compiled /favicon.ico in 1243ms (4235 modules)
+ [32m[1m✓[22m[39m Compiled in 1ms (2350 modules)
+ GET /api/auth/session [32m200[39m in 1861ms
+ GET /chat [32m200[39m in 1116ms
+ [37m[1m○[22m[39m Compiling /api/profile ...
+ [32m[1m✓[22m[39m Compiled /api/profile in 1227ms (4258 modules)
+ [32m[1m✓[22m[39m Compiled in 0ms (2373 modules)
+ GET /favicon.ico [32m200[39m in 3478ms
+ [32m[1m✓[22m[39m Compiled in 1ms (2373 modules)
+ GET /api/auth/session [32m200[39m in 2922ms
+ GET /api/auth/session [32m200[39m in 13ms
+ [37m[1m○[22m[39m Compiling /insights ...
+ [32m[1m✓[22m[39m Compiled /insights in 787ms (4294 modules)
+ GET /api/profile [32m200[39m in 5423ms
+ [37m[1m○[22m[39m Compiling /journal/calendar ...
+ [32m[1m✓[22m[39m Compiled /journal/calendar in 1343ms (4306 modules)
+ [37m[1m○[22m[39m Compiling /history ...
+ [32m[1m✓[22m[39m Compiled /history in 849ms (4316 modules)
