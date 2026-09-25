@@ -472,7 +472,7 @@ Now generate the meaningful, insightful journal for ${formattedDate}.`;
         // Validate format
         if (this.validateJournalFormat(text)) {
           logger.info('✅ Gemini generated valid journal');
-          return text;
+          return this.fixMoodScoreLine(text, emotionSummary.moodScore);
         } else {
           logger.warn('⚠️ Gemini output invalid format, trying Groq...');
         }
@@ -512,7 +512,7 @@ Now generate the meaningful, insightful journal for ${formattedDate}.`;
         }
         
         logger.info('✅ Groq generated journal');
-        return text;
+        return this.fixMoodScoreLine(text, emotionSummary.moodScore);
         
       } catch (groqError) {
         logger.error(`❌ Groq error: ${groqError.message}`);
@@ -525,6 +525,17 @@ Now generate the meaningful, insightful journal for ${formattedDate}.`;
     }
   }
   
+  /**
+   * The LLM is asked to copy "Mood Score: X/100" verbatim into the journal
+   * body, but since it's free-form generation (not a template substitution),
+   * it sometimes rewrites the denominator (e.g. "62/10" instead of "62/100").
+   * We already know the true score from emotionSummary, so force-correct the
+   * line after generation rather than trust the LLM to transcribe it exactly.
+   */
+  fixMoodScoreLine(text, moodScore) {
+    return text.replace(/Mood Score:\s*[\d.]+\s*\/\s*\d+/i, `Mood Score: ${moodScore}/100`);
+  }
+
   /**
    * Validate journal format matches requirements
    */
