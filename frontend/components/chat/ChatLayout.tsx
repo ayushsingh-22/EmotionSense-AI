@@ -135,19 +135,9 @@ export function ChatLayout({
     return effectiveCollapsed ? 60 : 280;
   }, [isMobile, mobileSidebarOpen, effectiveCollapsed]);
 
-  // ---------------------
-  // AUTO-SCROLL TO BOTTOM (ChatGPT behavior)
-  // ---------------------
-  useEffect(() => {
-    const scroller = scrollRef.current;
-    if (!scroller) return;
-
-    // Smooth scroll like ChatGPT
-    scroller.scrollTo({
-      top: scroller.scrollHeight,
-      behavior: 'smooth',
-    });
-  }, [children, scrollRef]);
+  // Auto-scroll is owned by the page (it tracks whether the user is already
+  // near the bottom before following new messages) — duplicating it here
+  // fought that logic and yanked the view down while reading older messages.
 
   return (
     <div
@@ -231,7 +221,7 @@ export function ChatLayout({
       ------------------------------ */}
       <div className="flex min-w-0 flex-1 flex-col">
         {header && (
-          <div className="flex items-center justify-between border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur">
+          <div className="flex items-center justify-between bg-background/95 px-4 py-2.5 backdrop-blur">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <Button
                 variant="ghost"
@@ -266,15 +256,17 @@ export function ChatLayout({
             onScroll={onContentScroll}
             className="flex-1 min-h-0 overflow-y-auto px-2 py-4 sm:px-4 md:px-6"
           >
-            <div className="mx-auto max-w-3xl flex flex-col space-y-4">
+            <div className="mx-auto max-w-3xl flex flex-col space-y-6">
               {children}
             </div>
           </div>
 
           {/* -----------------------------
-              INPUT BAR (STICKY)
+              INPUT BAR — fade instead of a hard border so the
+              transition into the composer feels soft, not boxed
           ------------------------------ */}
-          <div className="border-t border-border/60 bg-background/95 px-3 py-4 backdrop-blur">
+          <div className="relative px-3 pb-4 pt-2">
+            <div className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-background to-transparent" />
             <div className="mx-auto max-w-3xl">{input}</div>
           </div>
         </div>

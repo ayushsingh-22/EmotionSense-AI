@@ -2,7 +2,8 @@
 
 import { memo, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Bot, User, Copy, Edit3, RefreshCw } from 'lucide-react';
+import { Sparkles, Copy, Edit3, RefreshCw, Check } from 'lucide-react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -28,8 +29,20 @@ interface ChatMessageProps {
 }
 
 const messageVariants = {
-  initial: { opacity: 0, y: 10 },
+  initial: { opacity: 0, y: 6 },
   animate: { opacity: 1, y: 0 },
+};
+
+// One calm dot colour per emotion instead of a gradient badge — informative
+// without competing for attention with the message text.
+const EMOTION_DOT: Record<string, string> = {
+  joy: 'bg-amber-400',
+  sadness: 'bg-blue-400',
+  anger: 'bg-red-400',
+  fear: 'bg-purple-400',
+  surprise: 'bg-pink-400',
+  disgust: 'bg-green-400',
+  neutral: 'bg-gray-400',
 };
 
 export const ChatMessage = memo(function ChatMessage({
@@ -47,10 +60,13 @@ export const ChatMessage = memo(function ChatMessage({
   confidence,
 }: ChatMessageProps) {
   const isUser = role === 'user';
+  const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     } catch (error) {
       console.error('Failed to copy message', error);
     }
@@ -64,176 +80,117 @@ export const ChatMessage = memo(function ChatMessage({
     });
   }, [timestamp]);
 
+  const emotionKey = emotion?.toLowerCase();
+  const emotionDot = (emotionKey && EMOTION_DOT[emotionKey]) || 'bg-muted-foreground/50';
+
   return (
     <motion.div
       variants={messageVariants}
       initial="initial"
       animate="animate"
-      layout
+      layout="position"
       className={cn(
-        'group relative flex w-full gap-4',
+        'group relative flex w-full items-start gap-3',
         isUser ? 'justify-end' : 'justify-start'
       )}
     >
       {!isUser && (
-        <motion.div 
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary/80 to-primary/60 text-primary-foreground shadow-lg"
-          whileHover={{ scale: 1.1, rotate: 5 }}
-          animate={{
-            boxShadow: [
-              '0 0 20px rgba(168, 85, 247, 0.3)',
-              '0 0 30px rgba(168, 85, 247, 0.5)',
-              '0 0 20px rgba(168, 85, 247, 0.3)',
-            ],
-          }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          <Bot className="h-5 w-5" />
-        </motion.div>
+        <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Sparkles className="h-3.5 w-3.5" />
+        </div>
       )}
 
-      <motion.div
+      <div
         className={cn(
-          'max-w-2xl space-y-2 rounded-3xl border-2 px-5 py-4 text-sm leading-relaxed shadow-xl backdrop-blur-sm transition-all duration-300',
-          isUser 
-            ? 'bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 text-foreground border-blue-400/40 shadow-blue-500/20' 
-            : 'bg-background/95 border-border/60 shadow-purple-500/10',
-          isHighlighted && 'ring-4 ring-primary/40 shadow-2xl',
-          'hover:shadow-2xl'
+          'flex min-w-0 max-w-[85%] flex-col gap-1.5 sm:max-w-[75%] lg:max-w-2xl',
+          isUser ? 'items-end' : 'items-start'
         )}
-        whileHover={{ scale: 1.01 }}
       >
-        {isLoading ? (
-          <div className="flex items-center gap-3 text-muted-foreground py-2">
-            <motion.span 
-              className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-primary to-purple-600" 
-              animate={{ opacity: 1 }}
-              transition={{ duration: 1, repeat: Infinity, repeatType: "reverse", delay: 0 }}
-            />
-            <motion.span 
-              className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-primary to-purple-600" 
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, repeat: Infinity, repeatType: "reverse", delay: 0.2 }}
-            />
-            <motion.span 
-              className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-primary to-purple-600" 
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, repeat: Infinity, repeatType: "reverse", delay: 0.4 }}
-            />
-          </div>
-        ) : (
-          <>
-            <div className="prose prose-sm dark:prose-invert max-w-none break-words text-base text-foreground/95 leading-relaxed [&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:my-2 [&>ol]:my-2 [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:pl-5 [&>ol]:pl-5 [&>li]:mb-1 [&_strong]:font-bold [&_strong]:text-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-sm">
+        <div
+          className={cn(
+            'min-w-0 text-[15px] leading-7 transition-shadow',
+            isUser
+              ? 'rounded-3xl rounded-tr-lg bg-muted px-4 py-2.5 text-foreground'
+              : 'px-0 py-0 text-foreground',
+            isHighlighted && 'ring-2 ring-primary/40 rounded-2xl'
+          )}
+        >
+          {isLoading ? (
+            <div className="flex items-center gap-1.5 py-1.5">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:0ms]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/60 [animation-delay:300ms]" />
+            </div>
+          ) : (
+            <div className="prose prose-sm dark:prose-invert max-w-none break-words [&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:my-2 [&>ol]:my-2 [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:pl-5 [&>ol]:pl-5 [&>li]:mb-1 [&_strong]:font-semibold [&_strong]:text-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-sm">
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
                 {message}
               </ReactMarkdown>
             </div>
-
-            {/* Emotion detected badge - only for user messages */}
-            {isUser && emotion && (
-              <motion.div
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="mt-3 pt-3 border-t border-border/30"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium">Emotion Detected:</span>
-                  <div className={cn(
-                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold",
-                    emotion.toLowerCase() === 'joy' && "bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 border border-amber-300/50",
-                    emotion.toLowerCase() === 'sadness' && "bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border border-blue-300/50",
-                    emotion.toLowerCase() === 'anger' && "bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border border-red-300/50",
-                    emotion.toLowerCase() === 'fear' && "bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 border border-purple-300/50",
-                    emotion.toLowerCase() === 'surprise' && "bg-gradient-to-r from-pink-100 to-fuchsia-100 text-pink-700 border border-pink-300/50",
-                    emotion.toLowerCase() === 'disgust' && "bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-300/50",
-                    emotion.toLowerCase() === 'neutral' && "bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700 border border-gray-300/50",
-                    !['joy', 'sadness', 'anger', 'fear', 'surprise', 'disgust', 'neutral'].includes(emotion.toLowerCase()) && "bg-muted text-muted-foreground border border-border"
-                  )}>
-                    <span className="text-sm">
-                      {emotion.toLowerCase() === 'joy' && '😀'}
-                      {emotion.toLowerCase() === 'sadness' && '😭'}
-                      {emotion.toLowerCase() === 'anger' && '🤬'}
-                      {emotion.toLowerCase() === 'fear' && '😨'}
-                      {emotion.toLowerCase() === 'surprise' && '😲'}
-                      {emotion.toLowerCase() === 'disgust' && '🤢'}
-                      {emotion.toLowerCase() === 'neutral' && '😐'}
-                    </span>
-                    <span className="capitalize">{emotion}</span>
-                    {confidence !== null && confidence !== undefined && (
-                      <span className="opacity-70">
-                        ({Math.round(confidence * 100)}%)
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </>
-        )}
-
-        <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
-          {isEdited && (
-            <span className="rounded-full bg-primary/20 px-2.5 py-1 text-[11px] font-semibold text-primary">
-              Edited
-            </span>
           )}
-          {formattedTime && <span className="font-medium">{formattedTime}</span>}
-
-          <div className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <Button
-              variant="ghost"
-              size="icon"
-              title="Copy message"
-              onClick={handleCopy}
-              className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-
-            {isUser && editable && onEditRequest && (
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Edit message"
-                onClick={() => onEditRequest(id)}
-                className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
-              >
-                <Edit3 className="h-4 w-4" />
-              </Button>
-            )}
-
-            {!isUser && onRegenerate && (
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Regenerate response"
-                onClick={onRegenerate}
-                className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
         </div>
-      </motion.div>
 
-      {isUser && (
-        <motion.div 
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 via-indigo-500 to-indigo-600 text-white shadow-lg"
-          whileHover={{ scale: 1.1, rotate: -5 }}
-          animate={{
-            boxShadow: [
-              '0 0 20px rgba(59, 130, 246, 0.3)',
-              '0 0 30px rgba(59, 130, 246, 0.5)',
-              '0 0 20px rgba(59, 130, 246, 0.3)',
-            ],
-          }}
-          transition={{ duration: 2, repeat: Infinity, delay: 1, type: 'tween', ease: 'easeInOut' }}
-        >
-          <User className="h-5 w-5" />
-        </motion.div>
-      )}
+        {/* Meta row: timestamp, edited flag, emotion chip, actions */}
+        {!isLoading && (
+          <div
+            className={cn(
+              'flex items-center gap-2 px-1 text-xs text-muted-foreground',
+              isUser && 'flex-row-reverse'
+            )}
+          >
+            {formattedTime && <span>{formattedTime}</span>}
+
+            {isEdited && <span className="text-primary/80">Edited</span>}
+
+            {isUser && emotion && (
+              <span className="inline-flex items-center gap-1.5" title={confidence ? `${Math.round(confidence * 100)}% confidence` : undefined}>
+                <span className={cn('h-1.5 w-1.5 rounded-full', emotionDot)} />
+                <span className="capitalize">{emotion}</span>
+              </span>
+            )}
+
+            <div
+              className={cn(
+                'flex items-center gap-0.5 opacity-70 transition-opacity sm:opacity-0 sm:group-hover:opacity-100',
+              )}
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Copy message"
+                onClick={handleCopy}
+                className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full"
+              >
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              </Button>
+
+              {isUser && editable && onEditRequest && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Edit message"
+                  onClick={() => onEditRequest(id)}
+                  className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+
+              {!isUser && onRegenerate && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Regenerate response"
+                  onClick={onRegenerate}
+                  className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 });

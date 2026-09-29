@@ -267,33 +267,30 @@ export default function ChatPage() {
 
   const headerContent = (
     <div className="flex w-full items-center justify-between gap-4">
-      <div className="min-w-0">
-        <h1 className="text-lg font-semibold text-foreground sm:text-xl">EmotionSense Companion</h1>
-        <p className="text-sm text-muted-foreground">A calm space to talk through what you feel.</p>
-      </div>
+      <h1 className="truncate text-base font-semibold text-foreground">EmotionSense Companion</h1>
 
       <div className="flex flex-shrink-0 items-center gap-2">
-        <div className="flex rounded-full border border-border/60 bg-background p-1">
+        <div className="flex rounded-full bg-muted p-0.5">
           <Button
             variant={chatMode === 'text' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setChatMode('text')}
-            className="gap-2"
+            className="h-8 gap-1.5 rounded-full px-3"
           >
-            <MessageSquare className="h-4 w-4" />
+            <MessageSquare className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Text</span>
           </Button>
           <Button
             variant={chatMode === 'voice' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setChatMode('voice')}
-            className="gap-2"
+            className="h-8 gap-1.5 rounded-full px-3"
           >
-            {chatMode === 'voice' ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            {chatMode === 'voice' ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5" />}
             <span className="hidden sm:inline">Voice</span>
           </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={handleNewSession} disabled={isLoading}>
+        <Button variant="ghost" size="sm" onClick={handleNewSession} disabled={isLoading} className="rounded-full">
           New Chat
         </Button>
       </div>
@@ -317,15 +314,22 @@ export default function ChatPage() {
     <div className="flex-1 overflow-hidden">
       {displayedMessages.length === 0 ? (
         <div className="flex h-full items-center justify-center">
-          <div className="mx-auto max-w-md space-y-4 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-              <MessageSquare className="h-8 w-8 text-primary" />
+          <div className="mx-auto max-w-md space-y-6 text-center">
+            <div className="space-y-2">
+              <h3 className="text-2xl font-semibold text-foreground">
+                {user?.name ? `Hi ${user.name.split(' ')[0]}, how are you feeling?` : 'How are you feeling right now?'}
+              </h3>
+              <p className="text-sm text-muted-foreground">Share anything on your mind — I&apos;m here to listen.</p>
             </div>
-            <h3 className="text-lg font-semibold text-foreground">Welcome back</h3>
-            <p className="text-sm text-muted-foreground">Share anything on your mind. I&apos;m here to listen and respond with empathy.</p>
             <div className="flex flex-wrap justify-center gap-2">
               {suggestions.map((suggestion) => (
-                <Button key={suggestion} variant="outline" size="sm" onClick={() => handleSendMessage(suggestion)}>
+                <Button
+                  key={suggestion}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSendMessage(suggestion)}
+                  className="rounded-full border-border/70 bg-muted/40 font-normal hover:bg-muted"
+                >
                   {suggestion}
                 </Button>
               ))}

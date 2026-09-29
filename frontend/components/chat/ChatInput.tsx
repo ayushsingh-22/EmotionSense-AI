@@ -3,7 +3,7 @@
 import { useRef, useCallback, KeyboardEvent, memo, type ChangeEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, X } from 'lucide-react';
 
 interface ChatInputProps {
   value: string;
@@ -34,13 +34,13 @@ export const ChatInput = memo(function ChatInput({
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea
+  // Auto-resize textarea, capped at roughly 5 lines
   const handleTextareaChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
     const textarea = e.target;
     onChange(textarea.value);
-    
+
     textarea.style.height = 'auto';
-    const newHeight = Math.min(textarea.scrollHeight, 120);
+    const newHeight = Math.min(textarea.scrollHeight, 128);
     textarea.style.height = newHeight + 'px';
   }, [onChange]);
 
@@ -59,65 +59,57 @@ export const ChatInput = memo(function ChatInput({
   return (
     <div
       className={cn(
-        'space-y-3 rounded-3xl border-2 border-primary/20 bg-background/80 p-5 shadow-2xl backdrop-blur-lg',
-        'hover:border-primary/40 transition-all duration-300',
+        'rounded-3xl border border-border bg-card shadow-sm transition-shadow',
+        'focus-within:shadow-md focus-within:ring-1 focus-within:ring-primary/30',
         className
       )}
     >
       {isEditing && (
-        <div className="flex items-center justify-between rounded-2xl bg-primary/10 px-4 py-2.5 text-sm text-primary backdrop-blur-sm">
+        <div className="flex items-center justify-between rounded-t-3xl border-b border-border/60 bg-primary/5 px-4 py-2 text-sm text-primary">
           <span className="font-medium">{editingLabel || 'Editing previous message'}</span>
           {onCancelEdit && (
-            <Button variant="ghost" size="sm" onClick={onCancelEdit} className="h-8 px-3 text-primary hover:bg-primary/20 rounded-xl">
+            <Button variant="ghost" size="sm" onClick={onCancelEdit} className="h-7 gap-1 px-2 text-primary hover:bg-primary/10 rounded-full">
+              <X className="h-3.5 w-3.5" />
               Cancel
             </Button>
           )}
         </div>
       )}
 
-      <div className="flex items-end gap-3">
-        <div className="relative flex-1">
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={handleTextareaChange}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled || isLoading}
-            rows={1}
-            className={cn(
-              'w-full min-h-[52px] max-h-[140px] resize-none rounded-2xl border-2 border-border/40 bg-background/90 px-5 py-4 text-base text-foreground transition-all',
-              'focus:border-primary/60 focus:ring-4 focus:ring-primary/20 dark:bg-background/95',
-              'placeholder:text-muted-foreground/60',
-              'disabled:opacity-60 disabled:cursor-not-allowed',
-              'shadow-inner'
-            )}
-            style={{
-              lineHeight: '1.6',
-              fontFamily: 'inherit',
-            }}
-          />
-        </div>
+      <div className="flex items-end gap-2 p-2.5">
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={handleTextareaChange}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={disabled || isLoading}
+          rows={1}
+          title="Enter to send, Shift+Enter for a new line"
+          className={cn(
+            'max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-foreground',
+            'placeholder:text-muted-foreground/60 focus:outline-none',
+            'disabled:cursor-not-allowed disabled:opacity-60'
+          )}
+          style={{ fontFamily: 'inherit' }}
+        />
 
         <Button
           type="button"
           onClick={onSubmit}
           disabled={!canSubmit}
           className={cn(
-            'h-12 w-12 flex-shrink-0 rounded-2xl p-0 shadow-lg transition-all duration-300',
+            'h-11 w-11 flex-shrink-0 rounded-full p-0 transition-all',
             'flex items-center justify-center',
-            'bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 text-white',
-            'disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed disabled:shadow-none',
-            canSubmit && 'hover:scale-110 hover:shadow-2xl hover:shadow-primary/40 active:scale-95',
-            'border-2 border-white/20'
+            'bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-sm',
+            'disabled:from-muted disabled:to-muted disabled:text-muted-foreground disabled:shadow-none',
+            canSubmit && 'hover:opacity-90 active:scale-95'
           )}
-          title="Send message (Shift+Enter for new line)"
+          title="Send message"
         >
-          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+          {isLoading ? <Loader2 className="h-4.5 w-4.5 animate-spin" /> : <Send className="h-4.5 w-4.5" />}
         </Button>
       </div>
-
-      <div className="px-2 text-xs text-muted-foreground/70 font-medium">✨ Shift + Enter for new line</div>
     </div>
   );
 });

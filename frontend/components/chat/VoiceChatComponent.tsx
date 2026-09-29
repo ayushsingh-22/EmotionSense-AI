@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Mic, MicOff, Loader2, AlertCircle, Volume2, RotateCcw, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
-import axios from 'axios';
+import { sendVoiceMessageStream, type VoiceAudioChunk } from '@/lib/api';
 
 // Type declarations
 type PermissionState = 'granted' | 'denied' | 'prompt';
@@ -46,6 +46,11 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
   const [listeningDuration, setListeningDuration] = useState(0);
   const [audioResponseUrl, setAudioResponseUrl] = useState<string | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  // AI reply text as it streams in via SSE, shown live before the audio is ready.
+  const [streamingResponse, setStreamingResponse] = useState('');
+  // Continuous "voice mode": once enabled, the mic auto-restarts after each
+  // AI response finishes speaking, so the user never has to tap again.
+  const [continuousMode, setContinuousMode] = useState(false);
 
   const handleError = useCallback((err: unknown, fallbackMessage: string) => {
     console.error(fallbackMessage, err);
@@ -65,6 +70,131 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Silence-detection (VAD) refs — analyse mic input while recording so we
+  // can auto-stop a turn instead of requiring a manual tap.
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const vadRafRef = useRef<number | null>(null);
+  const silenceStartRef = useRef<number | null>(null);
+  const hasSpokenRef = useRef(false);
+  const continuousModeRef = useRef(false);
+  // Sentence-level TTS chunks arrive out of order relative to playback speed
+  // (network/TTS latency varies per chunk), so we buffer by index and only
+  // ever play them back-to-back in order, starting well before the full
+  // response/final audio is ready.
+  const chunkQueueRef = useRef<Map<number, VoiceAudioChunk>>(new Map());
+  const nextChunkIndexRef = useRef(0);
+  const isPlayingChunkRef = useRef(false);
+  // Barge-in: a separate mic stream/analyser opened only while AI audio is
+  // playing, so the user can start talking over the response and have it
+  // stop immediately — like ChatGPT voice mode's interrupt behavior. Kept
+  // fully separate from the recording VAD above since the two run at
+  // different times (never concurrently) but must not interfere with each
+  // other's refs.
+  const bargeInStreamRef = useRef<MediaStream | null>(null);
+  const bargeInContextRef = useRef<AudioContext | null>(null);
+  const bargeInAnalyserRef = useRef<AnalyserNode | null>(null);
+  const bargeInRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    continuousModeRef.current = continuousMode;
+  }, [continuousMode]);
+
+  // Silence thresholds. RMS is on a 0-1 scale from the analyser's time-domain
+  // data; SILENCE_DURATION_MS is how long the user must be quiet before we
+  // treat their turn as finished (mirrors ChatGPT voice mode's auto-send).
+  const SILENCE_RMS_THRESHOLD = 0.02;
+  const SILENCE_DURATION_MS = 1200;
+  const MIN_SPEECH_DURATION_MS = 400;
+  // Barge-in fires on the first loud-enough frame — no debounce — so the AI
+  // stops talking as soon as the user starts, mirroring ChatGPT voice mode.
+  // Threshold is a bit higher than the recording VAD's to avoid the AI's own
+  // audio (picked up faintly via speakers/echo) from self-triggering a stop.
+  const BARGE_IN_RMS_THRESHOLD = 0.05;
+
+  const stopVoiceActivityDetection = useCallback(() => {
+    if (vadRafRef.current !== null) {
+      cancelAnimationFrame(vadRafRef.current);
+      vadRafRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    silenceStartRef.current = null;
+    hasSpokenRef.current = false;
+  }, []);
+
+  // Forward ref so the barge-in monitor (defined before stopAudioPlayback
+  // and startListening exist) can call them once they're defined below.
+  const stopAudioPlaybackRef = useRef<() => void>(() => {});
+
+  const stopBargeInMonitor = useCallback(() => {
+    if (bargeInRafRef.current !== null) {
+      cancelAnimationFrame(bargeInRafRef.current);
+      bargeInRafRef.current = null;
+    }
+    if (bargeInContextRef.current) {
+      bargeInContextRef.current.close().catch(() => {});
+      bargeInContextRef.current = null;
+    }
+    bargeInAnalyserRef.current = null;
+    if (bargeInStreamRef.current) {
+      bargeInStreamRef.current.getTracks().forEach(track => track.stop());
+      bargeInStreamRef.current = null;
+    }
+  }, []);
+
+  const startBargeInMonitor = useCallback(async () => {
+    // Don't fight the recording VAD for the mic, don't open a second stream
+    // if one's already monitoring (e.g. between back-to-back chunks), and
+    // don't bother if this browser doesn't support AudioContext (barge-in
+    // is a nice-to-have, not a hard requirement).
+    if (mediaStreamRef.current || bargeInStreamRef.current) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      bargeInStreamRef.current = stream;
+
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioContext = new AudioContextCtor();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+
+      bargeInContextRef.current = audioContext;
+      bargeInAnalyserRef.current = analyser;
+
+      const data = new Float32Array(analyser.fftSize);
+
+      const tick = () => {
+        if (!bargeInAnalyserRef.current) return;
+        bargeInAnalyserRef.current.getFloatTimeDomainData(data);
+
+        let sumSquares = 0;
+        for (let i = 0; i < data.length; i++) sumSquares += data[i] * data[i];
+        const rms = Math.sqrt(sumSquares / data.length);
+
+        if (rms > BARGE_IN_RMS_THRESHOLD) {
+          // User started talking over the AI — stop playback immediately
+          // and start a fresh recording turn, exactly like tapping the mic.
+          stopBargeInMonitor();
+          stopAudioPlaybackRef.current();
+          startListeningRef.current();
+          return;
+        }
+
+        bargeInRafRef.current = requestAnimationFrame(tick);
+      };
+
+      bargeInRafRef.current = requestAnimationFrame(tick);
+    } catch (err) {
+      // Barge-in is a UX enhancement, not a hard requirement.
+      console.error('Failed to start barge-in monitor:', err);
+    }
+  }, [stopBargeInMonitor]);
 
   // Cleanup function
   const cleanup = () => {
@@ -83,6 +213,8 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       clearInterval(durationIntervalRef.current);
       durationIntervalRef.current = null;
     }
+    stopVoiceActivityDetection();
+    stopBargeInMonitor();
   };
 
   // Effects
@@ -104,6 +236,15 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
     }
   };
 
+  // Fires only once all queued audio (every sentence chunk, or the single
+  // fallback clip) has finished playing and the backend has confirmed no
+  // more chunks are coming — not after each individual chunk.
+  const onAllAudioFinished = useCallback(() => {
+    if (continuousModeRef.current) {
+      startListeningRef.current();
+    }
+  }, []);
+
   // Audio playback functions
   const stopAudioPlayback = useCallback(() => {
     if (audioRef.current) {
@@ -111,7 +252,16 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       audioRef.current = null;
       setIsPlayingAudio(false);
     }
-  }, []);
+    chunkQueueRef.current.clear();
+    nextChunkIndexRef.current = 0;
+    isPlayingChunkRef.current = false;
+    streamDoneRef.current = false;
+    stopBargeInMonitor();
+  }, [stopBargeInMonitor]);
+
+  useEffect(() => {
+    stopAudioPlaybackRef.current = stopAudioPlayback;
+  }, [stopAudioPlayback]);
 
   const playAudioResponse = useCallback(async (url: string) => {
     try {
@@ -120,10 +270,11 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       const audio = new Audio(url);
       audio.preload = 'auto'; // Preload audio data
       audioRef.current = audio;
-      
+
       audio.onended = () => {
         setIsPlayingAudio(false);
         audioRef.current = null;
+        onAllAudioFinished();
       };
 
       audio.onerror = (e) => {
@@ -139,16 +290,131 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
 
       setIsPlayingAudio(true);
       await audio.play();
+      void startBargeInMonitor();
     } catch (error) {
       handleError(error, 'Failed to play audio response');
       setIsPlayingAudio(false);
     }
-  }, [stopAudioPlayback, handleError]);
+  }, [stopAudioPlayback, handleError, onAllAudioFinished, startBargeInMonitor]);
 
-  const isButtonDisabled = useMemo(() => 
-    disabled || isProcessing, 
+  // Streaming-TTS chunk queue: plays sentence audio clips strictly in order
+  // as soon as each becomes available, instead of waiting for the whole
+  // response to finish. `streamDoneRef` tracks whether the backend has told
+  // us no more chunks are coming, so we know when the *last* chunk's
+  // onended should count as "AI finished speaking" for continuous mode.
+  const streamDoneRef = useRef(false);
+  const totalChunkCountRef = useRef<number | null>(null);
+
+  const playNextQueuedChunk = useCallback(() => {
+    const nextIndex = nextChunkIndexRef.current;
+    const chunk = chunkQueueRef.current.get(nextIndex);
+
+    if (!chunk) {
+      isPlayingChunkRef.current = false;
+      // No more chunks buffered right now. If the stream has finished and
+      // this was the last expected chunk, the conversation turn is over.
+      if (streamDoneRef.current && totalChunkCountRef.current !== null && nextIndex >= totalChunkCountRef.current) {
+        setIsPlayingAudio(false);
+        onAllAudioFinished();
+      }
+      return;
+    }
+
+    chunkQueueRef.current.delete(nextIndex);
+    isPlayingChunkRef.current = true;
+    setIsPlayingAudio(true);
+    void startBargeInMonitor();
+
+    const audio = new Audio(chunk.url);
+    audio.preload = 'auto';
+    audioRef.current = audio;
+
+    audio.onended = () => {
+      audioRef.current = null;
+      nextChunkIndexRef.current = nextIndex + 1;
+      playNextQueuedChunk();
+    };
+
+    audio.onerror = (e) => {
+      console.error('Audio chunk playback error:', e);
+      audioRef.current = null;
+      nextChunkIndexRef.current = nextIndex + 1;
+      playNextQueuedChunk();
+    };
+
+    audio.play().catch((error) => {
+      console.error('Failed to play audio chunk:', error);
+      audioRef.current = null;
+      nextChunkIndexRef.current = nextIndex + 1;
+      playNextQueuedChunk();
+    });
+  }, [onAllAudioFinished, startBargeInMonitor]);
+
+  const enqueueAudioChunk = useCallback((chunk: VoiceAudioChunk) => {
+    chunkQueueRef.current.set(chunk.index, chunk);
+    if (!isPlayingChunkRef.current) {
+      playNextQueuedChunk();
+    }
+  }, [playNextQueuedChunk]);
+
+  const isButtonDisabled = useMemo(() =>
+    disabled || isProcessing,
     [disabled, isProcessing]
   );
+
+  // Forward refs so callbacks defined earlier in the file (VAD loop, audio
+  // onended handler) can call functions that are declared further down.
+  const stopListeningRef = useRef<() => void>(() => {});
+  const startListeningRef = useRef<() => void>(() => {});
+
+  const startVoiceActivityDetection = useCallback((stream: MediaStream) => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioContext = new AudioContextCtor();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+      silenceStartRef.current = null;
+      hasSpokenRef.current = false;
+
+      const data = new Float32Array(analyser.fftSize);
+      const startedAt = Date.now();
+
+      const tick = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getFloatTimeDomainData(data);
+
+        let sumSquares = 0;
+        for (let i = 0; i < data.length; i++) sumSquares += data[i] * data[i];
+        const rms = Math.sqrt(sumSquares / data.length);
+
+        const now = Date.now();
+        if (rms > SILENCE_RMS_THRESHOLD) {
+          hasSpokenRef.current = true;
+          silenceStartRef.current = null;
+        } else if (hasSpokenRef.current && now - startedAt > MIN_SPEECH_DURATION_MS) {
+          if (silenceStartRef.current === null) {
+            silenceStartRef.current = now;
+          } else if (now - silenceStartRef.current > SILENCE_DURATION_MS) {
+            stopListeningRef.current();
+            return;
+          }
+        }
+
+        vadRafRef.current = requestAnimationFrame(tick);
+      };
+
+      vadRafRef.current = requestAnimationFrame(tick);
+    } catch (err) {
+      // VAD is a UX enhancement, not a hard requirement — if AudioContext
+      // fails (unsupported browser, etc.) fall back to manual tap-to-stop.
+      console.error('Failed to start voice activity detection:', err);
+    }
+  }, []);
 
   // Recording control functions - memoized for performance
   const startListening = useCallback(async () => {
@@ -222,6 +488,8 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       durationIntervalRef.current = setInterval(() => {
         setListeningDuration((prev) => prev + 1);
       }, 1000);
+
+      startVoiceActivityDetection(stream);
     } catch (error) {
       console.error('Error starting recording:', error);
       const err = error as { name?: string; message?: string };
@@ -237,7 +505,11 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       setError(errorMessage);
       if (onError) onError(errorMessage);
     }
-  }, [disabled, permission, onError, ensureSessionReady]);
+  }, [disabled, permission, onError, ensureSessionReady, startVoiceActivityDetection]);
+
+  useEffect(() => {
+    startListeningRef.current = () => { void startListening(); };
+  }, [startListening]);
 
   // Voice message submission - memoized
   const submitVoiceMessage = useCallback(async () => {
@@ -265,67 +537,64 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       }
 
       setCurrentTranscript('Processing voice message...');
+      setStreamingResponse('');
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
       const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
 
-      const formData = new FormData();
-      formData.append('userId', userId);
-      if (resolvedSessionId) formData.append('sessionId', resolvedSessionId);
-      formData.append('audio', audioBlob, 'voice-message.webm');
-      formData.append('type', 'voice');
+      let accumulatedText = '';
 
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/chat/voice`,
-        formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 120000
-        }
-      );
+      // Reset chunk-playback state for this new turn.
+      chunkQueueRef.current.clear();
+      nextChunkIndexRef.current = 0;
+      isPlayingChunkRef.current = false;
+      streamDoneRef.current = false;
+      totalChunkCountRef.current = null;
 
-      if (response.data.success) {
-        const data = response.data.data;
+      await sendVoiceMessageStream(audioBlob, userId, resolvedSessionId, {
+        onTranscript: (text) => {
+          setCurrentTranscript(text);
+        },
+        onToken: (text) => {
+          accumulatedText += text;
+          setStreamingResponse(accumulatedText);
+        },
+        onAudioChunk: (chunk) => {
+          // Sentence audio ready — queue it for in-order playback right
+          // away, rather than waiting for the full response.
+          enqueueAudioChunk(chunk);
+        },
+        onDone: async (data) => {
+          const chunks = data.audioChunks;
+          if (Array.isArray(chunks) && chunks.length > 0) {
+            // Chunked audio already streaming/queued via onAudioChunk — just
+            // record how many chunks to expect so playNextQueuedChunk knows
+            // when the last one has finished.
+            totalChunkCountRef.current = chunks.length;
+            streamDoneRef.current = true;
+            if (!isPlayingChunkRef.current) {
+              playNextQueuedChunk();
+            }
+          } else if (data.audio?.url) {
+            // No chunked audio (e.g. all per-sentence TTS calls failed) —
+            // fall back to the single full-response clip.
+            setAudioResponseUrl(data.audio.url);
+            await playAudioResponse(data.audio.url);
+          } else {
+            streamDoneRef.current = true;
+            totalChunkCountRef.current = 0;
+          }
 
-        if (data.userMessage?.text) {
-          setCurrentTranscript(data.userMessage.text);
-        }
-
-        if (data.audio?.url) {
-          setAudioResponseUrl(data.audio.url);
-          await playAudioResponse(data.audio.url);
-        }
-
-        if (onMessageReceived) {
-          onMessageReceived(data);
-        }
-
-      } else {
-        throw new Error(response.data.error || 'Failed to process voice message');
-      }
+          if (onMessageReceived) {
+            onMessageReceived(data as unknown as Record<string, unknown>);
+          }
+        },
+        onError: (message) => {
+          throw new Error(message);
+        },
+      });
     } catch (err) {
       console.error('Error submitting voice message:', err);
-      let errorMessage = 'Failed to submit voice message';
-      
-      if (axios.isAxiosError(err)) {
-        const statusCode = err.response?.status;
-        const responseError = err.response?.data?.error;
-
-        console.log(`API Error - Status: ${statusCode}, Message: ${responseError || err.message}`);
-
-        if (statusCode === 404) {
-          errorMessage = 'Voice chat endpoint not available. Please check server configuration.';
-        } else if (statusCode === 413) {
-          errorMessage = 'Audio file too large. Please record a shorter message.';
-        } else if (statusCode === 415) {
-          errorMessage = 'Unsupported audio format. Please try again.';
-        } else if (statusCode === 400 && responseError?.includes('message')) {
-          errorMessage = 'Failed to process voice message. Please try speaking clearly and try again.';
-        } else {
-          errorMessage = responseError || err.message;
-        }
-      } else if (err instanceof Error) {
-        errorMessage = err.message;
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to submit voice message';
 
       setError(errorMessage);
       if (onError) onError(errorMessage);
@@ -336,9 +605,10 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
         variant: "destructive",
       });
     } finally {
+      setStreamingResponse('');
       setIsProcessing(false);
     }
-  }, [disabled, isProcessing, userId, sessionId, onMessageReceived, onError, playAudioResponse, ensureSessionReady]);
+  }, [disabled, isProcessing, userId, sessionId, onMessageReceived, onError, playAudioResponse, ensureSessionReady, enqueueAudioChunk, playNextQueuedChunk]);
 
   const stopListening = useCallback(async () => {
     try {
@@ -361,6 +631,8 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
             mediaStreamRef.current.getTracks().forEach(track => track.stop());
             mediaStreamRef.current = null;
           }
+
+          stopVoiceActivityDetection();
         };
 
         // Set up the stop handler
@@ -414,7 +686,11 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       setIsProcessing(false);
       throw error;
     }
-  }, [submitVoiceMessage]);
+  }, [submitVoiceMessage, stopVoiceActivityDetection]);
+
+  useEffect(() => {
+    stopListeningRef.current = () => { void stopListening(); };
+  }, [stopListening]);
 
   const clearTranscript = useCallback(() => {
     setCurrentTranscript('');
@@ -443,6 +719,29 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
           <span className="text-xs text-destructive font-medium">{error}</span>
         </div>
       )}
+
+      {/* Continuous Voice Mode Toggle */}
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium text-muted-foreground">
+          Continuous voice mode
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          onClick={() => setContinuousMode((prev) => !prev)}
+          className={cn(
+            'h-7 rounded-full px-3 text-xs font-semibold transition-all',
+            continuousMode
+              ? 'bg-gradient-to-r from-primary to-purple-600 text-white border-transparent'
+              : 'bg-background'
+          )}
+          title="When on, the mic reopens automatically after each response so you can talk hands-free"
+        >
+          {continuousMode ? 'On' : 'Off'}
+        </Button>
+      </div>
 
       {/* Main Input Area */}
       <div className="flex items-end gap-3">
@@ -474,19 +773,26 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
               </div>
             </div>
           ) : isProcessing ? (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <span
-                    key={index}
-                    className="h-2 w-2 rounded-full bg-gradient-to-r from-primary to-purple-600 animate-pulse"
-                    style={{ animationDelay: `${index * 0.2}s` }}
-                  />
-                ))}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <span
+                      key={index}
+                      className="h-2 w-2 rounded-full bg-gradient-to-r from-primary to-purple-600 animate-pulse"
+                      style={{ animationDelay: `${index * 0.2}s` }}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs font-semibold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+                  {streamingResponse ? 'Responding...' : 'Processing...'}
+                </span>
               </div>
-              <span className="text-xs font-semibold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-                Processing...
-              </span>
+              {streamingResponse && (
+                <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                  {streamingResponse}
+                </p>
+              )}
             </div>
           ) : currentTranscript ? (
             <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
@@ -495,7 +801,11 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
           ) : (
             <div className="flex items-center gap-3 text-muted-foreground/60">
               <Mic className="h-5 w-5" />
-              <span className="text-base">Tap the mic to start recording...</span>
+              <span className="text-base">
+                {continuousMode
+                  ? 'Tap the mic to start — it will keep listening automatically'
+                  : 'Tap the mic to start recording...'}
+              </span>
             </div>
           )}
         </div>

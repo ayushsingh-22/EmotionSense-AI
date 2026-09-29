@@ -89,6 +89,27 @@ export interface ChatMessageResult {
   };
 }
 
+export interface VoiceMessageResult {
+  sessionId: string;
+  userMessage: Record<string, unknown> & { id: string; message: string };
+  aiResponse: Record<string, unknown> & { id: string; message: string; model?: string };
+  emotion: {
+    detected: string;
+    confidence: number;
+    scores: Record<string, number>;
+  };
+  language?: Record<string, unknown>;
+  audioChunks?: Array<{ index: number; text: string; url: string; duration?: number }>;
+  audio?: {
+    url: string;
+    duration?: number;
+    provider?: string;
+    language?: string;
+  } | null;
+  contextLength: number;
+  transcription?: Record<string, unknown>;
+}
+
 export interface AnalysisHistory {
   id: string;
   type: 'text' | 'voice' | 'multimodal';

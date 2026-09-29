@@ -1326,6 +1326,458 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
 }));
 
 /**
+ * POST /api/chat/voice/stream
+ * Same pipeline as POST /voice (STT -> emotion -> LLM -> translate -> TTS),
+ * but streams the AI's response token-by-token over SSE as soon as the LLM
+ * starts producing text, instead of waiting for the full response before
+ * sending anything back. Mirrors /message/stream's SSE contract so the
+ * frontend can reuse the same event-parsing logic for voice and text chat.
+ *
+ * Events sent: 'transcript' (once STT completes), 'token' (repeated,
+ * English LLM tokens as they stream in), 'done' (final payload, same shape
+ * as /voice's response.data), 'error'.
+ *
+ * Note: TTS is still generated as one call on the full final response (not
+ * chunked/streamed yet) -- audio only becomes available in the 'done' event.
+ */
+router.post('/voice/stream', upload.single('audio'), asyncHandler(async (req, res) => {
+  const { userId, sessionId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ success: false, error: 'User ID is required' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: 'Audio file is required' });
+  }
+
+  console.log(`🎙️ [stream] Processing voice message for user: ${userId}`);
+  console.log(`📁 [stream] Audio file: ${req.file.originalname} (${req.file.mimetype}, ${req.file.size} bytes)`);
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  req.socket?.setNoDelay?.(true);
+  res.flushHeaders?.();
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  let clientClosed = false;
+  res.on('close', () => { clientClosed = true; });
+
+  try {
+    // Step 1: Transcribe audio using Groq Whisper with automatic language detection
+    console.log(`🌐 [stream] Transcribing audio with Groq Whisper (auto-detect language)...`);
+    const { speechToTextGroq } = await import('../voice-service/index.js');
+    const fs = await import('fs');
+    const tempDir = path.join(__dirname, '../../temp/audio');
+
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    const fileExt = path.extname(req.file.originalname) || '.webm';
+    const tempFilePath = path.join(tempDir, `voice-${Date.now()}${fileExt}`);
+    fs.writeFileSync(tempFilePath, req.file.buffer);
+
+    const transcriptionResult = await speechToTextGroq(tempFilePath);
+
+    try {
+      fs.unlinkSync(tempFilePath);
+      console.log(`🧹 [stream] Cleaned up temp file: ${tempFilePath}`);
+    } catch (cleanupError) {
+      console.warn('⚠️ [stream] Failed to cleanup temp file:', cleanupError.message);
+    }
+
+    const transcript = transcriptionResult.transcript;
+    const whisperLanguage = transcriptionResult.language || 'en';
+
+    if (transcriptionResult.error) {
+      console.error(`❌ [stream] Transcription error: ${transcriptionResult.error}`);
+      if (!clientClosed) {
+        sendEvent('error', {
+          error: 'Speech transcription failed',
+          details: transcriptionResult.error
+        });
+      }
+      return res.end();
+    }
+
+    if (!transcript || transcript.trim().length === 0) {
+      console.warn(`⚠️ [stream] Empty transcript received from Groq`);
+      if (!clientClosed) {
+        sendEvent('error', {
+          error: 'Speech transcription failed or no speech detected',
+          details: 'Empty transcript - possibly no clear speech in audio'
+        });
+      }
+      return res.end();
+    }
+
+    console.log(`✅ [stream] Whisper transcription: "${transcript}"`);
+
+    if (!clientClosed) {
+      sendEvent('transcript', { text: transcript, whisperLanguage });
+    }
+
+    // Step 1.5: Validate if detected language is an Indian language
+    const normalizedLanguage = normalizeIndianLanguageCode(whisperLanguage);
+
+    // Step 2: Translate to English if needed (for internal chat reasoning)
+    console.log(`🔄 [stream] Translating to English if needed...`);
+    const translationResult = await translateToEnglishIfNeeded(transcript);
+
+    const {
+      translatedText: englishText,
+      sourceLang: translationLanguage,
+      needsTranslation,
+      usedFallback: usedTranslationFallback,
+      translationFailed
+    } = translationResult;
+
+    const detectedLanguage = normalizedLanguage;
+
+    // Step 3: Get or create session
+    let currentSessionId = sessionId;
+    let isNewSession = false;
+
+    if (!currentSessionId) {
+      console.log(`🆕 [stream] Creating new voice chat session...`);
+      const sessionTitle = transcript.length > 40 ? transcript.substring(0, 40).trim() + '...' : transcript.trim();
+      const newSession = await createChatSession(userId, sessionTitle);
+      currentSessionId = newSession.id;
+      isNewSession = true;
+    }
+
+    // Step 4: Get recent messages for context
+    const memoryLength = parseInt(process.env.CHAT_MEMORY_LENGTH || 10);
+    const conversationHistory = await getRecentChatMessages(userId, currentSessionId, memoryLength);
+
+    // Step 5: Analyze emotion from the English text
+    const emotionResult = await analyzeTextEmotion(englishText);
+    console.log(`✅ [stream] Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
+
+    // Step 5.5: Check for high-risk messages and trigger emergency alert if needed
+    const riskAnalysis = detectRiskLevel(englishText);
+    if (riskAnalysis.riskLevel) {
+      try {
+        const emergencyContact = await getEmergencyContact(userId);
+        let alertSent = false;
+
+        if (emergencyContact && emergencyContact.notify_enabled) {
+          if (shouldTriggerEmergencyAlert(emotionResult.emotion, riskAnalysis.riskLevel)) {
+            const userProfile = await getUserProfile(userId);
+            let userData = {
+              id: userId,
+              full_name: userProfile?.full_name || userProfile?.name || req.user?.full_name || 'User',
+              email: userProfile?.email || userProfile?.user_email || userProfile?.auth_email || req.user?.email || 'Not available'
+            };
+
+            alertSent = await sendEmergencyAlert(
+              userData,
+              emergencyContact,
+              emotionResult.emotion,
+              englishText,
+              riskAnalysis.riskLevel
+            );
+          }
+        }
+
+        await logSafetyAlert(
+          userId,
+          emotionResult.emotion,
+          englishText,
+          emergencyContact?.id || null,
+          alertSent
+        );
+      } catch (alertError) {
+        console.error(`⚠️ [stream] Error handling emergency alert:`, alertError.message);
+      }
+    }
+
+    // Step 6: Save user message (voice transcript)
+    const userMessage = await saveChatMessage(
+      userId,
+      currentSessionId,
+      'user',
+      transcript,
+      {
+        emotion: emotionResult.emotion,
+        confidence: emotionResult.confidence,
+        detectedLanguage: detectedLanguage,
+        languageName: getLanguageName(detectedLanguage),
+        wasTranslated: needsTranslation,
+        translatedText: needsTranslation ? englishText : null,
+        messageType: 'voice',
+        audioFileName: req.file.originalname
+      }
+    );
+
+    // Step 7: Stream the AI response token-by-token, and pipeline TTS
+    // sentence-by-sentence as complete sentences arrive -- instead of
+    // waiting for the whole response before synthesizing any audio, each
+    // finished sentence is translated (if needed) and sent to TTS the
+    // moment it's complete, then emitted as its own 'audio_chunk' event so
+    // playback can start well before the LLM finishes talking.
+    //
+    // Chunk tasks are chained sequentially (not fired in parallel) so audio
+    // arrives in the same order it was spoken, while each chunk's
+    // translate+TTS work still overlaps with later tokens still streaming.
+    console.log(`🤖 [stream] Generating AI response with conversation context...`);
+
+    const ttsLanguage = getIndianLanguageTTSCode(detectedLanguage);
+    const shouldTranslateChunks = needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown';
+    const SENTENCE_BOUNDARY_RE = /[.!?।॥\n]+["')\]]?\s+/;
+
+    let sentenceBuffer = '';
+    let chunkChain = Promise.resolve();
+    let chunkIndex = 0;
+    const audioChunks = [];
+
+    const enqueueChunk = (sentenceText) => {
+      const trimmed = sentenceText.trim();
+      if (!trimmed) return;
+
+      const index = chunkIndex++;
+      chunkChain = chunkChain.then(async () => {
+        try {
+          let chunkText = trimmed;
+          if (shouldTranslateChunks) {
+            try {
+              chunkText = await translateBackToUserLanguage(trimmed, detectedLanguage);
+            } catch (translateError) {
+              console.warn(`⚠️ [stream] Chunk translation failed, using English:`, translateError.message);
+            }
+          }
+
+          const chunkAudio = await textToSpeech(chunkText, ttsLanguage);
+          audioChunks.push({ index, text: chunkText, url: chunkAudio.audioUrl, duration: chunkAudio.duration });
+
+          if (!clientClosed) {
+            sendEvent('audio_chunk', {
+              index,
+              text: chunkText,
+              url: chunkAudio.audioUrl,
+              duration: chunkAudio.duration
+            });
+          }
+        } catch (chunkError) {
+          console.warn(`⚠️ [stream] Chunk TTS failed for chunk ${index}:`, chunkError.message);
+        }
+      });
+    };
+
+    const llmResponse = await generateResponseStream({
+      emotion: emotionResult.emotion,
+      confidence: emotionResult.confidence,
+      context: {
+        userMessage: englishText,
+        processedText: emotionResult.processedText,
+        originalMessage: transcript,
+        userLanguage: detectedLanguage
+      },
+      transcript: englishText,
+      conversationHistory: conversationHistory
+    }, (tokenText) => {
+      if (!clientClosed) {
+        sendEvent('token', { text: tokenText });
+      }
+
+      sentenceBuffer += tokenText;
+      let match;
+      // eslint-disable-next-line no-cond-assign
+      while ((match = sentenceBuffer.match(SENTENCE_BOUNDARY_RE))) {
+        const boundaryEnd = match.index + match[0].length;
+        const sentence = sentenceBuffer.slice(0, boundaryEnd);
+        sentenceBuffer = sentenceBuffer.slice(boundaryEnd);
+        enqueueChunk(sentence);
+      }
+    });
+
+    // Flush whatever's left in the buffer (e.g. a final sentence with no
+    // trailing punctuation) as the last chunk.
+    if (sentenceBuffer.trim()) {
+      enqueueChunk(sentenceBuffer);
+      sentenceBuffer = '';
+    }
+
+    console.log(`✅ [stream] AI response generated`);
+
+    if (!llmResponse.text || llmResponse.text.trim().length === 0) {
+      throw new Error('AI response is empty. This may be due to safety filters or API issues.');
+    }
+
+    // Step 8: Translate AI response back to user's language (full text, for
+    // saving to the DB / the 'done' payload's message field -- the chunk
+    // translations above already handled the user-facing audio).
+    let finalResponse = llmResponse.text;
+    let responseTranslated = false;
+    let responseTranslationFailed = false;
+
+    if (shouldTranslateChunks) {
+      console.log(`🔄 [stream] Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
+      try {
+        finalResponse = await translateBackToUserLanguage(llmResponse.text, detectedLanguage);
+        responseTranslated = true;
+      } catch (error) {
+        console.error(`❌ [stream] Failed to translate response:`, error.message);
+        finalResponse = llmResponse.text;
+        responseTranslationFailed = true;
+      }
+    }
+
+    // Wait for all queued chunk TTS work to finish before building the
+    // 'done' payload, so audioChunks is complete.
+    await chunkChain;
+
+    // Step 9: Save AI response to database
+    const assistantMessage = await saveChatMessage(
+      userId,
+      currentSessionId,
+      'assistant',
+      finalResponse,
+      {
+        originalEnglishText: responseTranslated ? llmResponse.text : null,
+        targetLanguage: detectedLanguage,
+        wasTranslated: responseTranslated,
+        translationFailed: responseTranslationFailed,
+        messageType: 'voice_response'
+      }
+    );
+
+    // Step 10: Update session title for new sessions
+    if (isNewSession) {
+      try {
+        const titleText = transcript.length > 60 ? transcript.substring(0, 60).trim() + '...' : transcript.trim();
+        let betterTitle = titleText;
+
+        if (transcript.trim().length <= 10) {
+          const emotionContext = emotionResult.emotion === 'neutral' ? 'Voice chat' : `${emotionResult.emotion} voice chat`;
+          const languageContext = detectedLanguage !== 'en' ? ` (${getLanguageName(detectedLanguage)})` : '';
+          betterTitle = `${emotionContext}${languageContext}`;
+        }
+
+        await updateChatSessionTitle(userId, currentSessionId, betterTitle);
+      } catch (error) {
+        console.warn(`⚠️ [stream] Failed to update session title:`, error.message);
+      }
+    }
+
+    // Step 11: Audio was already generated sentence-by-sentence in Step 7
+    // (see audioChunks) and streamed via 'audio_chunk' events as each
+    // sentence completed -- no need to re-synthesize the full text again
+    // here. Fall back to a single full-text TTS call only if chunking
+    // produced nothing (e.g. every chunk's TTS call failed).
+    let audioResponse = null;
+    if (audioChunks.length === 0 && finalResponse) {
+      console.log(`🔊 [stream] No audio chunks produced, falling back to single-call TTS...`);
+      try {
+        audioResponse = await textToSpeech(finalResponse, ttsLanguage);
+        console.log(`✅ [stream] Audio response generated in ${getIndianLanguageName(detectedLanguage)}`);
+      } catch (audioError) {
+        console.warn(`⚠️ [stream] Audio generation failed:`, audioError.message);
+      }
+    }
+
+    // Step 12: Build the same shaped payload as POST /voice's `data` field
+    const donePayload = {
+      sessionId: currentSessionId,
+      userMessage: {
+        id: userMessage.id,
+        content: userMessage.content || transcript,
+        message: transcript,
+        text: transcript,
+        englishText: needsTranslation ? englishText : null,
+        transcript: transcript,
+        emotion: userMessage.emotion || emotionResult.emotion,
+        emotionConfidence: userMessage.emotion_confidence ?? emotionResult.confidence,
+        confidence: userMessage.emotion_confidence ?? emotionResult.confidence,
+        metadata: userMessage.metadata,
+        audioUrl: userMessage.audio_url,
+        timestamp: userMessage.created_at,
+        detectedLanguage: detectedLanguage,
+        languageName: getIndianLanguageName(detectedLanguage),
+        isIndianLanguage: isIndianLanguageSupported(detectedLanguage),
+        whisperLanguage: whisperLanguage,
+        translationLanguage: translationLanguage,
+        wasTranslated: needsTranslation,
+        translationMethod: usedTranslationFallback ? 'gemini_fallback' : 'google_translate',
+        translationFailed: translationFailed
+      },
+      aiResponse: {
+        id: assistantMessage.id,
+        content: assistantMessage.content || finalResponse,
+        message: finalResponse,
+        text: finalResponse,
+        englishText: llmResponse.text,
+        originalEnglishText: llmResponse.text,
+        model: llmResponse.model,
+        metadata: assistantMessage.metadata,
+        audioUrl: assistantMessage.audio_url,
+        timestamp: assistantMessage.created_at,
+        wasTranslated: responseTranslated,
+        translationFailed: responseTranslationFailed,
+        targetLanguage: detectedLanguage
+      },
+      emotion: {
+        detected: emotionResult.emotion,
+        confidence: emotionResult.confidence,
+        scores: emotionResult.scores
+      },
+      language: {
+        detected: detectedLanguage,
+        name: getIndianLanguageName(detectedLanguage),
+        isIndianLanguage: isIndianLanguageSupported(detectedLanguage),
+        whisperDetected: whisperLanguage,
+        translationDetected: translationLanguage,
+        supported: isIndianLanguageSupported(detectedLanguage),
+        inputTranslated: needsTranslation,
+        outputTranslated: responseTranslated,
+        ttsCode: getIndianLanguageTTSCode(detectedLanguage)
+      },
+      // Sentence-level chunks, already streamed live via 'audio_chunk'
+      // events as they completed -- included again here so a client that
+      // only listens for 'done' (or reconnects) can still play them back.
+      audioChunks: audioChunks.sort((a, b) => a.index - b.index),
+      audio: audioResponse ? {
+        url: audioResponse.audioUrl,
+        duration: audioResponse.duration,
+        provider: audioResponse.provider,
+        language: detectedLanguage
+      } : null,
+      contextLength: conversationHistory.length,
+      transcription: {
+        provider: 'groq_whisper',
+        confidence: transcriptionResult.confidence,
+        duration: transcriptionResult.duration,
+        whisperLanguage: whisperLanguage
+      }
+    };
+
+    console.log(`🎉 [stream] Voice message processing completed successfully`);
+    if (!clientClosed) {
+      sendEvent('done', donePayload);
+    }
+    res.end();
+
+  } catch (error) {
+    console.error('❌ [stream] Error processing voice message:', error);
+    if (!clientClosed) {
+      sendEvent('error', {
+        error: 'Failed to process voice message',
+        details: error.message
+      });
+    }
+    res.end();
+  }
+}));
+
+/**
  * Helper function to map language codes for TTS
  * @param {string} language - Language code (e.g., 'en', 'es', 'fr')
  * @returns {string} TTS-compatible language code (e.g., 'en-US', 'es-ES', 'fr-FR')

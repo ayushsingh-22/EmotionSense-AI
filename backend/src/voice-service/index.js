@@ -122,7 +122,7 @@ export const speechToTextGroq = async (audioPath) => {
       transcriptionOptions.language = config.stt.groq.language;
     }
     
-    const transcription = await groq.audio.transcriptions.create(transcriptionOptions);
+const transcription = await groq.audio.transcriptions.create(transcriptionOptions);
 
     // Extract transcript text
     const transcript = transcription.text || '';

@@ -6,11 +6,11 @@
 @import '../styles/chat-optimized.css';
 
 /**
- * Global Color Scheme (ChatGPT-inspired professional design)
- * Primary: #5a67d8 (Indigo)
- * Accent: #667eea (Light Indigo)
- * Background: #f9fafb (Light) / #0f172a (Dark)
- * Text: #111827 (Dark) / #f3f4f6 (Light)
+ * Global Color Scheme (calm, single-accent violet design)
+ * Primary: hsl(262 80% 50%) — violet
+ * Secondary/Accent: hsl(260 84% 62%) — light violet
+ * Background: #ffffff (Light) / hsl(224 71% 4%) (Dark)
+ * Text: hsl(217 33% 17%) (Light) / #f3f4f6 (Dark)
  */
 
 @layer base {
@@ -25,18 +25,18 @@
     --popover: 0 0% 100%;
     --popover-foreground: 217 33% 17%;
     
-    /* Primary: #5a67d8 (Indigo) */
+    /* Primary: violet */
     --primary: 262 80% 50%;
     --primary-foreground: 0 0% 100%;
-    
-    /* Secondary: #667eea (Light Indigo) */
+
+    /* Secondary: light violet */
     --secondary: 260 84% 62%;
     --secondary-foreground: 0 0% 100%;
-    
+
     --muted: 220 13% 95%;
     --muted-foreground: 217 10% 47%;
-    
-    /* Accent: #667eea */
+
+    /* Accent: light violet */
     --accent: 260 84% 62%;
     --accent-foreground: 0 0% 100%;
     
@@ -63,18 +63,18 @@
     --popover: 217 33% 17%;
     --popover-foreground: 210 20% 98%;
     
-    /* Primary remains consistent: #5a67d8 */
+    /* Primary remains consistent: violet */
     --primary: 262 80% 60%;
     --primary-foreground: 224 71% 4%;
-    
-    /* Secondary: #667eea */
+
+    /* Secondary: light violet */
     --secondary: 260 84% 62%;
     --secondary-foreground: 224 71% 4%;
-    
+
     --muted: 217 33% 25%;
     --muted-foreground: 217 9% 65%;
-    
-    /* Accent: #667eea */
+
+    /* Accent: light violet */
     --accent: 260 84% 62%;
     --accent-foreground: 224 71% 4%;
     
@@ -190,11 +190,11 @@
 
   /* Chat-specific utilities */
   .chat-message-user {
-    @apply bg-blue-500/10 dark:bg-blue-900/20 rounded-2xl px-4 py-3 max-w-xl;
+    @apply bg-muted rounded-2xl px-4 py-3 max-w-xl;
   }
 
   .chat-message-assistant {
-    @apply bg-gray-50/50 dark:bg-gray-800/50 rounded-2xl px-4 py-3 max-w-2xl;
+    @apply bg-transparent rounded-2xl px-4 py-3 max-w-2xl;
   }
 }
 
@@ -255,7 +255,7 @@ select {
   
   /* Glow effect */
   .glow {
-    box-shadow: 0 0 20px rgba(90, 103, 216, 0.5);
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.5);
   }
   
   /* Floating animation */

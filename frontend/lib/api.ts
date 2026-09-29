@@ -5,6 +5,7 @@ import type {
   VoiceAnalysisResult,
   MultiModalResult,
   ChatMessageResult,
+  VoiceMessageResult,
 } from '@/types';
 
 // Create axios instance with optimized config
@@ -262,6 +263,122 @@ export const sendChatMessageStream = async (
     buffer += decoder.decode(value, { stream: true });
 
     // SSE frames are separated by a blank line ("\n\n")
+    let separatorIndex: number;
+    while ((separatorIndex = buffer.indexOf('\n\n')) !== -1) {
+      const rawFrame = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+      if (rawFrame.trim().length > 0) {
+        handleFrame(rawFrame);
+      }
+    }
+  }
+};
+
+/**
+ * Send a recorded voice message and consume the streamed SSE response.
+ *
+ * Same fetch + reader approach as sendChatMessageStream, against POST
+ * /api/chat/voice/stream. Frame format sent by the backend:
+ *   event: transcript   data: {"text": "...", "whisperLanguage": "..."}
+ *   event: token        data: {"text": "..."}
+ *   event: audio_chunk  data: {"index": 0, "text": "...", "url": "...", "duration": 1.2}
+ *   event: done         data: <same shape as /api/chat/voice's response.data>
+ *   event: error        data: {"error": "...", "details": "..."}
+ *
+ * Callbacks:
+ *   onTranscript(text)   - called once the user's speech has been transcribed
+ *   onToken(text)        - called for each incremental chunk of AI reply text
+ *   onAudioChunk(chunk)  - called for each sentence's TTS audio as soon as it's ready,
+ *                          in order, well before the full response/'done' event
+ *   onDone(result)       - called once with the final VoiceMessageResult payload
+ *   onError(message)     - called if the stream reports/ends in an error
+ */
+export interface VoiceAudioChunk {
+  index: number;
+  text: string;
+  url: string;
+  duration?: number;
+}
+
+export const sendVoiceMessageStream = async (
+  audioBlob: Blob,
+  userId: string,
+  sessionId: string | undefined,
+  callbacks: {
+    onTranscript: (text: string, whisperLanguage?: string) => void;
+    onToken: (text: string) => void;
+    onAudioChunk?: (chunk: VoiceAudioChunk) => void;
+    onDone: (result: VoiceMessageResult) => void;
+    onError: (message: string) => void;
+  }
+): Promise<void> => {
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+  const formData = new FormData();
+  formData.append('userId', userId);
+  if (sessionId) formData.append('sessionId', sessionId);
+  formData.append('audio', audioBlob, 'voice-message.webm');
+  formData.append('type', 'voice');
+
+  const response = await fetch(`${baseURL}/api/chat/voice/stream`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok || !response.body) {
+    callbacks.onError(`Request failed with status ${response.status}`);
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const handleFrame = (rawFrame: string) => {
+    let eventName = 'message';
+    const dataLines: string[] = [];
+
+    for (const line of rawFrame.split('\n')) {
+      if (line.startsWith('event:')) {
+        eventName = line.slice('event:'.length).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice('data:'.length).trim());
+      }
+    }
+
+    if (dataLines.length === 0) return;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dataLines.join('\n'));
+    } catch {
+      return;
+    }
+
+    if (eventName === 'transcript') {
+      const data = parsed as { text?: string; whisperLanguage?: string };
+      if (typeof data.text === 'string') callbacks.onTranscript(data.text, data.whisperLanguage);
+    } else if (eventName === 'token') {
+      const text = (parsed as { text?: string })?.text;
+      if (typeof text === 'string') callbacks.onToken(text);
+    } else if (eventName === 'audio_chunk') {
+      const chunk = parsed as VoiceAudioChunk;
+      if (typeof chunk.url === 'string') callbacks.onAudioChunk?.(chunk);
+    } else if (eventName === 'done') {
+      callbacks.onDone(parsed as VoiceMessageResult);
+    } else if (eventName === 'error') {
+      const err = parsed as { error?: string; details?: string };
+      callbacks.onError(err.details || err.error || 'Unknown streaming error');
+    }
+  };
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
     let separatorIndex: number;
     while ((separatorIndex = buffer.indexOf('\n\n')) !== -1) {
       const rawFrame = buffer.slice(0, separatorIndex);
