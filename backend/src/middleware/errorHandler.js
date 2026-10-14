@@ -1,10 +1,16 @@
 /**
  * Error Handling Middleware
- * Centralized error handling for the application
+ * Centralized error handling for the application.
+ *
+ * Responses never contain internal error text. 5xx and unknown errors are answered
+ * with a generic message + request id; the full error (redacted) goes to the log.
+ * Operational 4xx errors raised on purpose (ApiError) keep their message.
  */
+import { safePublicMessage } from '../utils/publicError.js';
 
 /**
- * Custom API Error class
+ * Custom API Error class. Messages of ApiError are written for end users and are
+ * returned as-is for 4xx statuses.
  */
 export class ApiError extends Error {
   constructor(statusCode, message, isOperational = true, stack = '') {
@@ -19,44 +25,63 @@ export class ApiError extends Error {
   }
 }
 
+const GENERIC = {
+  400: 'Bad request',
+  401: 'Authentication required',
+  403: 'Forbidden',
+  404: 'Not found',
+  413: 'Payload too large',
+  429: 'Too many requests',
+  500: 'Internal server error'
+};
+
 /**
  * Error handler middleware
- * Catches and formats errors before sending response
  */
 export const errorHandler = (err, req, res, next) => {
-  let { statusCode = 500, message } = err;
+  if (res.headersSent) return next(err);
 
-  // Log error for debugging
-  console.error('❌ Error:', {
-    message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    url: req.originalUrl,
-    method: req.method
-  });
+  let statusCode = Number(err.statusCode || err.status) || 500;
+  if (statusCode < 400 || statusCode > 599) statusCode = 500;
+  let message;
 
-  // Handle specific error types
-  if (err.name === 'ValidationError') {
-    statusCode = 400;
-    message = 'Validation Error: ' + message;
-  } else if (err.name === 'UnauthorizedError') {
-    statusCode = 401;
-    message = 'Unauthorized access';
+  if (err instanceof ApiError && err.isOperational && statusCode < 500) {
+    message = err.message; // deliberate, user-facing text
   } else if (err.code === 'LIMIT_FILE_SIZE') {
     statusCode = 413;
     message = 'File size exceeds the maximum allowed limit';
   } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
     statusCode = 400;
     message = 'Unexpected file field';
+  } else if (err.type === 'entity.parse.failed') {
+    statusCode = 400;
+    message = 'Invalid JSON in request body';
+  } else if (err.type === 'entity.too.large') {
+    statusCode = 413;
+    message = GENERIC[413];
+  } else if (statusCode < 500) {
+    message = safePublicMessage(err, GENERIC[statusCode] || 'Bad request');
+  } else {
+    message = GENERIC[500];
   }
 
-  // Send error response
+  // Full diagnostics stay server-side (console output is redacted).
+  console.error('❌ Error:', {
+    requestId: req.id,
+    status: statusCode,
+    method: req.method,
+    url: req.originalUrl?.split('?')[0],
+    // body-parser messages quote the start of the request body; never log that.
+    message: err.type === 'entity.parse.failed' ? 'Malformed JSON body' : err.message,
+    stack: statusCode >= 500 ? err.stack : undefined
+  });
+
+  const debug = process.env.NODE_ENV === 'development' && process.env.EXPOSE_ERROR_DETAILS === 'true';
   res.status(statusCode).json({
     success: false,
     error: message,
-    ...(process.env.NODE_ENV === 'development' && {
-      stack: err.stack,
-      details: err
-    })
+    requestId: req.id,
+    ...(debug && { stack: err.stack })
   });
 };
 

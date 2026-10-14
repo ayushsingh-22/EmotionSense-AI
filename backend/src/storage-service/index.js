@@ -235,6 +235,19 @@ export const saveChatMessage = async (userId, sessionId, role, message, emotionD
 };
 
 /**
+ * True only if the chat session exists AND belongs to the user.
+ * Used before attaching new messages to a client-supplied sessionId.
+ */
+export const userOwnsChatSession = async (userId, sessionId) => {
+  if (!userId || !sessionId) return false;
+  const row = await prisma.chatSession.findFirst({
+    where: { id: sessionId, userId },
+    select: { id: true }
+  });
+  return !!row;
+};
+
+/**
  * Get chat sessions for a user
  */
 export const getUserChatSessions = async (userId) => {

@@ -8,7 +8,7 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { asyncHandler } from '../middleware/errorHandler.js';
+import { asyncHandler, ApiError } from '../middleware/errorHandler.js';
 import { analyzeTextEmotion } from '../text-service/index.js';
 import { generateResponse, generateResponseStream } from '../llm-service/index.js';
 import { generateSpeech } from '../tts-service/index.js';
@@ -37,6 +37,12 @@ import { textToSpeech } from '../utils/voiceHelper.js';
 import { sendEmergencyAlert } from '../utils/nodemailerHelper.js';
 import { detectRiskLevel, shouldTriggerEmergencyAlert } from '../utils/safetyHelper.js';
 import config from '../config/index.js';
+import { bindUserId } from '../middleware/auth.js';
+import { validate } from '../middleware/security.js';
+import { userOwnsChatSession } from '../storage-service/index.js';
+import {
+  chatMessageBody, sessionCreateBody, sessionTitleBody, sessionIdParams, voiceFormBody
+} from '../middleware/schemas.js';
 import { 
   isIndianLanguageSupported, 
   getIndianLanguageName,
@@ -58,12 +64,25 @@ const upload = multer({
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error(`Invalid audio format: ${file.mimetype}`));
+      cb(new ApiError(400, 'Invalid audio format'));
     }
   }
 });
 
 const router = express.Router();
+
+/**
+ * A client-supplied sessionId must belong to the authenticated user BEFORE any
+ * paid work (translation/LLM/STT) or writes happen. Runs after bindUserId (and
+ * after multer on multipart routes), so req.userId is the verified id.
+ */
+const requireOwnedSession = asyncHandler(async (req, res, next) => {
+  const sessionId = req.body?.sessionId;
+  if (sessionId && !(await userOwnsChatSession(req.userId, sessionId))) {
+    return res.status(404).json({ success: false, error: 'Session not found' });
+  }
+  next();
+});
 
 /**
  * POST /api/chat/message
@@ -77,7 +96,7 @@ const router = express.Router();
  *   "includeAudio": true (optional, default: false)
  * }
  */
-router.post('/message', asyncHandler(async (req, res) => {
+router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession, asyncHandler(async (req, res) => {
   const { message, userId, sessionId, includeAudio = false } = req.body;
 
   // Validate input
@@ -424,7 +443,7 @@ router.post('/message', asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to process chat message',
-      details: error.message
+      requestId: req.id
     });
   }
 }));
@@ -455,7 +474,7 @@ router.post('/message', asyncHandler(async (req, res) => {
  *
  * Request body: identical to POST /message.
  */
-router.post('/message/stream', asyncHandler(async (req, res) => {
+router.post('/message/stream', validate({ body: chatMessageBody }), requireOwnedSession, asyncHandler(async (req, res) => {
   const { message, userId, sessionId, includeAudio = false } = req.body;
 
   if (!message || typeof message !== 'string') {
@@ -761,7 +780,7 @@ router.post('/message/stream', asyncHandler(async (req, res) => {
     if (!clientClosed) {
       sendEvent('error', {
         error: 'Failed to process chat message',
-        details: error.message
+        requestId: req.id
       });
     }
     res.end();
@@ -798,7 +817,7 @@ router.get('/sessions', asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch chat sessions',
-      details: error.message
+      requestId: req.id
     });
   }
 }));
@@ -807,7 +826,7 @@ router.get('/sessions', asyncHandler(async (req, res) => {
  * GET /api/chat/sessions/:sessionId/messages
  * Get all messages for a specific chat session
  */
-router.get('/sessions/:sessionId/messages', asyncHandler(async (req, res) => {
+router.get('/sessions/:sessionId/messages', validate({ params: sessionIdParams }), asyncHandler(async (req, res) => {
   const { sessionId } = req.params;
   const { userId } = req.query;
 
@@ -836,7 +855,7 @@ router.get('/sessions/:sessionId/messages', asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch chat messages',
-      details: error.message
+      requestId: req.id
     });
   }
 }));
@@ -845,7 +864,7 @@ router.get('/sessions/:sessionId/messages', asyncHandler(async (req, res) => {
  * POST /api/chat/sessions
  * Create a new chat session
  */
-router.post('/sessions', asyncHandler(async (req, res) => {
+router.post('/sessions', validate({ body: sessionCreateBody }), asyncHandler(async (req, res) => {
   const { userId, sessionTitle } = req.body;
 
   if (!userId) {
@@ -868,7 +887,7 @@ router.post('/sessions', asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to create chat session',
-      details: error.message
+      requestId: req.id
     });
   }
 }));
@@ -877,7 +896,7 @@ router.post('/sessions', asyncHandler(async (req, res) => {
  * PUT /api/chat/sessions/:sessionId/title
  * Update session title
  */
-router.put('/sessions/:sessionId/title', asyncHandler(async (req, res) => {
+router.put('/sessions/:sessionId/title', validate({ params: sessionIdParams, body: sessionTitleBody }), asyncHandler(async (req, res) => {
   const { sessionId } = req.params;
   const { userId, title } = req.body;
 
@@ -901,7 +920,7 @@ router.put('/sessions/:sessionId/title', asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update session title',
-      details: error.message
+      requestId: req.id
     });
   }
 }));
@@ -910,7 +929,7 @@ router.put('/sessions/:sessionId/title', asyncHandler(async (req, res) => {
  * DELETE /api/chat/sessions/:sessionId
  * Delete a chat session and all its messages
  */
-router.delete('/sessions/:sessionId', asyncHandler(async (req, res) => {
+router.delete('/sessions/:sessionId', validate({ params: sessionIdParams }), asyncHandler(async (req, res) => {
   const { sessionId } = req.params;
   const { userId } = req.query;
 
@@ -934,7 +953,7 @@ router.delete('/sessions/:sessionId', asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to delete chat session',
-      details: error.message
+      requestId: req.id
     });
   }
 }));
@@ -950,7 +969,7 @@ router.delete('/sessions/:sessionId', asyncHandler(async (req, res) => {
  * - sessionId: Session ID (optional - creates new if not provided)
  * - language: User language code (optional, default: en-US)
  */
-router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
+router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voiceFormBody }), requireOwnedSession, asyncHandler(async (req, res) => {
   const { userId, sessionId } = req.body;
 
   // Validate input
@@ -1018,7 +1037,6 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
         success: false,
         error: 'Speech transcription failed',
         details: {
-          groqError: transcriptionResult.error,
           receivedFile: req.file.originalname,
           fileSize: req.file.size,
           message: 'The audio file could not be transcribed. Please try again with clearer audio.'
@@ -1320,7 +1338,7 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to process voice message',
-      details: error.message
+      requestId: req.id
     });
   }
 }));
@@ -1340,7 +1358,7 @@ router.post('/voice', upload.single('audio'), asyncHandler(async (req, res) => {
  * Note: TTS is still generated as one call on the full final response (not
  * chunked/streamed yet) -- audio only becomes available in the 'done' event.
  */
-router.post('/voice/stream', upload.single('audio'), asyncHandler(async (req, res) => {
+router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body: voiceFormBody }), requireOwnedSession, asyncHandler(async (req, res) => {
   const { userId, sessionId } = req.body;
 
   if (!userId) {
@@ -1402,7 +1420,7 @@ router.post('/voice/stream', upload.single('audio'), asyncHandler(async (req, re
       if (!clientClosed) {
         sendEvent('error', {
           error: 'Speech transcription failed',
-          details: transcriptionResult.error
+          requestId: req.id
         });
       }
       return res.end();
@@ -1770,7 +1788,7 @@ router.post('/voice/stream', upload.single('audio'), asyncHandler(async (req, re
     if (!clientClosed) {
       sendEvent('error', {
         error: 'Failed to process voice message',
-        details: error.message
+        requestId: req.id
       });
     }
     res.end();
@@ -1823,7 +1841,7 @@ function getLanguageCodeForTTS(language) {
  * 
  * Response: { success: true, data: { text: string, confidence: number, language: string } }
  */
-router.post('/transcribe', upload.single('audio'), asyncHandler(async (req, res) => {
+router.post('/transcribe', upload.single('audio'), bindUserId, asyncHandler(async (req, res) => {
   console.log('🎙️ Transcribe endpoint called');
 
   // Validate audio file
@@ -1889,7 +1907,7 @@ router.post('/transcribe', upload.single('audio'), asyncHandler(async (req, res)
     res.status(500).json({
       success: false,
       error: 'Speech transcription failed',
-      details: error.message
+      requestId: req.id
     });
   }
 }));

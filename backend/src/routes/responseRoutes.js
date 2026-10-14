@@ -3,6 +3,8 @@
  * Handles empathetic response generation using LLM
  */
 
+import { validate } from '../middleware/security.js';
+import { responseGenerateBody, responseChatBody } from '../middleware/schemas.js';
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { generateResponse } from '../llm-service/index.js';
@@ -25,7 +27,7 @@ const router = express.Router();
  *   "includeAudio": true (optional, default: false)
  * }
  */
-router.post('/generate', asyncHandler(async (req, res) => {
+router.post('/generate', validate({ body: responseGenerateBody }), asyncHandler(async (req, res) => {
   const { emotion, confidence, context, transcript, includeAudio = false } = req.body;
 
   // Validate input
@@ -78,7 +80,7 @@ router.post('/generate', asyncHandler(async (req, res) => {
  *   "conversationHistory": [] (optional)
  * }
  */
-router.post('/chat', asyncHandler(async (req, res) => {
+router.post('/chat', validate({ body: responseChatBody }), asyncHandler(async (req, res) => {
   const { message, emotion, conversationHistory = [] } = req.body;
 
   // Validate input

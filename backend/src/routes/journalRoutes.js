@@ -1,9 +1,13 @@
+import { safePublicMessage } from '../utils/publicError.js';
 import express from 'express';
 import journalGenerator from '../journal-service/journalGenerator.js';
 import cronScheduler from '../journal-service/cronScheduler.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
+import { requireCronSecret } from '../middleware/auth.js';
+import { validate } from '../middleware/security.js';
+import { journalGenerateBody, dateParams, limitQuery } from '../middleware/schemas.js';
 
 /**
  * Get current date in IST timezone (YYYY-MM-DD format)
@@ -85,7 +89,8 @@ router.get('/today', async (req, res) => {
     logger.error('❌ Error getting today\'s journal:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -96,7 +101,7 @@ router.get('/today', async (req, res) => {
  * GET /api/journal/list?userId=xxx&limit=30
  * Get list of journal entries for a user
  */
-router.get('/list', async (req, res) => {
+router.get('/list', validate({ query: limitQuery }), async (req, res) => {
   try {
     const { userId, limit } = req.query;
     
@@ -163,7 +168,8 @@ router.get('/list', async (req, res) => {
     logger.error('❌ Error getting journal list:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -173,7 +179,7 @@ router.get('/list', async (req, res) => {
  * Manually generate a journal for a specific date
  * Body: { userId, date?, force? }
  */
-router.post('/generate', async (req, res) => {
+router.post('/generate', validate({ body: journalGenerateBody }), async (req, res) => {
   try {
     const { userId, date, force } = req.body;
     
@@ -233,7 +239,8 @@ router.post('/generate', async (req, res) => {
     logger.error('❌ Error generating journal:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -311,7 +318,8 @@ router.post('/refresh', async (req, res) => {
     logger.error('❌ Error refreshing journal:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -335,7 +343,8 @@ router.get('/status', async (req, res) => {
     logger.error('❌ Error getting status:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -344,7 +353,7 @@ router.get('/status', async (req, res) => {
  * POST /api/journal/test-generation
  * Test manual generation for all users (admin/testing only)
  */
-router.post('/test-generation', async (req, res) => {
+router.post('/test-generation', requireCronSecret, async (req, res) => {
   try {
     const { date } = req.body;
     
@@ -361,7 +370,8 @@ router.post('/test-generation', async (req, res) => {
     logger.error('❌ Error in test generation:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -370,7 +380,7 @@ router.post('/test-generation', async (req, res) => {
  * GET /api/journal/:date?userId=xxx
  * Get journal for a specific date
  */
-router.get('/:date', async (req, res) => {
+router.get('/:date', validate({ params: dateParams }), async (req, res) => {
   try {
     const { userId } = req.query;
     const { date } = req.params;
@@ -443,7 +453,8 @@ router.get('/:date', async (req, res) => {
     logger.error(`❌ Error getting journal for ${req.params.date}:`, error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });

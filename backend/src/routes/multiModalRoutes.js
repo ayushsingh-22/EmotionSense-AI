@@ -3,6 +3,7 @@
  * Handles combined text and voice emotion detection with multi-language support and emergency contact alerts
  */
 
+import { bindUserId } from '../middleware/auth.js';
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { upload, cleanupFile } from '../middleware/uploadMiddleware.js';
@@ -33,7 +34,7 @@ const router = express.Router();
  * - text: text input (optional, will use transcript if not provided)
  * - userId: user identifier (optional)
  */
-router.post('/', upload.single('audio'), asyncHandler(async (req, res) => {
+router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, res) => {
   const { text, userId } = req.body;
   const audioFile = req.file;
 

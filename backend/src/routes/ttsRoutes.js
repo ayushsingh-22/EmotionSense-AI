@@ -3,6 +3,8 @@
  * Handles text-to-speech conversion requests
  */
 
+import { validate } from '../middleware/security.js';
+import { ttsBody } from '../middleware/schemas.js';
 import express from 'express';
 import { generateSpeech, generateSpeechSarvam } from '../tts-service/index.js';
 import config from '../config/index.js';
@@ -13,7 +15,7 @@ const router = express.Router();
  * POST /api/tts
  * Convert text to speech
  */
-router.post('/', async (req, res) => {
+router.post('/', validate({ body: ttsBody }), async (req, res) => {
   try {
     const { text } = req.body;
 
@@ -65,8 +67,7 @@ router.post('/', async (req, res) => {
       return res.status(503).json({
         success: false,
         error: 'TTS service temporarily unavailable',
-        details: 'Piper TTS engine not installed or configured. Audio generation is currently disabled.',
-        suggestion: 'Download Piper from https://github.com/rhasspy/piper/releases'
+        requestId: req.id
       });
     }
 
@@ -86,7 +87,7 @@ router.post('/', async (req, res) => {
  * POST /api/tts/generate
  * Generate speech from text (alternative endpoint)
  */
-router.post('/generate', async (req, res) => {
+router.post('/generate', validate({ body: ttsBody }), async (req, res) => {
   try {
     const { text, language, voice } = req.body;
 
@@ -140,8 +141,7 @@ router.post('/generate', async (req, res) => {
       return res.status(503).json({
         success: false,
         error: 'TTS service temporarily unavailable',
-        details: 'Piper TTS engine not installed or configured. Audio generation is currently disabled.',
-        suggestion: 'Download Piper from https://github.com/rhasspy/piper/releases'
+        requestId: req.id
       });
     }
 
@@ -177,7 +177,7 @@ router.get('/health', (req, res) => {
  * Generate speech using Sarvam AI directly (bypass Google TTS)
  * Useful for testing or when you specifically want Sarvam's voice
  */
-router.post('/sarvam', async (req, res) => {
+router.post('/sarvam', validate({ body: ttsBody }), async (req, res) => {
   try {
     const { text, language_code } = req.body;
 
@@ -223,9 +223,8 @@ router.post('/sarvam', async (req, res) => {
       
       return res.status(503).json({
         success: false,
-        error: 'Sarvam AI TTS service failed',
-        details: sarvamError.message,
-        suggestion: 'Check SARVAM_API_KEY in .env file'
+        error: 'Text-to-speech service is temporarily unavailable',
+        requestId: req.id
       });
     }
 

@@ -3,6 +3,7 @@
  * Handles voice-based emotion detection requests with emergency contact support
  */
 
+import { bindUserId } from '../middleware/auth.js';
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { upload, cleanupFile } from '../middleware/uploadMiddleware.js';
@@ -26,7 +27,7 @@ const router = express.Router();
  * - audio: audio file (wav, mp3, ogg, webm)
  * - userId: user identifier (optional)
  */
-router.post('/', upload.single('audio'), asyncHandler(async (req, res) => {
+router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, res) => {
   const { userId } = req.body;
   const audioFile = req.file;
 

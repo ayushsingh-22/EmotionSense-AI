@@ -12,8 +12,15 @@ import {
   hasEmergencyContact
 } from '../storage-service/index.js';
 import { isEmailAlertsEnabled, getEmailConfigStatus } from '../utils/nodemailerHelper.js';
+import { requireSelfParam, requireCronSecret } from '../middleware/auth.js';
+import { validate, sensitiveWriteLimiter } from '../middleware/security.js';
+import { emergencyContactBody } from '../middleware/schemas.js';
 
 const router = express.Router();
+
+// Any :userId path segment must equal the authenticated caller.
+router.param('userId', requireSelfParam);
+const contactWrite = [sensitiveWriteLimiter(), validate({ body: emergencyContactBody })];
 
 /**
  * POST /api/emergency/save
@@ -27,7 +34,7 @@ const router = express.Router();
  *   "contactPhone": "+1234567890" (optional)
  * }
  */
-router.post('/save', asyncHandler(async (req, res) => {
+router.post('/save', ...contactWrite, asyncHandler(async (req, res) => {
   const { userId, contactName, contactEmail, contactPhone } = req.body;
 
   // Validate required fields
@@ -81,7 +88,6 @@ router.post('/save', asyncHandler(async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to save emergency contact',
-      details: error.message
     });
   }
 }));
@@ -133,7 +139,6 @@ router.get('/:userId', asyncHandler(async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to fetch emergency contact',
-      details: error.message
     });
   }
 }));
@@ -205,14 +210,13 @@ const updateHandler = asyncHandler(async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to update emergency contact',
-      details: error.message
     });
   }
 });
 
 // Support both PUT and POST for update (for backwards compatibility)
-router.put('/update', updateHandler);
-router.post('/update', updateHandler);
+router.put('/update', ...contactWrite, updateHandler);
+router.post('/update', ...contactWrite, updateHandler);
 
 /**
  * GET /api/emergency/check/:userId
@@ -254,7 +258,6 @@ router.get('/check/:userId', asyncHandler(async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to check emergency contact',
-      details: error.message
     });
   }
 }));
@@ -290,7 +293,6 @@ router.delete('/:userId', asyncHandler(async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to delete emergency contact',
-      details: error.message
     });
   }
 }));
@@ -299,7 +301,7 @@ router.delete('/:userId', asyncHandler(async (req, res) => {
  * GET /api/emergency/email/status
  * Get email service configuration status
  */
-router.get('/email/status', asyncHandler(async (req, res) => {
+router.get('/email/status', requireCronSecret, asyncHandler(async (req, res) => {
   const emailStatus = getEmailConfigStatus();
   
   return res.status(200).json({

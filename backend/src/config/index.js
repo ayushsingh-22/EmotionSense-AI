@@ -127,10 +127,11 @@ const config = {
   },
 
   // Auth Configuration
-  // NEXTAUTH_SECRET must match the frontend's NextAuth secret so this backend
-  // can verify the JWT session token issued by NextAuth on incoming requests.
+  // API_JWT_SECRET must equal the frontend's API_JWT_SECRET: the Next.js server
+  // signs short-lived bearer tokens with it and this backend verifies them
+  // (middleware/auth.js). It is NOT the NextAuth secret.
   auth: {
-    nextAuthSecret: process.env.NEXTAUTH_SECRET
+    apiJwtSecret: process.env.API_JWT_SECRET
   },
 
   // Storage Configuration
@@ -211,7 +212,7 @@ export const validateConfig = () => {
   const requiredFields = [
     { key: 'gemini.apiKey', value: config.gemini.apiKey, name: 'GEMINI_API_KEY' },
     { key: 'database.url', value: config.database.url, name: 'DATABASE_URL' },
-    { key: 'auth.nextAuthSecret', value: config.auth.nextAuthSecret, name: 'NEXTAUTH_SECRET' }
+    { key: 'auth.apiJwtSecret', value: config.auth.apiJwtSecret, name: 'API_JWT_SECRET' }
   ];
 
   const missing = requiredFields.filter(field => !field.value);

@@ -39,14 +39,14 @@ export const requestLogger = (req, res, next) => {
   const startTime = Date.now();
   
   // Log request
-  const requestLog = `[${getTimestamp()}] ${req.method} ${req.originalUrl} - IP: ${req.ip}`;
+  const requestLog = `[${getTimestamp()}] ${req.id ?? '-'} ${req.method} ${req.originalUrl.split('?')[0]} - IP: ${req.ip}`;
   console.log(`📥 ${requestLog}`);
   writeLogToFile(requestLog);
 
   // Log response when finished
   res.on('finish', () => {
     const duration = Date.now() - startTime;
-    const responseLog = `[${getTimestamp()}] ${req.method} ${req.originalUrl} - ${res.statusCode} - ${duration}ms`;
+    const responseLog = `[${getTimestamp()}] ${req.id ?? '-'} ${req.method} ${req.originalUrl.split('?')[0]} - ${res.statusCode} - ${duration}ms`;
     
     if (res.statusCode >= 400) {
       console.error(`📤❌ ${responseLog}`);

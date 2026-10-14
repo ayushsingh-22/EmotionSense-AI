@@ -1,0 +1,387 @@
+// Canonical schema for EmotionSense AI, targeting Neon (Postgres).
+// Both backend (Express) and frontend (Next.js/NextAuth) generate their
+// Prisma Client from this single file — see each app's package.json
+// "prisma.schema" pointer.
+//
+// Table/column names are kept snake_case via @map/@@map so the JSON shapes
+// returned to existing frontend components (which expect e.g. user_id,
+// created_at) don't have to change.
+//
+// IMPORTANT: this schema lives at the repo root, a sibling of backend/ and
+// frontend/, not inside either app. Prisma's default `output` (when left
+// unset) resolves relative to *this file's own directory*, not the directory
+// `prisma generate` was invoked from and not the consuming app's node_modules
+// — so without an explicit `output` per app, generate silently writes into
+// the repo root's node_modules instead of backend's or frontend's, and
+// whichever app actually imports @prisma/client ends up loading its own
+// un-generated placeholder client instead (this is what caused the
+// "PrismaClientInitializationError ... built on Vercel" build failures: the
+// message is generic and doesn't actually mean caching is at fault). Two
+// explicit generator blocks below make the output location deterministic
+// for both apps regardless of which one runs `generate`.
+
+generator client_backend {
+  provider      = "prisma-client-js"
+  output        = "../backend/node_modules/.prisma/client"
+  // "native" covers local dev (Windows/Mac/whatever you run on); the Linux
+  // targets cover Render's actual container runtime, which doesn't always
+  // match the build machine's own reported platform.
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+generator client_frontend {
+  provider      = "prisma-client-js"
+  output        = "../frontend/node_modules/.prisma/client"
+  // Same reasoning as above, but for Vercel's serverless runtime.
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String?  @map("full_name")
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  chatSessions      ChatSession[]
+  messages          Message[]
+  emergencyContact  EmergencyContact?
+  safetyAlerts      SafetyAlert[]
+  emotionAnalyses   EmotionAnalysis[]
+  emotionFlowSegs   EmotionFlowSegment[]
+  dailySummaries    DailyEmotionSummary[]
+  weeklySummaries   WeeklyEmotionSummary[]
+  masterActivities  MasterUserActivity[]
+  alertLogs         AlertLog[]
+  wellbeingPreference WellbeingUserPreference?
+  wellbeingUserConsents WellbeingUserConsent[]
+  wellbeingMoodCheckins WellbeingMoodCheckin[]
+  wellbeingJournalEntrys WellbeingJournalEntry[]
+  wellbeingActivitySessions WellbeingActivitySession[]
+  wellbeingRecommendationRuns WellbeingRecommendationRun[]
+
+  @@map("users")
+}
+
+model ChatSession {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  sessionTitle String   @default("New Chat") @map("session_title")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@map("chat_sessions")
+}
+
+model Message {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  sessionId         String   @map("session_id")
+  role              String
+  content           String
+  emotion           String?
+  emotionConfidence Float?   @map("emotion_confidence")
+  audioUrl          String?  @map("audio_url")
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model EmergencyContact {
+  id           String   @id @default(uuid())
+  userId       String   @unique @map("user_id")
+  contactName  String   @map("contact_name")
+  contactEmail String   @map("contact_email")
+  contactPhone String?  @map("contact_phone")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("emergency_contacts")
+}
+
+model SafetyAlert {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  emergencyContactId  String?   @map("emergency_contact_id")
+  detectedEmotion     String?   @map("detected_emotion")
+  messageText         String?   @map("message_text")
+  alertSent           Boolean   @default(false) @map("alert_sent")
+  alertSentAt         DateTime? @map("alert_sent_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("safety_alerts")
+}
+
+model EmotionAnalysis {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  type          String
+  inputText     String?  @map("input_text")
+  transcript    String?
+  emotion       String?
+  confidence    Float?
+  scores        Json?
+  audioFeatures Json?    @map("audio_features")
+  timestamp     DateTime @default(now())
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("emotion_analysis")
+}
+
+model EmotionFlowSegment {
+  id              String  @id @default(uuid())
+  userId          String  @map("user_id")
+  date            String
+  segment         String?
+  dominantEmotion String? @map("dominant_emotion")
+  intensity       Float?
+  summary         String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("emotion_flow_segments")
+}
+
+model DailyEmotionSummary {
+  id                  String   @id @default(uuid())
+  userId              String   @map("user_id")
+  date                String
+  dominantEmotion     String?  @map("dominant_emotion")
+  emotionDistribution Json?    @map("emotion_distribution")
+  moodScore           Float?   @map("mood_score")
+  totalEntries        Int      @default(0) @map("total_entries")
+  timeSegments        Json?    @map("time_segments")
+  trendPoints         Json?    @map("trend_points")
+  compassPoints       Json?    @map("compass_points")
+  emotionFlow         Json?    @map("emotion_flow")
+  segmentSummary      Json?    @map("segment_summary")
+  keyMoments          Json?    @map("key_moments")
+  summaryText         String?  @map("summary_text")
+  eJournalEntry       String?  @map("ejournal_entry")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("daily_emotion_summary")
+}
+
+model WeeklyEmotionSummary {
+  id                 String   @id @default(uuid())
+  userId             String   @map("user_id")
+  weekStart          String   @map("week_start")
+  weekEnd            String   @map("week_end")
+  dominantEmotion    String?  @map("dominant_emotion")
+  weeklyArc          Json?    @map("weekly_arc")
+  averageMoodScore   Float?   @map("average_mood_score")
+  keyHighlights      Json?    @map("key_highlights")
+  weeklyMomentFlow   Json?    @map("weekly_moment_flow")
+  weeklyReflection   String?  @map("weekly_reflection")
+  weeklySummaryText  String?  @map("weekly_summary_text")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart, weekEnd])
+  @@map("weekly_emotion_summary")
+}
+
+model MasterUserActivity {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  sessionId     String?  @map("session_id")
+  activityType  String   @map("activity_type")
+  role          String
+  source        String
+  content       String?
+  emotionData   Json?    @map("emotion_data")
+  metadata      Json?
+  localDate     String   @map("local_date")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("master_user_activity")
+}
+
+model AlertLog {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  contactEmail    String?  @map("contact_email")
+  alertType       String   @default("emotional_distress") @map("alert_type")
+  messageExcerpt  String?  @map("message_excerpt")
+  additionalData  Json?    @map("additional_data")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("alert_logs")
+}
+
+// V2 additions: additive tables; legacy tables remain unchanged.
+model WellbeingUserPreference {
+  userId                String   @id @map("user_id") @db.Text
+  preferredLanguage     String   @default("en") @map("preferred_language") @db.Text
+  preferredSupportModes String[] @default([]) @map("preferred_support_modes")
+  preferredActivityTypes String[] @default([]) @map("preferred_activity_types")
+  timezone              String   @default("UTC") @db.Text
+  accessibilityPreferences Json   @default("{}") @map("accessibility_preferences") @db.JsonB
+  updatedAt             DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  // DB FK user_id -> public.users(id); add `user` relation once current User model name known.
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("user_preferences")
+}
+
+model WellbeingUserConsent {
+  id            String   @id @default(dbgenerated("gen_random_uuid()::text")) @db.Text
+  userId        String   @map("user_id") @db.Text
+  purpose       String   @db.Text
+  noticeVersion String   @map("notice_version") @db.Text
+  granted       Boolean
+  recordedAt    DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  source        String   @default("in_app") @db.Text
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, purpose, recordedAt(sort: Desc)], map: "user_consents_user_purpose_time_idx")
+  @@map("user_consents")
+}
+
+model WellbeingMoodCheckin {
+  id          String   @id @default(dbgenerated("gen_random_uuid()::text")) @db.Text
+  userId      String   @map("user_id") @db.Text
+  moodLabel   String   @map("mood_label") @db.Text
+  moodScore   Int?     @map("mood_score") @db.SmallInt
+  energyScore Int?     @map("energy_score") @db.SmallInt
+  note        String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  recommendationRuns WellbeingRecommendationRun[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt(sort: Desc)], map: "mood_checkins_user_time_idx")
+  @@map("mood_checkins")
+}
+
+model WellbeingJournalEntry {
+  id        String   @id @default(dbgenerated("gen_random_uuid()::text")) @db.Text
+  userId    String   @map("user_id") @db.Text
+  title     String?  @db.Text
+  body      String   @db.Text
+  origin    String   @default("user") @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt(sort: Desc)], map: "journal_entries_user_time_idx")
+  @@map("journal_entries")
+}
+
+model WellbeingMediaAsset {
+  id              String   @id @default(dbgenerated("gen_random_uuid()::text")) @db.Text
+  storageProvider String   @map("storage_provider") @db.Text
+  objectKey       String   @map("object_key") @db.Text
+  mimeType        String   @map("mime_type") @db.Text
+  durationSeconds Int?     @map("duration_seconds")
+  licenseNote     String?  @map("license_note") @db.Text
+  visibility      String   @default("private") @db.Text
+  legacySource    String?  @map("legacy_source") @db.Text
+  legacyAssetId   String?  @map("legacy_asset_id") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  contentItems    WellbeingContentItem[]
+  @@unique([storageProvider, objectKey])
+  // Partial unique index on legacySource/legacyAssetId is managed through raw SQL migration.
+  @@map("media_assets")
+}
+
+model WellbeingContentItem {
+  id              String   @id @default(dbgenerated("gen_random_uuid()::text")) @db.Text
+  title           String   @db.Text
+  description     String?  @db.Text
+  contentType     String   @map("content_type") @db.Text
+  language        String   @default("en") @db.Text
+  durationSeconds Int?     @map("duration_seconds")
+  needTags        String[] @default([]) @map("need_tags")
+  suitabilityTags String[] @default([]) @map("suitability_tags")
+  mediaAssetId    String?  @map("media_asset_id") @db.Text
+  status          String   @default("draft") @db.Text
+  reviewVersion   String?  @map("review_version") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  mediaAsset      WellbeingMediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  activitySessions WellbeingActivitySession[]
+  recommendationItems WellbeingRecommendationItem[]
+  @@index([contentType, status], map: "content_items_type_status_idx")
+  @@map("content_items")
+}
+
+model WellbeingActivitySession {
+  id            String   @id @default(dbgenerated("gen_random_uuid()::text")) @db.Text
+  userId        String   @map("user_id") @db.Text
+  contentItemId String   @map("content_item_id") @db.Text
+  status        String   @default("started") @db.Text
+  startedAt     DateTime @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+  contentItem   WellbeingContentItem @relation(fields: [contentItemId], references: [id], onDelete: Restrict)
+  feedback      WellbeingActivityFeedback?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, startedAt(sort: Desc)], map: "activity_sessions_user_time_idx")
+  @@map("activity_sessions")
+}
+
+model WellbeingActivityFeedback {
+  id                String   @id @default(dbgenerated("gen_random_uuid()::text")) @db.Text
+  activitySessionId String   @unique @map("activity_session_id") @db.Text
+  helpfulness       String   @db.Text
+  beforeMoodScore   Int?     @map("before_mood_score") @db.SmallInt
+  afterMoodScore    Int?     @map("after_mood_score") @db.SmallInt
+  submittedAt       DateTime @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  activitySession   WellbeingActivitySession @relation(fields: [activitySessionId], references: [id], onDelete: Cascade)
+  @@map("activity_feedback")
+}
+
+model WellbeingRecommendationRun {
+  id             String   @id @default(dbgenerated("gen_random_uuid()::text")) @db.Text
+  userId         String   @map("user_id") @db.Text
+  moodCheckinId  String?  @map("mood_checkin_id") @db.Text
+  rulesVersion   String   @map("rules_version") @db.Text
+  contextCode    String?  @map("context_code") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  moodCheckin    WellbeingMoodCheckin? @relation(fields: [moodCheckinId], references: [id], onDelete: SetNull)
+  items          WellbeingRecommendationItem[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt(sort: Desc)], map: "recommendation_runs_user_time_idx")
+  @@map("recommendation_runs")
+}
+
+model WellbeingRecommendationItem {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()::text")) @db.Text
+  recommendationRunId String   @map("recommendation_run_id") @db.Text
+  contentItemId       String   @map("content_item_id") @db.Text
+  position            Int      @db.SmallInt
+  score               Float?
+  reasonCode          String?  @map("reason_code") @db.Text
+  selectedAt          DateTime? @map("selected_at") @db.Timestamptz(6)
+  run                 WellbeingRecommendationRun @relation(fields: [recommendationRunId], references: [id], onDelete: Cascade)
+  contentItem         WellbeingContentItem @relation(fields: [contentItemId], references: [id], onDelete: Restrict)
+  @@unique([recommendationRunId, position])
+  @@unique([recommendationRunId, contentItemId])
+  @@map("recommendation_items")
+}

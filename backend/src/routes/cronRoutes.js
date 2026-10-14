@@ -7,35 +7,9 @@
 import express from 'express';
 import prisma from '../lib/prisma.js';
 import config from '../config/index.js';
+import { requireCronSecret } from '../middleware/auth.js';
 
 const router = express.Router();
-
-/**
- * Middleware: Validate CRON_SECRET token
- * Rejects requests without valid Bearer token
- */
-const validateCronToken = (req, res, next) => {
-  const cronSecret = config.cron?.secret;
-
-  if (!cronSecret) {
-    console.error('❌ CRON_SECRET not configured');
-    return res.status(500).json({ error: 'Cron endpoint misconfigured' });
-  }
-
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized - Missing token' });
-  }
-
-  const token = authHeader.slice(7); // Remove 'Bearer ' prefix
-
-  if (token !== cronSecret) {
-    return res.status(401).json({ error: 'Unauthorized - Invalid token' });
-  }
-
-  next();
-};
 
 /**
  * GET /api/cron/ping
@@ -52,7 +26,7 @@ const validateCronToken = (req, res, next) => {
  * - 401 if token invalid/missing
  * - 500 if the Neon query fails
  */
-router.get('/ping', validateCronToken, async (req, res) => {
+router.get('/ping', requireCronSecret, async (req, res) => {
   const startTime = Date.now();
 
   try {
@@ -75,7 +49,7 @@ router.get('/ping', validateCronToken, async (req, res) => {
     return res.status(500).json({
       status: 'error',
       error: 'Internal server error',
-      details: err.message
+      requestId: req.id
     });
   }
 });

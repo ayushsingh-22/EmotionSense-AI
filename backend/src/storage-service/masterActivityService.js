@@ -167,14 +167,14 @@ class MasterActivityService {
    * @param {number} limit - Maximum number of records (default: 100)
    * @returns {Array} Array of activity records
    */
-  async getSessionActivities(session_id, limit = 100) {
+  async getSessionActivities(user_id, session_id, limit = 100) {
     try {
-      if (!session_id) {
-        throw new Error('session_id is required');
+      if (!session_id || !user_id) {
+        throw new Error('user_id and session_id are required');
       }
 
       const rows = await prisma.masterUserActivity.findMany({
-        where: { sessionId: session_id },
+        where: { userId: user_id, sessionId: session_id },
         orderBy: { createdAt: 'asc' },
         take: limit
       });
@@ -214,19 +214,54 @@ class MasterActivityService {
   }
 
   /**
+   * Update an activity the caller owns. Only content/emotion/metadata are
+   * mutable; ownership and identity columns can never be changed.
+   * @returns {Object|null} updated row, or null when not found / not owned
+   */
+  async updateActivity(user_id, activity_id, updates = {}) {
+    if (!user_id || !activity_id) throw new Error('user_id and activity_id are required');
+    const data = {};
+    if (updates.content !== undefined) data.content = updates.content;
+    if (updates.emotion_data !== undefined) data.emotionData = updates.emotion_data;
+    if (updates.metadata !== undefined) data.metadata = updates.metadata;
+    if (Object.keys(data).length === 0) throw new Error('No updatable fields provided');
+
+    const result = await prisma.masterUserActivity.updateMany({
+      where: { id: activity_id, userId: user_id },
+      data
+    });
+    if (result.count === 0) return null;
+    const row = await prisma.masterUserActivity.findFirst({ where: { id: activity_id, userId: user_id } });
+    return row ? normalizeActivityRow(row) : null;
+  }
+
+  /**
+   * Delete an activity the caller owns.
+   * @returns {boolean} true if a row was deleted
+   */
+  async deleteActivity(user_id, activity_id) {
+    if (!user_id || !activity_id) throw new Error('user_id and activity_id are required');
+    const result = await prisma.masterUserActivity.deleteMany({
+      where: { id: activity_id, userId: user_id }
+    });
+    return result.count > 0;
+  }
+
+  /**
    * Get session chat messages only (for chat UI)
    * @param {string} session_id - Session ID
    * @param {number} limit - Maximum number of messages (default: 100)
    * @returns {Array} Array of chat messages formatted for UI
    */
-  async getSessionChatMessages(session_id, limit = 100) {
+  async getSessionChatMessages(user_id, session_id, limit = 100) {
     try {
-      if (!session_id) {
-        throw new Error('session_id is required');
+      if (!session_id || !user_id) {
+        throw new Error('user_id and session_id are required');
       }
 
       const rows = await prisma.masterUserActivity.findMany({
         where: {
+          userId: user_id,
           sessionId: session_id,
           activityType: { in: ['chat_message', 'ai_response'] }
         },

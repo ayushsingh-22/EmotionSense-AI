@@ -1,12 +1,19 @@
+import { safePublicMessage } from '../utils/publicError.js';
 import express from 'express';
 const router = express.Router();
 import masterActivityService from '../storage-service/masterActivityService.js';
+import { requireSelfParam } from '../middleware/auth.js';
+import { validate } from '../middleware/security.js';
+import { activityCreateBody, activityIdParams, sessionIdParams, limitQuery } from '../middleware/schemas.js';
+
+// Any :userId path segment must equal the authenticated caller.
+router.param('userId', requireSelfParam);
 
 /**
  * POST /api/activity
  * Insert a new activity into the master table
  */
-router.post('/', async (req, res) => {
+router.post('/', validate({ body: activityCreateBody }), async (req, res) => {
   try {
     const {
       user_id,
@@ -44,7 +51,8 @@ router.post('/', async (req, res) => {
     console.error('POST /api/activity error:', error);
     res.status(400).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Invalid request'),
+      requestId: req.id
     });
   }
 });
@@ -53,7 +61,7 @@ router.post('/', async (req, res) => {
  * GET /api/activity/history/:userId
  * Get activities for a user with filtering
  */
-router.get('/history/:userId', async (req, res) => {
+router.get('/history/:userId', validate({ query: limitQuery }), async (req, res) => {
   try {
     const { userId } = req.params;
     const {
@@ -102,7 +110,8 @@ router.get('/history/:userId', async (req, res) => {
     console.error('GET /api/activity/history/:userId error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -111,12 +120,13 @@ router.get('/history/:userId', async (req, res) => {
  * GET /api/activity/session/:sessionId
  * Get all activities for a specific session
  */
-router.get('/session/:sessionId', async (req, res) => {
+router.get('/session/:sessionId', validate({ params: sessionIdParams, query: limitQuery }), async (req, res) => {
   try {
     const { sessionId } = req.params;
     const { limit = 100 } = req.query;
 
     const activities = await masterActivityService.getSessionActivities(
+      req.userId,
       sessionId,
       parseInt(limit)
     );
@@ -131,7 +141,8 @@ router.get('/session/:sessionId', async (req, res) => {
     console.error('GET /api/activity/session/:sessionId error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -140,12 +151,13 @@ router.get('/session/:sessionId', async (req, res) => {
  * GET /api/activity/session/:sessionId/messages
  * Get chat messages for a session (formatted for chat UI)
  */
-router.get('/session/:sessionId/messages', async (req, res) => {
+router.get('/session/:sessionId/messages', validate({ params: sessionIdParams, query: limitQuery }), async (req, res) => {
   try {
     const { sessionId } = req.params;
     const { limit = 100 } = req.query;
 
     const messages = await masterActivityService.getSessionChatMessages(
+      req.userId,
       sessionId,
       parseInt(limit)
     );
@@ -160,7 +172,8 @@ router.get('/session/:sessionId/messages', async (req, res) => {
     console.error('GET /api/activity/session/:sessionId/messages error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -169,7 +182,7 @@ router.get('/session/:sessionId/messages', async (req, res) => {
  * GET /api/activity/latest/:userId
  * Get latest activities for a user (dashboard view)
  */
-router.get('/latest/:userId', async (req, res) => {
+router.get('/latest/:userId', validate({ query: limitQuery }), async (req, res) => {
   try {
     const { userId } = req.params;
     const { limit = 20 } = req.query;
@@ -197,7 +210,8 @@ router.get('/latest/:userId', async (req, res) => {
     console.error('GET /api/activity/latest/:userId error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -241,7 +255,8 @@ router.get('/insights/:userId', async (req, res) => {
     console.error('GET /api/activity/insights/:userId error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -274,7 +289,8 @@ router.get('/stats/:userId', async (req, res) => {
     console.error('GET /api/activity/stats/:userId error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -283,7 +299,7 @@ router.get('/stats/:userId', async (req, res) => {
  * PUT /api/activity/:activityId
  * Update an existing activity
  */
-router.put('/:activityId', async (req, res) => {
+router.put('/:activityId', validate({ params: activityIdParams }), async (req, res) => {
   try {
     const { activityId } = req.params;
     const updates = req.body;
@@ -293,7 +309,10 @@ router.put('/:activityId', async (req, res) => {
     delete updates.created_at;
     delete updates.user_id; // Don't allow changing ownership
 
-    const activity = await masterActivityService.updateActivity(activityId, updates);
+    const activity = await masterActivityService.updateActivity(req.userId, activityId, updates);
+    if (!activity) {
+      return res.status(404).json({ success: false, error: 'Activity not found' });
+    }
 
     res.json({
       success: true,
@@ -305,7 +324,8 @@ router.put('/:activityId', async (req, res) => {
     console.error('PUT /api/activity/:activityId error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -314,11 +334,14 @@ router.put('/:activityId', async (req, res) => {
  * DELETE /api/activity/:activityId
  * Delete an activity
  */
-router.delete('/:activityId', async (req, res) => {
+router.delete('/:activityId', validate({ params: activityIdParams }), async (req, res) => {
   try {
     const { activityId } = req.params;
 
-    await masterActivityService.deleteActivity(activityId);
+    const deleted = await masterActivityService.deleteActivity(req.userId, activityId);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Activity not found' });
+    }
 
     res.json({
       success: true,
@@ -329,7 +352,8 @@ router.delete('/:activityId', async (req, res) => {
     console.error('DELETE /api/activity/:activityId error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });
@@ -358,7 +382,8 @@ router.get('/types', async (req, res) => {
     console.error('GET /api/activity/types error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: safePublicMessage(error, 'Internal server error'),
+      requestId: req.id
     });
   }
 });

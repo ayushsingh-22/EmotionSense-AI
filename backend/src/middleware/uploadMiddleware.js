@@ -9,6 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import config from '../config/index.js';
+import { ApiError } from './errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -50,7 +51,7 @@ const fileFilter = (req, file, cb) => {
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error(`Invalid file type. Allowed types: ${config.storage.allowedAudioFormats.join(', ')}`), false);
+    cb(new ApiError(400, `Invalid file type. Allowed types: ${config.storage.allowedAudioFormats.join(', ')}`), false);
   }
 };
 

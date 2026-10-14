@@ -78,7 +78,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!result || result.error) {
-        const message = 'Invalid email or password.';
+        const message =
+          result?.error === 'TooManyAttempts'
+            ? 'Too many attempts. Please wait a few minutes and try again.'
+            : 'Invalid email or password.';
         toast({
           title: 'Authentication Error',
           description: message,

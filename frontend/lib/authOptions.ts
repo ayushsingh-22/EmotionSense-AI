@@ -1,7 +1,7 @@
 import type { AuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import bcrypt from 'bcryptjs';
-import { prisma } from '@/lib/prisma';
+import { authLimits, clientIp, consume, hashPart, resetKey } from '@/lib/rateLimit';
+import { findUserForLogin, normalizeEmail, verifyPassword } from '@/lib/accountLookup';
 
 // NextAuth reads NEXTAUTH_URL from process.env internally. If it's not set
 // explicitly (easy to forget on a first Vercel deploy), fall back to
@@ -33,23 +33,39 @@ export const authOptions: AuthOptions = {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+      async authorize(credentials, req) {
+        const email = typeof credentials?.email === 'string' ? credentials.email.trim() : '';
+        const password = typeof credentials?.password === 'string' ? credentials.password : '';
+
+        // Bounded input: bcrypt only uses 72 bytes, and unbounded input is a cheap DoS.
+        if (!email || !password || email.length > 254 || password.length > 1024) {
+          await verifyPassword(password.slice(0, 1024), null); // keep timing uniform
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        });
+        // Throttle BEFORE touching the database. Keys are derived from what the caller
+        // typed (not from whether the account exists), so throttling reveals nothing.
+        const limits = authLimits();
+        const ip = clientIp(req?.headers as Record<string, string | string[] | undefined> | undefined);
+        const accountKey = `login:account:${hashPart(normalizeEmail(email))}`;
+        const [ipRl, accountRl] = await Promise.all([
+          consume(`login:ip:${hashPart(ip)}`, limits.loginPerIp),
+          consume(accountKey, limits.loginPerAccount)
+        ]);
+        if (!ipRl.allowed || !accountRl.allowed) {
+          throw new Error('TooManyAttempts');
+        }
 
-        if (!user) {
+        const user = await findUserForLogin(email);
+
+        // Same work whether or not the account exists (dummy hash) and identical
+        // outcome (null) for "no such user" and "wrong password".
+        const valid = await verifyPassword(password, user?.passwordHash);
+        if (!user || !valid) {
           return null;
         }
 
-        const isValid = await bcrypt.compare(credentials.password, user.passwordHash);
-        if (!isValid) {
-          return null;
-        }
+        await resetKey(accountKey); // a successful login clears that account's failure counter
 
         return {
           id: user.id,

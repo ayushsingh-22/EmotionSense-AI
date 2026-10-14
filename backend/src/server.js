@@ -4,7 +4,6 @@
  */
 
 import express from 'express';
-import cors from 'cors';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
@@ -20,6 +19,13 @@ import { initializeNodemailer } from './utils/nodemailerHelper.js';
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
+import { installLogRedaction } from './utils/logRedaction.js';
+import { randomUUID } from 'crypto';
+import { requireAuth, bindUserId, assertAuthConfigured } from './middleware/auth.js';
+import {
+  buildCors, securityHeaders, noStore, globalLimiter, authFailureLimiter,
+  aiBurstLimiter, aiDailyLimiter
+} from './middleware/security.js';
 
 // Import routes
 import textRoutes from './routes/textRoutes.js';
@@ -38,6 +44,9 @@ import { journalService } from './journal-service/index.js';
 
 // Load environment variables
 dotenv.config();
+
+// Every console line (including third-party error dumps) is redacted of secrets.
+installLogRedaction();
 
 // Get current directory (ES6 module compatibility)
 const __filename = fileURLToPath(import.meta.url);
@@ -82,52 +91,35 @@ const configureMiddleware = () => {
     }
   }));
 
-  /* ===================== SIMPLE CORS ===================== */
-  // CORS_ORIGIN is a comma-separated allow-list, e.g.:
-  //   http://localhost:3000,https://your-app.vercel.app
-  // Entries may include a single `*` wildcard segment (matched as a regex),
-  // e.g. `https://*.vercel.app` to cover Vercel's per-branch preview
-  // deployments without listing each one — those get a new subdomain per
-  // deploy that can't be known in advance.
-  const rawOrigins = process.env.CORS_ORIGIN || "";
+  // Render terminates TLS behind exactly one proxy hop; needed for correct
+  // client IPs (rate limiting) and req.secure.
+  app.set('trust proxy', parseInt(process.env.TRUST_PROXY_HOPS || '1', 10));
+  app.disable('x-powered-by');
 
-  let allowedOrigins = [];
-  if (!rawOrigins.trim() || rawOrigins.trim() === "*") {
-    allowedOrigins = "*"; // allow all
-    console.log("🌍 CORS: All origins allowed (*)");
-  } else {
-    allowedOrigins = rawOrigins.split(",").map(o => o.trim()).filter(Boolean);
-    console.log("🌍 CORS Allowed Origins:", allowedOrigins);
-  }
+  app.use(securityHeaders());
+  app.use(buildCors());
+  app.use(globalLimiter());
 
-  const originMatchers = allowedOrigins === "*" ? "*" : allowedOrigins.map((pattern) => {
-    if (!pattern.includes("*")) {
-      return { exact: pattern };
-    }
-    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-    return { regex: new RegExp(`^${escaped}$`) };
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+  // Server-generated request id (never trusted from the client): echoed in the
+  // X-Request-Id header and in error responses so support can find the log line.
+  app.use((req, res, next) => {
+    req.id = randomUUID();
+    res.setHeader('X-Request-Id', req.id);
+    next();
   });
-
-  app.use(cors({
-    origin: originMatchers === "*" ? true : (origin, cb) => {
-      if (!origin) return cb(null, true);
-      const allowed = originMatchers.some((m) => (m.exact ? m.exact === origin : m.regex.test(origin)));
-      if (allowed) return cb(null, true);
-      return cb(new Error(`❌ CORS BLOCKED → ${origin}`));
-    },
-    credentials: true,
-    methods: ["GET","POST","PUT","DELETE","OPTIONS"],
-    allowedHeaders: ["Content-Type","Authorization","X-Requested-With"]
-  }));
-  /* ======================================================== */
-
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(requestLogger);
 
+  // TTS output is served as an unguessable-URL capability (<audio src> cannot
+  // send Authorization headers). Filenames carry 122 bits of randomness (see
+  // utils/voiceHelper.js); directory listing and dotfiles are disabled.
   app.use('/audio', express.static(join(__dirname, '..', 'temp', 'audio'), {
     maxAge: '1h',
-    etag: false
+    etag: false,
+    index: false,
+    dotfiles: 'deny',
+    redirect: false
   }));
 };
 
@@ -135,7 +127,29 @@ const configureMiddleware = () => {
  * Configure API routes
  */
 const configureRoutes = () => {
+  // Public: minimal liveness only (see healthRoutes.js).
   app.use('/api/health', healthRoutes);
+  // Secret-gated, not user-facing.
+  app.use('/api/cron', cronRoutes);
+
+  // Everything below requires a valid bearer token. Failed attempts are
+  // rate-limited per IP before verification runs. bindUserId then pins the
+  // caller's identity to the token (multipart routes re-run it inside the route,
+  // after multer has parsed the form).
+  const authed = [authFailureLimiter(), requireAuth, noStore, bindUserId];
+  const paidAi = [aiBurstLimiter(), aiDailyLimiter()];
+
+  // Paid LLM / STT / TTS / emotion-model endpoints: authenticated + per-user limits.
+  app.use('/api/analyze', ...authed, ...paidAi);
+  app.use('/api/response', ...authed, ...paidAi);
+  app.use('/api/tts', ...authed, ...paidAi);
+  app.use('/api/chat', ...authed);
+  app.use(['/api/chat/message', '/api/chat/voice', '/api/chat/transcribe'], ...paidAi);
+  app.use('/api/emergency', ...authed);
+  app.use('/api/insights', ...authed);
+  app.use('/api/activity', ...authed);
+  app.use('/api/journal', ...authed);
+
   app.use('/api/analyze/text', textRoutes);
   app.use('/api/analyze/voice', voiceRoutes);
   app.use('/api/analyze/multimodal', multiModalRoutes);
@@ -146,7 +160,6 @@ const configureRoutes = () => {
   app.use('/api/insights', insightsRoutes);
   app.use('/api/activity', activityRoutes);
   app.use('/api/journal', journalRoutes);
-  app.use('/api/cron', cronRoutes);
 
   app.get('/', (req, res) => {
     res.json({
@@ -162,20 +175,32 @@ const configureRoutes = () => {
 };
 
 /**
+ * Assemble middleware + routes + error handler (no listening, no side effects
+ * beyond router imports). Exported for the automated test-suite.
+ */
+let built = false;
+export const buildApp = () => {
+  if (built) return app;
+  configureMiddleware();
+  configureRoutes();
+  app.use(errorHandler);
+  built = true;
+  return app;
+};
+
+/**
  * Start the server
  */
 const startServer = async () => {
   try {
+    assertAuthConfigured();
     createRequiredDirectories();
 
     console.log('📧 Initializing email...');
     const ok = await initializeNodemailer();
     if (!ok) console.log('⚠️ Email disabled');
 
-    configureMiddleware();
-    configureRoutes();
-
-    app.use(errorHandler);
+    buildApp();
 
     try {
       console.log('🚀 Journal Service starting...');
@@ -189,7 +214,7 @@ const startServer = async () => {
       console.log('='.repeat(50));
       console.log(`🚀 Server Running → http://localhost:${PORT}`);
       console.log(`🌍 NODE ENV → ${process.env.NODE_ENV}`);
-      console.log(`🔓 CORS Mode → ${process.env.CORS_ORIGIN || "* (default)"}`);
+      console.log(`🔓 CORS Mode → ${process.env.CORS_ORIGIN ? "allow-list" : "default (no cross-origin in production)"}`);
       console.log('='.repeat(50));
     });
 
@@ -199,6 +224,9 @@ const startServer = async () => {
   }
 };
 
+const isTest = process.env.NODE_ENV === 'test';
+
+if (!isTest) {
 process.on('uncaughtException', e => { console.error('💥', e); process.exit(1); });
 process.on('unhandledRejection', (r,p) => { console.error('💥', p, r); process.exit(1); });
 
@@ -214,5 +242,7 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-startServer();
+}
+
+if (!isTest) startServer();
 export default app;

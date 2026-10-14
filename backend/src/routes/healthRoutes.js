@@ -3,6 +3,7 @@
  * Endpoints for monitoring server and service health
  */
 
+import { requireCronSecret } from '../middleware/auth.js';
 import express from 'express';
 import config from '../config/index.js';
 import { getEmailConfigStatus } from '../utils/nodemailerHelper.js';
@@ -19,7 +20,9 @@ router.get('/', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: config.server.nodeEnv
+    environment: config.server.nodeEnv,
+    // Lets deploy verification prove the authenticated build is the one live.
+    release: 'phase2a-auth-1'
   });
 });
 
@@ -27,7 +30,7 @@ router.get('/', (req, res) => {
  * GET /api/health/detailed
  * Detailed health check with service status
  */
-router.get('/detailed', (req, res) => {
+router.get('/detailed', requireCronSecret, (req, res) => {
   const services = {
     gemini: !!config.gemini.apiKey,
     llama: config.llama.enabled,
@@ -55,7 +58,7 @@ router.get('/detailed', (req, res) => {
  * GET /api/health/email
  * Check email service status
  */
-router.get('/email', (req, res) => {
+router.get('/email', requireCronSecret, (req, res) => {
   const emailStatus = getEmailConfigStatus();
 
   res.json({

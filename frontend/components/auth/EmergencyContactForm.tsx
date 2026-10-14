@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import axios from 'axios';
+import { api } from '@/lib/api';
 
 interface EmergencyContactFormProps {
   userId: string;
@@ -86,12 +87,10 @@ export function EmergencyContactForm({
     setIsLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      
       // Determine if we're creating or updating
       const endpoint = initialContact ? '/api/emergency/update' : '/api/emergency/save';
       
-      const response = await axios.post(`${apiUrl}${endpoint}`, {
+      const response = await api.post(endpoint, {
         userId,
         contactName: formData.contactName.trim(),
         contactEmail: formData.contactEmail.trim(),

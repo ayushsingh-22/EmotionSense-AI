@@ -21,6 +21,56 @@ export const api = axios.create({
   timeout: 60000,
 });
 
+// ---- Backend authentication -------------------------------------------------
+// The Express API (Render) trusts only a short-lived bearer token minted by this
+// app's /api/backend-token route from the NextAuth session. The user id is
+// derived from that token server-side; any userId we still send is ignored
+// (and rejected if it differs).
+let cachedToken: { token: string; expiresAt: number } | null = null;
+let inflight: Promise<string> | null = null;
+
+export const clearBackendToken = () => {
+  cachedToken = null;
+};
+
+export const getBackendAuthToken = async (forceRefresh = false): Promise<string> => {
+  if (!forceRefresh && cachedToken && cachedToken.expiresAt - Date.now() > 30_000) {
+    return cachedToken.token;
+  }
+  if (!inflight) {
+    inflight = fetch('/api/backend-token', { credentials: 'same-origin', cache: 'no-store' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Not authenticated (${res.status})`);
+        const data = (await res.json()) as { token: string; expiresAt: number };
+        cachedToken = { token: data.token, expiresAt: data.expiresAt };
+        return data.token;
+      })
+      .finally(() => {
+        inflight = null;
+      });
+  }
+  return inflight;
+};
+
+/** Authorization header for raw fetch() calls to the backend. */
+export const authHeaders = async (): Promise<Record<string, string>> => {
+  try {
+    return { Authorization: `Bearer ${await getBackendAuthToken()}` };
+  } catch (error) {
+    // Send the request unauthenticated: an authenticated backend answers 401
+    // (clear failure) and a not-yet-upgraded backend keeps working. Never block
+    // the whole UI on a token hiccup.
+    console.warn('[API] Could not obtain backend token:', error instanceof Error ? error.message : error);
+    return {};
+  }
+};
+
+api.interceptors.request.use(async (config) => {
+  const headers = await authHeaders();
+  if (headers.Authorization) config.headers.set('Authorization', headers.Authorization);
+  return config;
+});
+
 // Request interceptor for performance monitoring
 api.interceptors.request.use(
   (config) => {
@@ -42,7 +92,18 @@ api.interceptors.response.use(
     PerformanceMonitor.end(requestId);
     return response;
   },
-  (error) => {
+  async (error) => {
+    const original = error.config as (typeof error.config & { _retried?: boolean }) | undefined;
+    if (error.response?.status === 401 && original && !original._retried) {
+      original._retried = true;
+      clearBackendToken();
+      try {
+        original.headers.set('Authorization', `Bearer ${await getBackendAuthToken(true)}`);
+        return api.request(original);
+      } catch {
+        /* fall through to the original error */
+      }
+    }
     const requestId = `${error.config?.method?.toUpperCase()}-${error.config?.url}`;
     PerformanceMonitor.end(requestId);
     console.error('[API Response Error]', error.response?.data || error.message);
@@ -207,7 +268,7 @@ export const sendChatMessageStream = async (
 
   const response = await fetch(`${baseURL}/api/chat/message/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify({ message, userId, sessionId, includeAudio, memoryLength: 10 }),
   });
 
@@ -322,6 +383,7 @@ export const sendVoiceMessageStream = async (
 
   const response = await fetch(`${baseURL}/api/chat/voice/stream`, {
     method: 'POST',
+    headers: await authHeaders(),
     body: formData,
   });
 

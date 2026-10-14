@@ -9,6 +9,7 @@
  * 4. Error handling and graceful fallbacks
  */
 
+import { randomUUID } from 'crypto';
 import axios from 'axios';
 import { spawn } from 'child_process';
 import fs from 'fs';
@@ -144,7 +145,7 @@ export async function googleTTS(
     const audioBuffer = Buffer.from(response.data.audioContent, 'base64');
 
     // Save audio to temporary file
-    const audioFileName = `tts-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.mp3`;
+    const audioFileName = `tts-${Date.now()}-${randomUUID()}.mp3`;
     const audioPath = path.join(__dirname, '../../temp/audio', audioFileName);
 
     // Ensure temp directory exists
@@ -187,7 +188,7 @@ export async function piperTTS(text) {
     const outputPath = path.join(
       __dirname,
       '../../temp/audio',
-      `tts-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.wav`
+      `tts-${Date.now()}-${randomUUID()}.wav`
     );
 
     // Ensure temp directory exists
@@ -365,7 +366,7 @@ export async function textToSpeech(text, language = 'en-US') {
     
     // Save audio to file and generate URL
     const audioBuffer = Buffer.from(result.audioData, 'base64');
-    const fileName = `tts-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${result.format || 'mp3'}`;
+    const fileName = `tts-${Date.now()}-${randomUUID()}.${result.format || 'mp3'}`;
     const outputPath = path.join(__dirname, '../../temp/audio', fileName);
     
     // Ensure temp directory exists

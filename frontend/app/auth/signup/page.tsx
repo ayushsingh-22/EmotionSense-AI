@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { validateNewPassword, PASSWORD_MIN_LENGTH } from '@/lib/passwordPolicy';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Activity } from 'lucide-react';
@@ -38,8 +39,9 @@ export default function SignUpPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    const passwordCheck = validateNewPassword(password, { email, fullName });
+    if (!passwordCheck.ok) {
+      setError(passwordCheck.reason);
       return;
     }
 
@@ -131,12 +133,12 @@ export default function SignUpPage() {
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Create a password (min. 6 characters)"
+                  placeholder={`Create a password (min. ${PASSWORD_MIN_LENGTH} characters)`}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={isLoading}
-                  minLength={6}
+                  minLength={PASSWORD_MIN_LENGTH}
                   className="h-12 rounded-xl border-2 focus:border-blue-500 transition-all duration-300 pr-12"
                 />
                 <Button

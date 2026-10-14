@@ -3,6 +3,8 @@
  * Handles text-based emotion detection requests with multi-language support and emergency contact alerts
  */
 
+import { validate } from '../middleware/security.js';
+import { textBody } from '../middleware/schemas.js';
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { analyzeTextEmotion } from '../text-service/index.js';
@@ -31,7 +33,7 @@ const router = express.Router();
  *   "userId": "user123" (optional)
  * }
  */
-router.post('/', asyncHandler(async (req, res) => {
+router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => {
   const { text, userId } = req.body;
 
   // Validate input

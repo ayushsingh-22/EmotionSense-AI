@@ -591,7 +591,7 @@ router.get("/daily", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch daily insights",
-      message: error.message,
+      requestId: req.id,
     });
   }
 });
@@ -889,7 +889,7 @@ router.get("/weekly", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch weekly insights",
-      message: error.message,
+      requestId: req.id,
     });
   }
 });
@@ -952,7 +952,7 @@ router.get("/timeline/:date", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch emotion timeline",
-      message: error.message,
+      requestId: req.id,
     });
   }
 });
@@ -1006,7 +1006,7 @@ router.get("/monthly", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch monthly insights",
-      message: error.message,
+      requestId: req.id,
     });
   }
 });
@@ -1137,7 +1137,7 @@ router.get("/stats", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch user statistics",
-      message: error.message,
+      requestId: req.id,
     });
   }
 });
@@ -1230,7 +1230,7 @@ router.get("/moments", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch key moments",
-      message: error.message,
+      requestId: req.id,
     });
   }
 });
