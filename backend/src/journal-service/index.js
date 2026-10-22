@@ -23,15 +23,18 @@ class JournalService {
     try {
       console.log('🚀 Initializing Journal Service...');
       
-      // Start cron scheduler for nightly generation
-      cronScheduler.start();
+      // Start cron scheduler for nightly generation (not registered in local development unless enabled)
+      const scheduled = cronScheduler.start();
       
       this.isInitialized = true;
       console.log('✅ Journal Service initialized successfully');
       
-      // Log current schedule
-      console.log(`📅 Nightly journal generation scheduled for: ${cronScheduler.cronSchedule}`);
-      console.log(`🌍 Timezone: Asia/Kolkata (IST)`);
+      if (scheduled) {
+        console.log(`📅 Nightly journal generation scheduled for: ${cronScheduler.cronSchedule}`);
+        console.log(`🌍 Timezone: Asia/Kolkata (IST)`);
+      } else {
+        console.log('⏸️ Nightly journal generation disabled in local development (JOURNAL_SCHEDULER_ENABLED=true enables it)');
+      }
       
     } catch (error) {
       console.error('❌ Failed to initialize Journal Service:', error);

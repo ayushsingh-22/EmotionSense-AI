@@ -1,9 +1,10 @@
+/* Import our optimized chat styles. @import must precede all other rules (CSS spec; enforced by Turbopack). Webpack
+   hoisted this import ahead of the Tailwind output, so placing it first keeps the shipped cascade order. */
+@import '../styles/chat-optimized.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Import our optimized chat styles */
-@import '../styles/chat-optimized.css';
 
 /**
  * Global Color Scheme (calm, single-accent violet design)

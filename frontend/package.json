@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "prisma generate --schema=../prisma/schema.prisma && next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "postinstall": "prisma generate --schema=../prisma/schema.prisma",
     "test": "node --experimental-strip-types --test \"tests/*.test.mjs\""
   },
@@ -35,7 +35,7 @@
     "framer-motion": "^12.23.24",
     "jose": "^5.9.6",
     "lucide-react": "^0.546.0",
-    "next": "14.2.33",
+    "next": "^16.4.2",
     "next-auth": "^4.24.11",
     "next-themes": "^0.4.6",
     "react": "^18",
@@ -51,7 +51,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
-    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/typography": "^0.5.4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^18",
@@ -60,8 +60,9 @@
     "@typescript-eslint/eslint-plugin": "^8.48.0",
     "@typescript-eslint/parser": "^8.48.0",
     "autoprefixer": "^10.4.21",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "14.2.33",
+    "baseline-browser-mapping": "^2.11.30",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.2",
     "postcss": "^8",
     "postcss-nesting": "^13.0.2",
     "prisma": "^5.20.0",

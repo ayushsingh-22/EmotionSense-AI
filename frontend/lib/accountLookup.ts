@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -13,9 +12,6 @@ export const normalizeEmail = (raw: string) => raw.trim().toLowerCase();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const isPlausibleEmail = (email: string) => email.length <= 254 && EMAIL_RE.test(email);
-
-/** bcrypt hash of a random value (cost 10 = existing hashes). Compared against when the user is unknown so response time does not reveal whether an account exists. */
-export const DUMMY_PASSWORD_HASH = '$2a$10$YpGUZRwnfwcOcp9Tpq131OvYnrdz4dTvM9Ejb.rpUMaP8VJcEqqh.';
 
 /**
  * Finds the account for a login attempt: exact match first (the common case and
@@ -41,8 +37,6 @@ export async function emailInUse(email: string) {
   return !!hit;
 }
 
-/** Verifies a password with constant work regardless of whether the user exists. */
-export async function verifyPassword(plain: string, hash: string | undefined | null) {
-  const ok = await bcrypt.compare(plain, hash || DUMMY_PASSWORD_HASH);
-  return !!hash && ok;
-}
+// Pure password helpers live in passwordVerify.ts (no database import, unit-testable);
+// re-exported so existing imports keep working.
+export { DUMMY_PASSWORD_HASH, verifyPassword } from '@/lib/passwordVerify';

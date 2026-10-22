@@ -1,68 +1,38 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// The frontend is its own project root. Pinned explicitly because the repository root also has a package-lock.json,
+// which otherwise makes Next.js infer the wrong workspace root (bundling and output file tracing must agree).
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Image optimization for faster loading and smaller bundle sizes
+  // next/image is not used anywhere in the app. No remote hosts are allowed, so the /_next/image optimizer can never be
+  // used as an open proxy for arbitrary HTTPS hosts (the previous `hostname: '**'` allowed exactly that). Add specific
+  // hosts here if remote images are ever introduced.
   images: {
-    formats: ['image/avif', 'image/webp'],
-    unoptimized: false, // Enable Next.js image optimization
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-    ],
+    formats: ['image/webp'],
+    remotePatterns: [],
   },
-  
-  // Experimental optimizations
+
+  // Next.js 16 name for the former experimental.serverComponentsExternalPackages. Prisma must be resolved through
+  // normal node_modules require() instead of being bundled, or its query-engine lookup breaks at runtime (seen on
+  // Vercel as PrismaClientInitializationError). @prisma/client is also on Next's built-in list; kept explicit on purpose.
+  serverExternalPackages: ['@prisma/client'],
+
   experimental: {
     optimizePackageImports: [
       '@radix-ui/react-icons',
       'lucide-react',
     ],
-    // Without this, Next.js's webpack bundler inlines @prisma/client into
-    // each API route's compiled output, which breaks Prisma's own relative
-    // lookup for its native query-engine binary at runtime — surfacing as
-    // "PrismaClientInitializationError ... built on Vercel" during build-time
-    // page-data collection, even though `prisma generate` ran successfully.
-    // Marking it external tells Next.js to resolve it via normal node_modules
-    // require() instead of bundling it, exactly like Prisma's own Next.js
-    // deployment docs recommend.
-    serverComponentsExternalPackages: ['@prisma/client', '.prisma/client'],
   },
 
-  // Bundle analysis for optimization insights
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: {
-          chunks: 'all',
-          cacheGroups: {
-            // Separate vendor code into its own chunk
-            vendor: {
-              test: /[\\/]node_modules[\\/]/,
-              name: 'vendors',
-              priority: 10,
-              reuseExistingChunk: true,
-            },
-            // Separate React into its own dedicated chunk
-            react: {
-              test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
-              name: 'react-vendors',
-              priority: 20,
-              reuseExistingChunk: true,
-            },
-            // Common shared modules between chunks
-            common: {
-              minChunks: 2,
-              priority: 5,
-              reuseExistingChunk: true,
-            },
-          },
-        },
-      };
-    }
-    return config;
+  // Turbopack is the Next.js 16 default production bundler. The former custom webpack splitChunks block (vendor / React
+  // chunk grouping) was a performance tweak only; Turbopack performs its own chunking.
+  turbopack: {
+    root: projectRoot,
   },
+  outputFileTracingRoot: projectRoot,
 };
 
 export default nextConfig;

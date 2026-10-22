@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import dynamic from "next/dynamic";
 import { Suspense } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SessionProviderWrapper } from "@/components/providers/SessionProviderWrapper";
@@ -12,29 +11,8 @@ import { Sidebar } from "@/components/sidebar";
 import { Toaster } from "@/components/ui/toaster";
 import { MainContent } from "@/components/MainContent";
 import { EmergencyContactChecker } from "@/components/EmergencyContactChecker";
-
-// Preload improved navbar for better performance
-const ImprovedNavbar = dynamic(() => import("@/components/navbar").then(mod => ({ default: mod.Navbar })), { 
-  ssr: false,
-  loading: () => <NavbarSkeleton /> 
-});
-
-// Lightweight navbar skeleton for faster perceived load time
-function NavbarSkeleton() {
-  return (
-    <div className="h-16 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 fixed top-0 w-full z-40">
-      <div className="container flex h-16 items-center justify-between px-4" style={{ maxWidth: '100%' }}>
-        <div className="flex items-center gap-2">
-          <div className="w-32 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-        </div>
-        <div className="flex gap-2">
-          <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
-          <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
-        </div>
-      </div>
-    </div>
-  );
-}
+import { ClientNavbar } from "@/components/ClientNavbar";
+import { NavbarSkeleton } from "@/components/NavbarSkeleton";
 
 // Page loading skeleton
 function PageLoadingSkeleton() {
@@ -94,7 +72,7 @@ export default function RootLayout({
                   
                   {/* Navigation Bar */}
                   <Suspense fallback={<NavbarSkeleton />}>
-                    <ImprovedNavbar />
+                    <ClientNavbar />
                   </Suspense>
                   
                   {/* Main Layout */}

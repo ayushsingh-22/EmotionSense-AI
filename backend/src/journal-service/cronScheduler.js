@@ -3,7 +3,22 @@ import journalGenerator from './journalGenerator.js';
 import prisma from '../lib/prisma.js';
 import logger from '../utils/logger.js';
 
-class CronScheduler {
+/**
+ * Whether the nightly journal job may be registered in this process.
+ *
+ * Local development and test runs (NODE_ENV "development" or "test") do NOT register it unless
+ * JOURNAL_SCHEDULER_ENABLED=true, so a developer's local server never silently generates journals (LLM calls +
+ * database writes) for every user of the development database at 23:30 IST.
+ * Every other environment, including production and an unset NODE_ENV, keeps the original behaviour: always registered.
+ */
+export const shouldRegisterNightlyJob = (env = process.env) => {
+  const nodeEnv = String(env.NODE_ENV || '').trim().toLowerCase();
+  const isLocal = nodeEnv === 'development' || nodeEnv === 'test';
+  if (!isLocal) return true;
+  return env.JOURNAL_SCHEDULER_ENABLED === 'true';
+};
+
+export class CronScheduler {
   constructor() {
     // Run at 23:30 IST (6:00 PM UTC) every night
     this.cronSchedule = process.env.JOURNAL_CRON_SCHEDULE || '30 23 * * *';
@@ -24,11 +39,16 @@ class CronScheduler {
   /**
    * Start the cron scheduler for nightly journal generation
    */
-  start() {
+  start({ env = process.env, scheduler = cron } = {}) {
+    if (!shouldRegisterNightlyJob(env)) {
+      this.cronTask = null;
+      logger.info('⏸️ Nightly journal cron NOT registered (local development/test). Set JOURNAL_SCHEDULER_ENABLED=true to enable it.');
+      return false;
+    }
     logger.info(`📅 Starting journal cron scheduler: ${this.cronSchedule} (Asia/Kolkata)`);
     
     // Schedule nightly journal generation
-    this.cronTask = cron.schedule(this.cronSchedule, async () => {
+    this.cronTask = scheduler.schedule(this.cronSchedule, async () => {
       if (this.isRunning) {
         logger.warn('⚠️ Journal generation already in progress, skipping...');
         return;
@@ -50,6 +70,7 @@ class CronScheduler {
     });
 
     logger.info('✅ Journal cron scheduler started');
+    return true;
   }
 
   /**

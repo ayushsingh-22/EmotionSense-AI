@@ -14,7 +14,7 @@
  * NEXTAUTH_SECRET). No fallback.
  */
 import { createHash, timingSafeEqual } from 'crypto';
-import { jwtVerify } from 'jose';
+import { jwtVerify, SignJWT } from 'jose';
 
 export const TOKEN_ISSUER = 'mantra-web';
 export const TOKEN_AUDIENCE = 'mantra-api';
@@ -42,6 +42,30 @@ const getSecretKey = () => {
     cachedSecretSource = secret;
   }
   return cachedKey;
+};
+
+export const TOKEN_TTL_SECONDS = 5 * 60;
+
+/**
+ * Mints a short-lived API token for an identity that was ALREADY authenticated
+ * elsewhere (the Firebase exchange route). Same contract as the web tokens signed
+ * by frontend/lib/backendAuth.ts: HS256, iss "mantra-web", aud "mantra-api",
+ * sub = canonical users.id, 5-minute expiry, optional email claim.
+ * `userId` must be users.id, never a provider subject.
+ */
+export const mintApiToken = async (userId, email) => {
+  if (typeof userId !== 'string' || userId.length === 0 || userId.length > 128) {
+    throw new Error('mintApiToken: invalid user id');
+  }
+  const token = await new SignJWT({ email: email ?? undefined })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setSubject(userId)
+    .setIssuer(TOKEN_ISSUER)
+    .setAudience(TOKEN_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(`${TOKEN_TTL_SECONDS}s`)
+    .sign(getSecretKey());
+  return { token, expiresAt: Date.now() + TOKEN_TTL_SECONDS * 1000, expiresIn: TOKEN_TTL_SECONDS };
 };
 
 /** Throws at boot if auth cannot work, instead of failing every request. */

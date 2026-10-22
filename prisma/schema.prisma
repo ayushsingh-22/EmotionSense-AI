@@ -42,13 +42,17 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  fullName     String?  @map("full_name")
-  avatarUrl    String?  @map("avatar_url")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id              String    @id @default(uuid())
+  email           String    @unique
+  // NULL = no password credential (e.g. a Firebase-only account). A null hash can
+  // never authenticate through the NextAuth Credentials provider.
+  passwordHash    String?   @map("password_hash")
+  fullName        String?   @map("full_name")
+  avatarUrl       String?   @map("avatar_url")
+  // Set only when email ownership was proven. Historic web accounts stay NULL.
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   chatSessions     ChatSession[]
   messages         Message[]
@@ -67,7 +71,11 @@ model User {
   journalEntries     JournalEntry[]
   activitySessions   ActivitySession[]
   recommendationRuns RecommendationRun[]
+  authIdentities     AuthIdentity[]
+  authLinkChallenges AuthLinkChallenge[]
 
+  // Not expressible in Prisma, created in migration 20261014120000_add_auth_identities:
+  //   UNIQUE INDEX users_email_lower_key ON users (lower(email))
   @@map("users")
 }
 
@@ -406,4 +414,53 @@ model RecommendationItem {
   @@unique([recommendationRunId, position])
   @@unique([recommendationRunId, contentItemId])
   @@map("recommendation_items")
+}
+
+/// External identity (e.g. a Firebase Auth account) linked to exactly one users.id.
+/// The provider subject is NEVER used as an application key and NEVER auto-linked by
+/// email: rows are created only by the backend after verifying a provider token.
+model AuthIdentity {
+  id              String    @id @default(dbgenerated("gen_random_uuid()::text"))
+  userId          String    @map("user_id")
+  provider        String // e.g. 'firebase'
+  providerProject String    @map("provider_project") // e.g. Firebase project id (separates dev/prod)
+  providerSub     String    @map("provider_sub") // provider's stable subject (Firebase UID)
+  signInMethod    String?   @map("sign_in_method") // e.g. 'google.com' | 'password'
+  emailAtLink     String?   @map("email_at_link") // normalised email at link time (audit only)
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  linkMethod      String    @map("link_method") // 'created' | 'password_proof' | 'email_link' | 'admin'
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz(6)
+  disabledAt      DateTime? @map("disabled_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerProject, providerSub], map: "auth_identities_provider_project_sub_key")
+  @@index([userId], map: "auth_identities_user_id_idx")
+  @@map("auth_identities")
+}
+
+/// One-time, short-lived proof that a web account's password AND a fresh Firebase identity were both verified for
+/// linking (Phase 2B.5). Only a SHA-256 digest of the random challenge is stored, never the challenge itself,
+/// a password, a password hash or a Firebase token. Rows are created and consumed by the backend only.
+model AuthLinkChallenge {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()::text"))
+  challengeHash         String    @unique(map: "auth_link_challenges_challenge_hash_key") @map("challenge_hash") // hex SHA-256 of the raw challenge
+  userId                String    @map("user_id") // target canonical web account (server-derived, never client-supplied)
+  provider              String
+  providerProject       String    @map("provider_project")
+  providerSub           String    @map("provider_sub")
+  purpose               String // only 'link_firebase' (CHECK constraint)
+  credentialFingerprint String    @map("credential_fingerprint") // hex SHA-256 of users.password_hash at proof time
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt             DateTime  @map("expires_at") @db.Timestamptz(6) // at most created_at + 5 minutes (CHECK constraint)
+  consumedAt            DateTime? @map("consumed_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "auth_link_challenges_user_id_idx")
+  @@index([expiresAt], map: "auth_link_challenges_expires_at_idx")
+  @@index([provider, providerProject, providerSub], map: "auth_link_challenges_provider_identity_idx")
+  @@map("auth_link_challenges")
 }
