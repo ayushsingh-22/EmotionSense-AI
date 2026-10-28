@@ -4,6 +4,7 @@
  */
 
 import dotenv from 'dotenv';
+import { normalizeNodeEnv, isProduction } from './environment.js';
 
 dotenv.config();
 
@@ -11,7 +12,7 @@ const config = {
   // Server Configuration
   server: {
     port: process.env.PORT || 8080,
-    nodeEnv: process.env.NODE_ENV || 'development',
+    nodeEnv: normalizeNodeEnv() || 'development',
     corsOrigin: process.env.CORS_ORIGIN || '*'
   },
 
@@ -153,7 +154,7 @@ const config = {
   logging: {
     level: process.env.LOG_LEVEL || 'info',
     enableConsole: true,
-    enableFile: process.env.NODE_ENV === 'production'
+    enableFile: isProduction()
   },
 
   // Safety and Emergency Contact Settings

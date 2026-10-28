@@ -39,7 +39,6 @@ export async function translateToEnglishIfNeeded(text) {
   }
 
   try {
-    console.log(`🌐 Detecting language for: "${text.substring(0, 50)}..."`);
     
     // First check if text is Hinglish (romanized Hindi)
     const isHinglish = detectHinglish(text);
@@ -65,7 +64,6 @@ export async function translateToEnglishIfNeeded(text) {
     const needsTranslation = sourceLang !== 'en';
     
     if (needsTranslation) {
-      console.log(`🔄 Translated from ${sourceLang} to English: "${translatedText}"`);
     } else {
       console.log(`✅ Text is already in English, no translation needed`);
     }
@@ -132,7 +130,6 @@ export async function translateBackToUserLanguage(text, targetLang) {
   }
 
   try {
-    console.log(`🔄 Translating response back to ${targetLang}: "${text.substring(0, 50)}..."`);
     
     const result = await translate(text, { 
       from: 'en', 
@@ -271,7 +268,6 @@ Respond with ONLY the English translation, no additional comments.`;
     const response = result.response;
     const translatedText = response.text().trim();
     
-    console.log(`🤖 Gemini Hinglish→English translation: "${translatedText}"`);
     return { translatedText };
     
   } catch (error) {
@@ -305,7 +301,6 @@ Respond with ONLY the Hinglish translation in Roman script, no additional commen
     const response = result.response;
     const hinglishText = response.text().trim();
     
-    console.log(`🤖 Gemini English→Hinglish translation: "${hinglishText}"`);
     return hinglishText;
     
   } catch (error) {

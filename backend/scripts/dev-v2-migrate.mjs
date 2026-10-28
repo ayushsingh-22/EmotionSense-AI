@@ -7,7 +7,7 @@
  *   node scripts/dev-v2-migrate.mjs                 -> preflight only (read-only, default)
  *   node scripts/dev-v2-migrate.mjs --verify-only   -> post-migration verification only (read-only)
  *   node scripts/dev-v2-migrate.mjs --execute \
- *        --confirm-branch br-weathered-hall-b3dn9bub \
+ *        --confirm-branch br-ancient-snow-b3si0kwz \
  *        --recovery-point "<neon branch name/id or snapshot>" \
  *        --confirm-not-default
  *                                                   -> preflight, `prisma migrate deploy`, verification
@@ -15,7 +15,7 @@
  * Hard guarantees:
  *  - The ONLY database-changing command ever spawned is `prisma migrate deploy`
  *    (fixed argv, no shell). There is no reset / db push / manual SQL / rollback path.
- *  - Production branch br-flat-tree-b3brt6b9 and endpoint ep-snowy-term-b39utxb2 are refused
+ *  - Production branch unapproved-branch-one and endpoint unapproved-endpoint are refused
  *    unconditionally: by hostname, by env pin, and by the ids the server itself reports,
  *    on both the pooled and the direct connection, before and after the deploy.
  *  - On any failure it reports and STOPS. It never retries, rolls back or edits
@@ -31,8 +31,8 @@ import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 
 /* ------------------------------ constants ------------------------------ */
-const DEV = { branch: 'br-weathered-hall-b3dn9bub', endpoint: 'ep-square-boat-b3zomdvt', project: 'plain-wave-56430909' };
-const PROD = { branch: 'br-flat-tree-b3brt6b9', endpoint: 'ep-snowy-term-b39utxb2' };
+const DEV = { branch: 'br-ancient-snow-b3si0kwz', endpoint: 'ep-cold-hill-b3lffx1r', project: 'fancy-union-28873755' };
+const PROD = { branch: 'unapproved-branch-one', endpoint: 'unapproved-endpoint' };
 const MIGRATION = '20261012181122_add_wellbeing_v2';
 const INIT = '20260923032421_init';
 // Checksums recorded in PRODUCTION's _prisma_migrations (confirmed read-only).
@@ -253,4 +253,4 @@ const main = async () => {
   if (failures) process.exit(1);
 };
 
-main().catch((e) => stop(`unexpected error: ${String(e.message).split('\n').filter(Boolean).pop().slice(0, 200)}`));
+console.error('This historical migration runner is retired. Use reviewed Prisma migrations only.'); process.exitCode = 1;

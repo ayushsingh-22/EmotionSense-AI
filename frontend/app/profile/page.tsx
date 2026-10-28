@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
-import { getEmergencyContact } from '@/lib/api';
+import { getEmergencyContact, setEmergencyContactNotifications } from '@/lib/api';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { GradientHeader } from '@/components/ui/GradientHeader';
 import { AnimatedIcon } from '@/components/ui/AnimatedIcon';
@@ -36,6 +36,7 @@ export default function ProfilePage() {
   const [emergencyContact, setEmergencyContact] = useState<EmergencyContact | null>(null);
   const [showEmergencyForm, setShowEmergencyForm] = useState(false);
   const [emergencyLoading, setEmergencyLoading] = useState(false);
+  const [updatingAlerts, setUpdatingAlerts] = useState(false);
 
   // Dialog States
   const [deleteDataDialogOpen, setDeleteDataDialogOpen] = useState(false);
@@ -72,6 +73,19 @@ export default function ProfilePage() {
     };
     fetchData();
   }, [user, fetchEmergencyContact]);
+
+  const handleToggleEmergencyAlerts = async () => {
+    if (!emergencyContact || updatingAlerts) return;
+    try {
+      setUpdatingAlerts(true);
+      const updated = await setEmergencyContactNotifications(!emergencyContact.notify_enabled);
+      setEmergencyContact(updated);
+    } catch {
+      toast({ title: 'Could not update alerts', description: 'Please try again.', variant: 'destructive' });
+    } finally {
+      setUpdatingAlerts(false);
+    }
+  };
 
   const handleUpdateProfile = async () => {
     if (!user) return;
@@ -303,10 +317,13 @@ export default function ProfilePage() {
                   <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                     <p className="text-xs text-blue-800 dark:text-blue-200 flex items-start">
                       <span className="mr-2 flex-shrink-0">ℹ️</span>
-                      <span>This contact will be notified if our AI detects signs of severe emotional distress in your conversations.</span>
+                      <span>When enabled, MindHaven may tell this contact that you may be struggling and suggest they check in. Your messages and risk details are not included.</span>
                     </p>
                   </div>
                   
+                  <Button onClick={handleToggleEmergencyAlerts} disabled={updatingAlerts} variant="outline" className="w-full">
+                    {emergencyContact.notify_enabled ? 'Turn off emergency alerts' : 'Turn on emergency alerts'}
+                  </Button>
                   {/* Action Button */}
                   <Button
                     onClick={() => setShowEmergencyForm(true)}

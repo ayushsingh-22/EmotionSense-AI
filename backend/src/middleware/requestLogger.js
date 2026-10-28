@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { isProduction } from '../config/environment.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,7 +23,7 @@ const getTimestamp = () => {
  * Write log to file (if enabled)
  */
 const writeLogToFile = (logMessage) => {
-  if (process.env.NODE_ENV === 'production') {
+  if (isProduction()) {
     const logDir = path.join(__dirname, '..', '..', 'logs');
     const logFile = path.join(logDir, `requests-${new Date().toISOString().split('T')[0]}.log`);
     

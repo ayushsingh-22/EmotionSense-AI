@@ -7,6 +7,7 @@
  * Operational 4xx errors raised on purpose (ApiError) keep their message.
  */
 import { safePublicMessage } from '../utils/publicError.js';
+import { normalizeNodeEnv } from '../config/environment.js';
 
 /**
  * Custom API Error class. Messages of ApiError are written for end users and are
@@ -76,7 +77,7 @@ export const errorHandler = (err, req, res, next) => {
     stack: statusCode >= 500 ? err.stack : undefined
   });
 
-  const debug = process.env.NODE_ENV === 'development' && process.env.EXPOSE_ERROR_DETAILS === 'true';
+  const debug = normalizeNodeEnv() === 'development' && process.env.EXPOSE_ERROR_DETAILS === 'true';
   res.status(statusCode).json({
     success: false,
     error: message,

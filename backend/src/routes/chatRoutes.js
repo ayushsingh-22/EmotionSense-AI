@@ -122,7 +122,6 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
   }
 
   console.log(`💬 Processing chat message for user: ${userId}`);
-  console.log(`📝 Message: "${message}"`);
 
   try {
     // Step 1: Language Detection & Translation to English
@@ -145,7 +144,6 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
     console.log(`🇮🇳 Indian Language: ${getIndianLanguageName(detectedLanguage)} ${isIndianLang ? '✓' : '(defaulted to English)'}`);
     
     if (needsTranslation) {
-      console.log(`🔄 Text translated for processing: "${englishText}"`);
     }
 
     if (usedTranslationFallback) {
@@ -173,7 +171,6 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
       currentSessionId = newSession.id;
       isNewSession = true;
       
-      console.log(`✅ Created new session "${sessionTitle}" for first user message`);
     }
 
     // Step 3: Get recent messages for context (empty for new sessions)
@@ -193,7 +190,6 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
     console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
     
     if (riskAnalysis.matchedKeywords.length > 0) {
-      console.log(`⚠️ Detected keywords: ${riskAnalysis.matchedKeywords.join(', ')}`);
     }
 
     // Log safety alert if high or medium risk detected
@@ -214,19 +210,11 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
             // Prepare user data for emergency alert
             let userData = {
               id: userId,
-              full_name: userProfile?.full_name || userProfile?.name || req.user?.full_name || 'User',
+              full_name: userProfile?.full_name || userProfile?.name || req.user?.full_name || null,
               email: userProfile?.email || userProfile?.user_email || userProfile?.auth_email || req.user?.email || 'Not available'
             };
             
-            console.log(`👤 User data for alert: ${userData.full_name} (${userData.email})`);
-            console.log(`🔍 User profile debug:`, { 
-              profile_exists: !!userProfile,
-              available_fields: userProfile ? Object.keys(userProfile) : 'none',
-              email_field: userProfile?.email,
-              user_email_field: userProfile?.user_email,
-              auth_email_field: userProfile?.auth_email
-            });
-            console.log(`📮 Sending alert to emergency contact: ${emergencyContact.contact_email}`);
+
             
             // Send email alert via Nodemailer to the emergency contact's email
             alertSent = await sendEmergencyAlert(
@@ -236,12 +224,6 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
               englishText,
               riskAnalysis.riskLevel
             );
-            
-            if (alertSent) {
-              console.log(`✅ Emergency alert email sent successfully to ${emergencyContact.contact_email}`);
-            } else {
-              console.warn(`⚠️ Failed to send emergency alert email to ${emergencyContact.contact_email}`);
-            }
           }
         }
         
@@ -255,7 +237,7 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
         );
         
       } catch (alertError) {
-        console.error(`⚠️ Error handling emergency alert:`, alertError.message);
+        console.error('Emergency alert processing failed');
         // Don't fail the chat request if alert handling fails
       }
     }
@@ -292,7 +274,6 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
       conversationHistory: conversationHistory
     });
 
-    console.log(`✅ AI response generated: "${llmResponse.text ? llmResponse.text.substring(0, 100) : 'No response'}..."`);
 
     // Validate that we have a response
     if (!llmResponse.text || llmResponse.text.trim().length === 0) {
@@ -488,7 +469,6 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
   }
 
   console.log(`💬 [stream] Processing chat message for user: ${userId}`);
-  console.log(`📝 [stream] Message: "${message}"`);
 
   // Set up SSE headers up front so we can stream errors too, not just success.
   res.writeHead(200, {
@@ -548,7 +528,6 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
       const newSession = await createChatSession(userId, sessionTitle);
       currentSessionId = newSession.id;
       isNewSession = true;
-      console.log(`✅ [stream] Created new session "${sessionTitle}" for first user message`);
     }
 
     // Step 3: Get recent messages for context
@@ -576,7 +555,7 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
             const userProfile = await getUserProfile(userId);
             let userData = {
               id: userId,
-              full_name: userProfile?.full_name || userProfile?.name || req.user?.full_name || 'User',
+              full_name: userProfile?.full_name || userProfile?.name || req.user?.full_name || null,
               email: userProfile?.email || userProfile?.user_email || userProfile?.auth_email || req.user?.email || 'Not available'
             };
 
@@ -587,12 +566,6 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
               englishText,
               riskAnalysis.riskLevel
             );
-
-            if (alertSent) {
-              console.log(`✅ [stream] Emergency alert email sent successfully to ${emergencyContact.contact_email}`);
-            } else {
-              console.warn(`⚠️ [stream] Failed to send emergency alert email to ${emergencyContact.contact_email}`);
-            }
           }
         }
 
@@ -604,7 +577,7 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
           alertSent
         );
       } catch (alertError) {
-        console.error(`⚠️ [stream] Error handling emergency alert:`, alertError.message);
+        console.error('Emergency alert processing failed');
       }
     }
 
@@ -644,7 +617,6 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
       }
     });
 
-    console.log(`✅ [stream] AI response generated: "${llmResponse.text ? llmResponse.text.substring(0, 100) : 'No response'}..."`);
 
     if (!llmResponse.text || llmResponse.text.trim().length === 0) {
       throw new Error('AI response is empty. This may be due to safety filters or API issues.');
@@ -988,7 +960,6 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
   }
 
   console.log(`🎙️ Processing multilingual voice message for user: ${userId}`);
-  console.log(`📁 Audio file: ${req.file.originalname} (${req.file.mimetype}, ${req.file.size} bytes)`);
 
   try {
     // Step 1: Transcribe audio using Groq Whisper with automatic language detection
@@ -1008,7 +979,6 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     const fileExt = path.extname(req.file.originalname) || '.webm';
     const tempFilePath = path.join(tempDir, `voice-${Date.now()}${fileExt}`);
     
-    console.log(`📁 Received audio file: ${req.file.originalname} (${req.file.size} bytes)`);
     
     // Write buffer to file for Groq Whisper
     fs.writeFileSync(tempFilePath, req.file.buffer);
@@ -1062,7 +1032,6 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
       });
     }
 
-    console.log(`✅ Whisper transcription: "${transcript}"`);
     console.log(`🌐 Detected language from Whisper: ${whisperLanguage}`);
     
     // Step 1.5: Validate if detected language is an Indian language
@@ -1093,7 +1062,6 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     console.log(`✅ Final Indian language: ${detectedLanguage} (${getIndianLanguageName(detectedLanguage)})`);
     
     if (needsTranslation) {
-      console.log(`📝 English translation for processing: "${englishText}"`);
     }
 
     // Step 3: Get or create session
@@ -1169,7 +1137,6 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     console.log(`📊 Translation Check:`);
     console.log(`   - Detected Language: ${detectedLanguage}`);
     console.log(`   - Needs Translation: ${needsTranslation}`);
-    console.log(`   - LLM Response (English): "${llmResponse.text.substring(0, 100)}..."`);
 
     if (needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown') {
       console.log(`🔄 Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
@@ -1241,11 +1208,8 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
 
     // Step 12: Return comprehensive multilingual response
     console.log(`📤 Preparing multilingual response to frontend:`);
-    console.log(`   📝 User Transcript (${detectedLanguage}): "${transcript.substring(0, 80)}"`);
     if (needsTranslation) {
-      console.log(`   📝 English Translation: "${englishText.substring(0, 80)}"`);
     }
-    console.log(`   🤖 AI Response English: "${llmResponse.text.substring(0, 80)}"`);
     if (responseTranslated) {
       console.log(`   🤖 AI Response (${detectedLanguage}): "${finalResponse.substring(0, 80)}"`);
     }
@@ -1369,7 +1333,6 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
   }
 
   console.log(`🎙️ [stream] Processing voice message for user: ${userId}`);
-  console.log(`📁 [stream] Audio file: ${req.file.originalname} (${req.file.mimetype}, ${req.file.size} bytes)`);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -1437,7 +1400,6 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
       return res.end();
     }
 
-    console.log(`✅ [stream] Whisper transcription: "${transcript}"`);
 
     if (!clientClosed) {
       sendEvent('transcript', { text: transcript, whisperLanguage });
@@ -1492,7 +1454,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
             const userProfile = await getUserProfile(userId);
             let userData = {
               id: userId,
-              full_name: userProfile?.full_name || userProfile?.name || req.user?.full_name || 'User',
+              full_name: userProfile?.full_name || userProfile?.name || req.user?.full_name || null,
               email: userProfile?.email || userProfile?.user_email || userProfile?.auth_email || req.user?.email || 'Not available'
             };
 
@@ -1514,7 +1476,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
           alertSent
         );
       } catch (alertError) {
-        console.error(`⚠️ [stream] Error handling emergency alert:`, alertError.message);
+        console.error('Emergency alert processing failed');
       }
     }
 
@@ -1852,7 +1814,6 @@ router.post('/transcribe', upload.single('audio'), bindUserId, asyncHandler(asyn
     });
   }
 
-  console.log(`📁 Audio file received: ${req.file.originalname} (${req.file.mimetype}, ${req.file.size} bytes)`);
 
   try {
     // Import voice service for Groq Whisper
@@ -1898,7 +1859,6 @@ router.post('/transcribe', upload.single('audio'), bindUserId, asyncHandler(asyn
       }
     });
 
-    console.log(`✅ Transcription successful: "${transcriptionResult.transcript.substring(0, 50)}..."`);
 
   } catch (error) {
     console.error('❌ Transcription failed:', error);

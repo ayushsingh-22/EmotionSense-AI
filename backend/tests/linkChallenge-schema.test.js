@@ -22,7 +22,7 @@ const file = path.join(migDir, NEW, 'migration.sql');
 const raw = fs.readFileSync(file);
 const sql = raw.toString('utf8');
 const code = sql.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
-const schema = fs.readFileSync(path.join(root, 'prisma', 'schema.prisma'), 'utf8');
+const schema = fs.readFileSync(path.join(root, 'backend', 'tests', 'fixtures', 'legacy-prisma-schema.prisma'), 'utf8');
 const model = schema.match(/model AuthLinkChallenge \{([\s\S]*?)\n\}/)?.[1];
 
 describe('migration ordering and previously applied migrations', () => {
@@ -33,7 +33,8 @@ describe('migration ordering and previously applied migrations', () => {
   });
   test('the new migration is the only addition and sorts after every applied one', () => {
     const dirs = fs.readdirSync(migDir).filter((d) => /^\d{14}_/.test(d)).sort();
-    assert.deepEqual(dirs, [...Object.keys(APPLIED), NEW]);
+    assert.deepEqual(dirs.slice(0, 4), [...Object.keys(APPLIED), NEW]);
+    assert.ok(dirs.includes('20261028120000_backend_owned_auth'));
   });
   test('LF line endings only (checksum is platform independent)', () => {
     assert.ok(!raw.includes(13));

@@ -65,6 +65,7 @@ const normalizeEmergencyContactRow = (row) => {
     contact_name: row.contactName,
     contact_email: row.contactEmail,
     contact_phone: row.contactPhone,
+    notify_enabled: row.notifyEnabled,
     created_at: row.createdAt,
     updated_at: row.updatedAt
   };
@@ -511,12 +512,17 @@ export const hasEmergencyContact = async (userId) => {
  */
 export const createOrUpdateEmergencyContact = async (userId, contactName, contactEmail, contactPhone = null) => {
   try {
-    const saved = await prisma.emergencyContact.upsert({
+    const saved = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`emergency-contact:${userId}`}, 0))::text`;
+      const existing = await tx.emergencyContact.findUnique({where:{userId}});
+      const replaced = !existing || existing.contactEmail.toLowerCase() !== contactEmail.toLowerCase();
+      const saved = await tx.emergencyContact.upsert({
       where: { userId },
       update: {
         contactName,
         contactEmail,
-        contactPhone
+        contactPhone,
+        ...(replaced ? {notifyEnabled:true} : {})
       },
       create: {
         userId,
@@ -524,6 +530,9 @@ export const createOrUpdateEmergencyContact = async (userId, contactName, contac
         contactEmail,
         contactPhone
       }
+      });
+      if(replaced) await tx.userConsent.create({data:{userId,purpose:'emergency_alert_sharing',noticeVersion:'emergency-alert-v1',granted:true,source:'in_app'}});
+      return saved;
     });
 
     console.log(`✅ Emergency contact saved for user: ${userId}`);
@@ -533,6 +542,15 @@ export const createOrUpdateEmergencyContact = async (userId, contactName, contac
     throw error;
   }
 };
+
+export const setEmergencyContactNotifications = async (userId, enabled) => prisma.$transaction(async tx => {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`emergency-contact:${userId}`}, 0))::text`;
+  const current=await tx.emergencyContact.findUnique({where:{userId}});
+  if(!current) return null;
+  const updated=await tx.emergencyContact.update({where:{userId},data:{notifyEnabled:enabled}});
+  if(enabled && !current.notifyEnabled) await tx.userConsent.create({data:{userId,purpose:'emergency_alert_sharing',noticeVersion:'emergency-alert-v1',granted:true,source:'in_app'}});
+  return normalizeEmergencyContactRow(updated);
+});
 
 /**
  * Delete emergency contact

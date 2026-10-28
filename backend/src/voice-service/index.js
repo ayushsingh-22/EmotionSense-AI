@@ -140,7 +140,6 @@ const transcription = await groq.audio.transcriptions.create(transcriptionOption
     // Get detected language from Whisper response
     const detectedLanguage = transcription.language || config.stt.groq.language || 'en';
     
-    console.log(`✅ Groq transcription: "${transcript}"`);
     console.log(`   Confidence: ${(confidence * 100).toFixed(1)}%`);
     console.log(`   Detected Language: ${detectedLanguage} (auto-detected by Whisper)`);
 
@@ -480,7 +479,6 @@ export const analyzeVoiceEmotion = async (audioPath) => {
   let transcriptResult;
   try {
     transcriptResult = await speechToTextGroq(audioPath);
-    console.log(`✅ Transcript: "${transcriptResult.transcript}"`);
   } catch (error) {
     console.error(`❌ STT Error:`, error.message);
     transcriptResult = { 

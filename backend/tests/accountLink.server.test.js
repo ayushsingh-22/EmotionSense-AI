@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { setTestEnv, mintToken, bearer } from './helpers.js';
 
-if (process.env.NODE_ENV === 'production') throw new Error('Refusing to run with NODE_ENV=production');
+if (String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production') throw new Error('Refusing to run with NODE_ENV=production');
 setTestEnv({
   RATE_LIMIT_AUTH_FAILURES_PER_15MIN: '10000',
   GEMINI_API_KEY: 'test-placeholder-not-a-real-key', GEMINI_API_KEY1: '', GEMINI_API_KEY2: '', GROQ_API_KEY: '',

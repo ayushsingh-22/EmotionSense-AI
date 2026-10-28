@@ -14,7 +14,7 @@ const migDir = path.join(root, 'prisma', 'migrations');
 const NEW = '20261014120000_add_auth_identities';
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8');
 const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
-const schema = read('prisma', 'schema.prisma');
+const schema = read('backend', 'tests', 'fixtures', 'legacy-prisma-schema.prisma');
 const sql = read('prisma', 'migrations', NEW, 'migration.sql');
 // SQL without comment lines, for statement-level assertions.
 const code = sql.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');

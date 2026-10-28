@@ -1,3 +1,5 @@
+Historical — refers to the deleted Neon project; not applicable.
+
 # Phase 2A Release Runbook — API Security Hardening
 
 Scope: Vercel (Next.js + NextAuth) and Render (Express) **production**, both on the

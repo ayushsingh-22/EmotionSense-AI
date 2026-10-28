@@ -574,6 +574,11 @@ export interface EmergencyContact {
   updated_at: string;
 }
 
+export const setEmergencyContactNotifications = async (notifyEnabled: boolean): Promise<EmergencyContact> => {
+  const response = await api.put<{ success: boolean; data: EmergencyContact }>('/api/emergency/notifications', { notifyEnabled });
+  return response.data.data;
+};
+
 /**
  * Check if user has an emergency contact
  */

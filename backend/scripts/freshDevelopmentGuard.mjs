@@ -1,18 +1,8 @@
 export const DEVELOPMENT = {
-  project: 'plain-wave-56430909',
-  branch: 'br-weathered-hall-b3dn9bub',
-  endpoint: 'ep-square-boat-b3zomdvt'
+  project: 'fancy-union-28873755',
+  branch: 'br-ancient-snow-b3si0kwz',
+  endpoint: 'ep-cold-hill-b3lffx1r'
 };
-
-export const PRODUCTION = {
-  branch: 'br-flat-tree-b3brt6b9',
-  endpoint: 'ep-snowy-term-b39utxb2'
-};
-
-export const RECOVERY_BRANCHES = new Set([
-  'br-still-fog-b36gqrgc',
-  'br-lively-boat-b3vxk8t3'
-]);
 
 export const PRISMA_MIGRATIONS_TABLE = '_prisma_migrations';
 export const PENDING_TABLE = 'auth_link_challenges';
@@ -73,10 +63,6 @@ export const validateDevelopmentIdentity = ({ reported, configuredEndpoint, expe
   const problems = [];
   if (!reported || typeof reported !== 'object') return ['database identity is missing'];
   if (reported.project !== DEVELOPMENT.project) problems.push('project is not the approved development project');
-  if (reported.branch === PRODUCTION.branch || reported.endpoint === PRODUCTION.endpoint) {
-    problems.push('production branch or endpoint is forbidden');
-  }
-  if (RECOVERY_BRANCHES.has(reported.branch)) problems.push('recovery branch is forbidden');
   if (reported.branch !== DEVELOPMENT.branch) problems.push('server-reported branch is not Development');
   if (reported.endpoint !== DEVELOPMENT.endpoint) problems.push('server-reported endpoint is not Development');
   if (configuredEndpoint !== DEVELOPMENT.endpoint) problems.push('configured endpoint is not Development');

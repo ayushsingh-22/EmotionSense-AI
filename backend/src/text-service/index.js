@@ -280,7 +280,6 @@ export const combineTextEmotionResults = (bilstmResult, hfResult) => {
 export const analyzeTextEmotion = async (text) => {
   console.log(`📝 Analyzing text emotion with dual models...`);
   const cleanedText = preprocessText(text);
-  console.log(`✅ Text preprocessed: "${cleanedText}"`);
 
   const [bilstmResult, hfResult] = await Promise.all([
     detectEmotionBiLSTM(cleanedText),

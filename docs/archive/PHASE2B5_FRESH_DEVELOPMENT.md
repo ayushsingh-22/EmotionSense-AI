@@ -1,3 +1,5 @@
+Historical — refers to the deleted Neon project; not applicable.
+
 # Phase 2B.5 fresh Development procedure
 
 This procedure preserves the existing Neon Development branch and endpoint while removing

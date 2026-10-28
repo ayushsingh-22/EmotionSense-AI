@@ -17,6 +17,7 @@ const SECRET_NAME = /(KEY|SECRET|PASSWORD|PASSWD|TOKEN|DATABASE_URL|DIRECT_URL|C
 const MIN_SECRET_LENGTH = 8;
 
 const PATTERNS = [
+  [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[REDACTED_EMAIL]'],
   [/postgres(?:ql)?:\/\/[^\s'"`<>)]+/gi, 'postgresql://[REDACTED]'],
   [/(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi, '$1[REDACTED]'],
   [/(authorization["']?\s*[:=]\s*["']?)(?!Bearer\s)[^\s"',}]+/gi, '$1[REDACTED]'],

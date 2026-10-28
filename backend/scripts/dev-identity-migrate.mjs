@@ -9,7 +9,7 @@
  *   node scripts/dev-identity-migrate.mjs --verify-only [--expect-users-fingerprint <sha256>] [--functional-probe]
  *        -> post-migration verification (read-only; --functional-probe adds a transaction that is ALWAYS rolled back)
  *   node scripts/dev-identity-migrate.mjs --execute \
- *        --confirm-branch br-weathered-hall-b3dn9bub \
+ *        --confirm-branch br-ancient-snow-b3si0kwz \
  *        --recovery-point <NEW neon branch id created for this migration, e.g. br-xxxx> \
  *        --confirm-recovery-verified \
  *        --confirm-not-default \
@@ -19,10 +19,10 @@
  * Hard guarantees:
  *  - The ONLY database-changing command ever spawned is `prisma migrate deploy` (fixed argv, no
  *    shell). No reset / db push / migrate resolve / manual SQL / rollback path exists here.
- *  - Production (branch br-flat-tree-b3brt6b9, endpoint ep-snowy-term-b39utxb2) is refused
+ *  - Production (branch unapproved-branch-one, endpoint unapproved-endpoint) is refused
  *    unconditionally: by hostname, by env pin, and by the ids the server itself reports, on both
  *    the pooled and the direct connection, before and after the deploy.
- *  - The recovery branch br-lively-boat-b3vxk8t3 must never be used as the migration target,
+ *  - The recovery branch unapproved-branch-two must never be used as the migration target,
  *    and is rejected as the "new" recovery point (a fresh pre-2B.2 branch is required).
  *  - The approved SQL is pinned by SHA-256 below: ANY edit to the migration file blocks execution.
  *  - On any failure it reports and STOPS: no retries, no rollback, no edits to _prisma_migrations.
@@ -37,9 +37,9 @@ import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 
 /* ------------------------------ constants ------------------------------ */
-const DEV = { branch: 'br-weathered-hall-b3dn9bub', endpoint: 'ep-square-boat-b3zomdvt', project: 'plain-wave-56430909' };
-const PROD = { branch: 'br-flat-tree-b3brt6b9', endpoint: 'ep-snowy-term-b39utxb2' };
-const OLD_RECOVERY = 'br-lively-boat-b3vxk8t3';
+const DEV = { branch: 'br-ancient-snow-b3si0kwz', endpoint: 'ep-cold-hill-b3lffx1r', project: 'fancy-union-28873755' };
+const PROD = { branch: 'unapproved-branch-one', endpoint: 'unapproved-endpoint' };
+const OLD_RECOVERY = 'unapproved-branch-two';
 
 const INIT = '20260923032421_init';
 const V2 = '20261012181122_add_wellbeing_v2';
@@ -365,4 +365,4 @@ const main = async () => {
   if (failures) process.exit(1);
 };
 
-main().catch((e) => stop(`unexpected error: ${String(e.message).split('\n').filter(Boolean).pop().slice(0, 200)}`));
+console.error('This historical migration runner is retired. Use reviewed Prisma migrations only.'); process.exitCode = 1;

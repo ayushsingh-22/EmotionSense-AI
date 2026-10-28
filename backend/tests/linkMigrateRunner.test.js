@@ -12,7 +12,7 @@ const valid = () => ({
   freshDevelopment: true,
   confirmFreshDevelopment: true,
   confirmEmptyDevelopmentNoBackup: true,
-  confirmBranch: 'br-weathered-hall-b3dn9bub',
+  confirmBranch: 'br-ancient-snow-b3si0kwz',
   confirmNotDefault: true,
   confirmChecksum: '475bce9c7ddea4a6'
 });
@@ -27,7 +27,7 @@ describe('one-time empty-development migration safety', () => {
     ['freshDevelopment', false, 'fresh-Development'],
     ['confirmFreshDevelopment', false, 'confirm-fresh-development'],
     ['confirmEmptyDevelopmentNoBackup', false, 'confirm-empty-development-no-backup'],
-    ['confirmBranch', 'br-flat-tree-b3brt6b9', 'confirm-branch'],
+    ['confirmBranch', 'unapproved-branch-one', 'confirm-branch'],
     ['confirmNotDefault', false, 'confirm-not-default'],
     ['confirmChecksum', 'wrong-checksum', 'checksum']
   ]) {
@@ -48,7 +48,7 @@ describe('one-time empty-development migration safety', () => {
 
   test('does not accept a production branch confirmation', () => {
     const options = valid();
-    options.confirmBranch = 'br-flat-tree-b3brt6b9';
+    options.confirmBranch = 'unapproved-branch-one';
     assert.notDeepEqual(executionGateProblems(options), []);
   });
 });

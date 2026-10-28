@@ -5,8 +5,6 @@ import {
   CLEANUP_ORDER,
   DEVELOPMENT,
   PENDING_TABLE,
-  PRODUCTION,
-  RECOVERY_BRANCHES,
   STATIC_TABLES,
   USER_DATA_TABLES,
   buildCleanupPlan,
@@ -30,8 +28,8 @@ describe('fresh development identity guard', () => {
   });
 
   for (const [label, reported] of [
-    ['production', { project: DEVELOPMENT.project, branch: PRODUCTION.branch, endpoint: PRODUCTION.endpoint }],
-    ['recovery', { project: DEVELOPMENT.project, branch: [...RECOVERY_BRANCHES][0], endpoint: 'ep-icy-waterfall-b3n4r4ps' }],
+    ['unapproved branch', { project: DEVELOPMENT.project, branch: 'unapproved-branch-one', endpoint: DEVELOPMENT.endpoint }],
+    ['unapproved endpoint', { project: DEVELOPMENT.project, branch: DEVELOPMENT.branch, endpoint: 'unapproved-endpoint-two' }],
     ['wrong project', { project: 'wrong-project', branch: DEVELOPMENT.branch, endpoint: DEVELOPMENT.endpoint }],
     ['wrong endpoint', { project: DEVELOPMENT.project, branch: DEVELOPMENT.branch, endpoint: 'ep-other' }]
   ]) {

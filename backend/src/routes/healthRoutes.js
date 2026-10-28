@@ -22,7 +22,8 @@ router.get('/', (req, res) => {
     uptime: process.uptime(),
     environment: config.server.nodeEnv,
     // Lets deploy verification prove the authenticated build is the one live.
-    release: 'phase2a-auth-1'
+    release: 'phase2a-auth-1',
+    commit: /^[a-f0-9]{7,40}$/i.test(process.env.RENDER_GIT_COMMIT || '') ? process.env.RENDER_GIT_COMMIT.slice(0, 7) : 'unknown'
   });
 });
 

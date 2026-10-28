@@ -75,7 +75,6 @@ export async function googleSTT(audioBuffer, languageCode = 'en-US') {
     const transcript = firstAlternative.transcript;
     const confidence = firstAlternative.confidence || 0;
 
-    console.log(`✅ STT transcription: "${transcript}" (confidence: ${confidence.toFixed(2)})`);
 
     return {
       text: transcript,
@@ -413,7 +412,6 @@ export async function processVoiceMessage(audioBuffer, userId, language = 'en-US
     console.log(`📝 Converting speech to text...`);
     const sttResult = await speechToText(audioBuffer, language);
 
-    console.log(`✅ Transcribed: "${sttResult.text}"`);
 
     // Return both transcript and audio buffer for further processing
     return {

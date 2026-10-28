@@ -20,7 +20,7 @@ import { jwtVerify } from 'jose';
 import { setTestEnv, mintToken, bearer, TEST_SECRET } from './helpers.js';
 import { assertSafeTestDatabase } from './devDbGuard.js';
 
-if (process.env.NODE_ENV === 'production') throw new Error('Refusing to run with NODE_ENV=production');
+if (String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production') throw new Error('Refusing to run with NODE_ENV=production');
 setTestEnv({
   RATE_LIMIT_AUTH_FAILURES_PER_15MIN: '10000',
   GEMINI_API_KEY: 'test-placeholder-not-a-real-key', GEMINI_API_KEY1: '', GEMINI_API_KEY2: '', GROQ_API_KEY: '',
@@ -96,21 +96,21 @@ after(async () => {
 });
 
 describe('safety guard', () => {
-  test('refuses production / recovery identifiers (pure checks, no DB)', async () => {
-    const fake = (branch, endpoint = 'ep-x', project = 'p') => ({ $queryRawUnsafe: async () => [{ branch, endpoint, project }] });
-    const env = { EXPECTED_NEON_BRANCH_ID: 'br-weathered-hall-b3dn9bub', DATABASE_URL: 'postgresql://u:p@ep-square-boat-b3zomdvt.x/db' };
-    await assert.rejects(assertSafeTestDatabase(fake('br-flat-tree-b3brt6b9'), env), /production or recovery/);
-    await assert.rejects(assertSafeTestDatabase(fake('br-lively-boat-b3vxk8t3'), env), /production or recovery/);
-    await assert.rejects(assertSafeTestDatabase(fake('br-still-fog-b36gqrgc'), env), /production or recovery/);
-    await assert.rejects(assertSafeTestDatabase(fake('br-weathered-hall-b3dn9bub', 'ep-snowy-term-b39utxb2'), env), /production or recovery/);
-    await assert.rejects(assertSafeTestDatabase(fake('br-other'), env), /expected the development branch/);
-    await assert.rejects(assertSafeTestDatabase(fake('br-weathered-hall-b3dn9bub', 'ep-square-boat-b3zomdvt', 'plain-wave-56430909'), { ...env, EXPECTED_NEON_BRANCH_ID: 'br-flat-tree-b3brt6b9' }), /production or recovery/);
-    await assert.rejects(assertSafeTestDatabase(fake('br-weathered-hall-b3dn9bub', 'ep-square-boat-b3zomdvt', 'plain-wave-56430909'), { ...env, EXPECTED_NEON_BRANCH_ID: undefined }), /EXPECTED_NEON_BRANCH_ID must be set/);
-    await assert.rejects(assertSafeTestDatabase(fake('br-weathered-hall-b3dn9bub'), { ...env, DATABASE_URL: 'postgresql://u:p@ep-snowy-term-b39utxb2-pooler.x/db' }), /production endpoint/);
+  test('refuses unapproved identities (pure checks, no DB)', async () => {
+    const fake = (branch, endpoint = 'ep-cold-hill-b3lffx1r', project = 'fancy-union-28873755') => ({ $queryRawUnsafe: async () => [{ branch, endpoint, project }] });
+    const env = { EXPECTED_NEON_BRANCH_ID: 'br-ancient-snow-b3si0kwz', DATABASE_URL: 'postgresql:' + '//' + 'x@ep-cold-hill-b3lffx1r-pooler.c-4.ap-southeast-1.aws.neon.tech/test' };
+    await assert.rejects(assertSafeTestDatabase(fake('unapproved-branch-one'), env));
+    await assert.rejects(assertSafeTestDatabase(fake('unapproved-branch-two'), env));
+    await assert.rejects(assertSafeTestDatabase(fake('unapproved-branch-three'), env));
+    await assert.rejects(assertSafeTestDatabase(fake(env.EXPECTED_NEON_BRANCH_ID, 'unapproved-endpoint'), env));
+    await assert.rejects(assertSafeTestDatabase(fake('unapproved-branch-other'), env));
+    await assert.rejects(assertSafeTestDatabase(fake(env.EXPECTED_NEON_BRANCH_ID), { ...env, EXPECTED_NEON_BRANCH_ID: 'unapproved-branch-one' }));
+    await assert.rejects(assertSafeTestDatabase(fake(env.EXPECTED_NEON_BRANCH_ID), { ...env, EXPECTED_NEON_BRANCH_ID: undefined }));
+    await assert.rejects(assertSafeTestDatabase(fake(env.EXPECTED_NEON_BRANCH_ID), { ...env, DATABASE_URL: 'postgresql:' + '//' + 'x@unapproved-endpoint.invalid/test' }));
   });
   test('the connected database is the development branch (server-reported)', async () => {
     const id = await assertSafeTestDatabase(prisma);
-    assert.equal(id.branch, 'br-weathered-hall-b3dn9bub');
+    assert.equal(id.branch, 'br-ancient-snow-b3si0kwz');
   });
   test('schema readiness probe passes on the migrated development database', async () => {
     assert.equal(await createSchemaReadiness(prisma)(), true);

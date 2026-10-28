@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { isProduction } from '../config/environment.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -38,7 +39,7 @@ class Logger {
   }
 
   writeToFile(level, message, meta) {
-    if (process.env.NODE_ENV === 'production') {
+    if (isProduction()) {
       const logFile = path.join(this.logDir, `${level.toLowerCase()}.log`);
       const formattedMessage = this.formatMessage(level, message, meta);
       fs.appendFileSync(logFile, formattedMessage + '\n');

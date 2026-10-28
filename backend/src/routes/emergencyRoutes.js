@@ -8,6 +8,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import {
   getEmergencyContact,
   createOrUpdateEmergencyContact,
+  setEmergencyContactNotifications,
   deleteEmergencyContact,
   hasEmergencyContact
 } from '../storage-service/index.js';
@@ -21,6 +22,13 @@ const router = express.Router();
 // Any :userId path segment must equal the authenticated caller.
 router.param('userId', requireSelfParam);
 const contactWrite = [sensitiveWriteLimiter(), validate({ body: emergencyContactBody })];
+
+router.put('/notifications', sensitiveWriteLimiter(), asyncHandler(async (req,res) => {
+  if(typeof req.body?.notifyEnabled !== 'boolean') return res.status(400).json({success:false,error:'Invalid notification preference'});
+  const contact=await setEmergencyContactNotifications(req.userId, req.body.notifyEnabled);
+  if(!contact) return res.status(404).json({success:false,error:'No emergency contact found'});
+  return res.json({success:true,data:contact});
+}));
 
 /**
  * POST /api/emergency/save
@@ -84,7 +92,7 @@ router.post('/save', ...contactWrite, asyncHandler(async (req, res) => {
       data: savedContact
     });
   } catch (error) {
-    console.error('Error saving emergency contact:', error);
+    console.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to save emergency contact',
@@ -135,7 +143,7 @@ router.get('/:userId', asyncHandler(async (req, res) => {
       });
     }
     
-    console.error('Error fetching emergency contact:', error);
+    console.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to fetch emergency contact',
@@ -206,7 +214,7 @@ const updateHandler = asyncHandler(async (req, res) => {
       data: updatedContact
     });
   } catch (error) {
-    console.error('Error updating emergency contact:', error);
+    console.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to update emergency contact',
@@ -254,7 +262,7 @@ router.get('/check/:userId', asyncHandler(async (req, res) => {
       });
     }
     
-    console.error('Error checking emergency contact:', error);
+    console.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to check emergency contact',
@@ -289,7 +297,7 @@ router.delete('/:userId', asyncHandler(async (req, res) => {
       message: 'Emergency contact deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting emergency contact:', error);
+    console.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to delete emergency contact',

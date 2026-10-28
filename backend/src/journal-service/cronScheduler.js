@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import journalGenerator from './journalGenerator.js';
 import prisma from '../lib/prisma.js';
 import logger from '../utils/logger.js';
+import { normalizeNodeEnv } from '../config/environment.js';
 
 /**
  * Whether the nightly journal job may be registered in this process.
@@ -12,7 +13,7 @@ import logger from '../utils/logger.js';
  * Every other environment, including production and an unset NODE_ENV, keeps the original behaviour: always registered.
  */
 export const shouldRegisterNightlyJob = (env = process.env) => {
-  const nodeEnv = String(env.NODE_ENV || '').trim().toLowerCase();
+  const nodeEnv = normalizeNodeEnv(env.NODE_ENV ?? '');
   const isLocal = nodeEnv === 'development' || nodeEnv === 'test';
   if (!isLocal) return true;
   return env.JOURNAL_SCHEDULER_ENABLED === 'true';

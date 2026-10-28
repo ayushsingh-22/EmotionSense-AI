@@ -16,7 +16,7 @@ import { randomUUID } from 'crypto';
 import { setTestEnv, mintToken, bearer } from './helpers.js';
 
 const originalNodeEnv = process.env.NODE_ENV;
-if (originalNodeEnv === 'production') throw new Error('Refusing to run integration tests with NODE_ENV=production');
+if (String(originalNodeEnv || '').trim().toLowerCase() === 'production') throw new Error('Refusing to run integration tests with NODE_ENV=production');
 setTestEnv({
   RATE_LIMIT_AI_PER_MIN: '3',
   RATE_LIMIT_AUTH_FAILURES_PER_15MIN: '10000',
@@ -45,19 +45,16 @@ let A; let B; let tokA; let tokB; let sessionB; let activityB;
  * Tests never run migrations, reset schemas or truncate: they only INSERT/DELETE
  * rows whose email is  phase2a-test-*@example.invalid.
  */
-const DEV = { branch: 'br-weathered-hall-b3dn9bub', endpoint: 'ep-square-boat-b3zomdvt', project: 'plain-wave-56430909' };
-const FORBIDDEN_BRANCHES = ['br-flat-tree-b3brt6b9' /* production */, 'br-lively-boat-b3vxk8t3' /* recovery */];
-const FORBIDDEN_ENDPOINTS = ['ep-snowy-term-b39utxb2' /* production */];
+const DEV = { branch: 'br-ancient-snow-b3si0kwz', endpoint: 'ep-cold-hill-b3lffx1r', project: 'fancy-union-28873755' };
 let dbApproved = false;
 const assertSafeTestDatabase = async () => {
-  const schema = new URL(process.env.DATABASE_URL).searchParams.get('schema') || 'public';
+  const url = new URL(process.env.DATABASE_URL);
+  const schema = url.searchParams.get('schema') || 'public';
+  if (url.hostname.split('.')[0].replace(/-pooler$/, '') !== DEV.endpoint || !url.hostname.endsWith('.aws.neon.tech')) throw new Error('Refusing unapproved database endpoint');
   const [id] = await prisma.$queryRawUnsafe(
     "select current_setting('neon.branch_id', true) as branch, current_setting('neon.endpoint_id', true) as endpoint, current_setting('neon.project_id', true) as project");
   const expected = process.env.EXPECTED_NEON_BRANCH_ID;
   if (!expected) throw new Error('Refusing to run: EXPECTED_NEON_BRANCH_ID must be set');
-  if (FORBIDDEN_BRANCHES.includes(id.branch) || FORBIDDEN_BRANCHES.includes(expected) || FORBIDDEN_ENDPOINTS.includes(id.endpoint)) {
-    throw new Error(`Refusing to run: ${id.branch}/${id.endpoint} is a production or recovery target`);
-  }
   if (id.branch !== DEV.branch || id.endpoint !== DEV.endpoint || id.project !== DEV.project) {
     throw new Error(`Refusing to run: database reports ${id.branch}/${id.endpoint}/${id.project}, expected the development branch`);
   }

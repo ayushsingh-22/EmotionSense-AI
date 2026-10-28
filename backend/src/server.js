@@ -12,16 +12,20 @@ import fs from 'fs';
 
 // Import configuration
 import config from './config/index.js';
+import { normalizeNodeEnv } from './config/environment.js';
 
 // Import services
-import { initializeNodemailer } from './utils/nodemailerHelper.js';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { installLogRedaction } from './utils/logRedaction.js';
 import { randomUUID } from 'crypto';
-import { requireAuth, bindUserId, assertAuthConfigured } from './middleware/auth.js';
+import { bindUserId, assertAuthConfigured } from './middleware/auth.js';
+import prisma from './lib/prisma.js';
+import { createAuthServices } from './auth/index.js';
+import { createBackendAuthRouter } from './routes/backendAuthRoutes.js';
+import rateLimit from 'express-rate-limit';
 import {
   buildCors, securityHeaders, noStore, globalLimiter, authFailureLimiter,
   aiBurstLimiter, aiDailyLimiter
@@ -104,9 +108,10 @@ const configureMiddleware = () => {
   app.use(buildCors());
   app.use(globalLimiter());
 
-  // The Firebase exchange route parses its own, much smaller JSON body (8kb).
+  app.use('/api/auth', noStore, rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false }), express.json({ limit: '8kb' }), express.urlencoded({ extended: true, limit: '8kb' }));
+  // Authentication bodies are parsed above; other routes retain the global limit.
   const skipForExchange = (parser) => (req, res, next) =>
-    (req.path.startsWith('/api/auth/firebase/') ? next() : parser(req, res, next));
+    (req.path.startsWith('/api/auth/') ? next() : parser(req, res, next));
   app.use(skipForExchange(express.json({ limit: '1mb' })));
   app.use(skipForExchange(express.urlencoded({ extended: true, limit: '1mb' })));
   // Server-generated request id (never trusted from the client): echoed in the
@@ -133,7 +138,8 @@ const configureMiddleware = () => {
 /**
  * Configure API routes
  */
-const configureRoutes = () => {
+const configureRoutes = (authServices) => {
+  const backendAuth = createBackendAuthRouter({ prisma, services: authServices });
   // Public: minimal liveness only (see healthRoutes.js).
   app.use('/api/health', healthRoutes);
   // Secret-gated, not user-facing.
@@ -147,12 +153,13 @@ const configureRoutes = () => {
   // to /start and /complete. Invisible (404) unless ACCOUNT_LINKING_ENABLED=true AND FIREBASE_EXCHANGE_ENABLED=true;
   // refuses (503) on a database without the identity + link-challenge schema.
   app.use('/api/auth/firebase/link', createAccountLinkRouter());
+  app.use('/api/auth', backendAuth.router);
 
   // Everything below requires a valid bearer token. Failed attempts are
   // rate-limited per IP before verification runs. bindUserId then pins the
   // caller's identity to the token (multipart routes re-run it inside the route,
   // after multer has parsed the form).
-  const authed = [authFailureLimiter(), requireAuth, noStore, bindUserId];
+  const authed = [authFailureLimiter(), backendAuth.auth, noStore, bindUserId];
   const paidAi = [aiBurstLimiter(), aiDailyLimiter()];
 
   // Paid LLM / STT / TTS / emotion-model endpoints: authenticated + per-user limits.
@@ -197,10 +204,10 @@ const configureRoutes = () => {
  * beyond router imports). Exported for the automated test-suite.
  */
 let built = false;
-export const buildApp = () => {
+export const buildApp = (authServices) => {
   if (built) return app;
   configureMiddleware();
-  configureRoutes();
+  configureRoutes(authServices || createAuthServices({ prisma }));
   app.use(errorHandler);
   built = true;
   return app;
@@ -224,10 +231,6 @@ const startServer = async () => {
     }
     createRequiredDirectories();
 
-    console.log('📧 Initializing email...');
-    const ok = await initializeNodemailer();
-    if (!ok) console.log('⚠️ Email disabled');
-
     buildApp();
 
     try {
@@ -241,7 +244,7 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log('='.repeat(50));
       console.log(`🚀 Server Running → http://localhost:${PORT}`);
-      console.log(`🌍 NODE ENV → ${process.env.NODE_ENV}`);
+      console.log(`🌍 NODE ENV → ${normalizeNodeEnv() || 'development'}`);
       console.log(`🔓 CORS Mode → ${process.env.CORS_ORIGIN ? "allow-list" : "default (no cross-origin in production)"}`);
       console.log('='.repeat(50));
     });
@@ -252,7 +255,7 @@ const startServer = async () => {
   }
 };
 
-const isTest = process.env.NODE_ENV === 'test';
+const isTest = normalizeNodeEnv() === 'test';
 
 if (!isTest) {
 process.on('uncaughtException', e => { console.error('💥', e); process.exit(1); });

@@ -97,13 +97,12 @@ export const triggerEmergencyNotification = async (
     console.log(`🔍 Fetching emergency contact for user: ${userId}`);
     const contact = await getEmergencyContact(userId);
 
-    if (!contact || !contact.contact_email) {
+    if (!contact || !contact.contact_email || !contact.notify_enabled) {
       console.log(`ℹ️ No emergency contact configured for user: ${userId}`);
       result.logged = true; // Still log the incident
     } else {
       // Step 4: Send emergency alert email
       try {
-        console.log(`⚠️ High-risk message detected - sending alert to: ${contact.contact_email}`);
 
         const emailSent = await sendEmergencyAlert(
           contact.contact_email,
@@ -116,12 +115,11 @@ export const triggerEmergencyNotification = async (
 
         if (emailSent) {
           result.alerted = true;
-          console.log(`✅ Emergency alert successfully sent to: ${contact.contact_email}`);
         } else {
           console.warn(`⚠️ Failed to send alert email but continuing...`);
         }
       } catch (emailError) {
-        console.error('❌ Error sending alert email:', emailError.message);
+        console.error('Emergency operation failed');
         result.error = `Email send failed: ${emailError.message}`;
       }
     }
@@ -145,7 +143,7 @@ export const triggerEmergencyNotification = async (
         console.warn('⚠️ Failed to log alert to Supabase');
       }
     } catch (logError) {
-      console.error('❌ Error logging safety alert:', logError.message);
+      console.error('Emergency operation failed');
       result.error = `Logging failed: ${logError.message}`;
     }
 
@@ -160,7 +158,7 @@ export const triggerEmergencyNotification = async (
 
     return result;
   } catch (error) {
-    console.error('❌ Unexpected error in emergency notification:', error.message);
+    console.error('Emergency operation failed');
     result.error = error.message;
     return result;
   }
@@ -198,7 +196,6 @@ export const analyzeAndNotifyIfNeeded = async (
     }
 
     console.warn(`⚠️ High-risk message detected (Risk: ${riskDetection.riskLevel})`);
-    console.warn(`   Keywords: ${riskDetection.matchedKeywords.join(', ')}`);
 
     // Trigger emergency notification
     const notificationResult = await triggerEmergencyNotification(
@@ -217,7 +214,7 @@ export const analyzeAndNotifyIfNeeded = async (
       result: notificationResult
     };
   } catch (error) {
-    console.error('❌ Error in analyze and notify workflow:', error.message);
+    console.error('Emergency operation failed');
     return {
       shouldAlert: false,
       riskLevel: 'unknown',

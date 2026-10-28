@@ -4,6 +4,7 @@
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { isProduction } from '../config/environment.js';
 
 /* ------------------------------- CORS --------------------------------- */
 
@@ -20,7 +21,7 @@ const DEV_DEFAULT_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000'];
 export const parseAllowedOrigins = (raw, nodeEnv = process.env.NODE_ENV) => {
   const entries = (raw || '').split(',').map((s) => s.trim()).filter(Boolean)
     .filter((e) => e !== '*');
-  const list = entries.length > 0 ? entries : (nodeEnv === 'production' ? [] : DEV_DEFAULT_ORIGINS);
+  const list = entries.length > 0 ? entries : (isProduction(nodeEnv) ? [] : DEV_DEFAULT_ORIGINS);
   return list.map((pattern) => {
     if (!pattern.includes('*')) return { exact: pattern.replace(/\/$/, '') };
     const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[a-z0-9-]+');
@@ -53,7 +54,7 @@ export const securityHeaders = () => helmet({
   // Frontend on another origin plays /audio/* files.
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   referrerPolicy: { policy: 'no-referrer' },
-  hsts: process.env.NODE_ENV === 'production'
+  hsts: isProduction()
     ? { maxAge: 15552000, includeSubDomains: true }
     : false
 });

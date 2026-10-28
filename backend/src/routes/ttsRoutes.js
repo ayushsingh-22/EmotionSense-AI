@@ -35,7 +35,6 @@ router.post('/', validate({ body: ttsBody }), async (req, res) => {
       });
     }
 
-    console.log(`🔊 TTS request received for text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
 
     try {
       // Generate speech
@@ -108,7 +107,6 @@ router.post('/generate', validate({ body: ttsBody }), async (req, res) => {
     }
 
     console.log(`🔊 TTS generate request: language=${language || 'default'}, voice=${voice || 'default'}`);
-    console.log(`   Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
 
     try {
       // Generate speech
@@ -191,7 +189,6 @@ router.post('/sarvam', validate({ body: ttsBody }), async (req, res) => {
 
     const langCode = language_code || 'en-IN';
     console.log(`🔊 Sarvam AI TTS request: language=${langCode}`);
-    console.log(`   Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
 
     try {
       // Generate speech using Sarvam AI

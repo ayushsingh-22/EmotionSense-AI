@@ -496,7 +496,6 @@ export const generateWithGemini = async (prompt) => {
         }
 
         console.log(`✅ Gemini response generated with ${modelName} (API Key ${keyIndex + 1})`);
-        console.log(`📝 Response preview: "${text.substring(0, 100)}..."`);
         return {
           text,
           model: `gemini-${modelName}`,
@@ -716,7 +715,6 @@ export const generateResponse = async ({ emotion, confidence, context, transcrip
   // Guardrail: block non-emotional requests
   const scopeCheck = detectNonEmotionalIntent(transcript, conversationHistory);
   if (scopeCheck.blocked) {
-    console.log(`🚧 Message appears outside emotional support scope (category: ${scopeCheck.category}, keyword: ${scopeCheck.keyword})`);
     return {
       text: buildScopeBoundaryMessage(scopeCheck.category),
       model: 'scope-guard',
@@ -775,7 +773,6 @@ export const generateResponseStream = async ({ emotion, confidence, context, tra
   // Guardrail: block non-emotional requests
   const scopeCheck = detectNonEmotionalIntent(transcript, conversationHistory);
   if (scopeCheck.blocked) {
-    console.log(`🚧 [stream] Message appears outside emotional support scope (category: ${scopeCheck.category}, keyword: ${scopeCheck.keyword})`);
     const text = buildScopeBoundaryMessage(scopeCheck.category);
     onToken(text);
     return {

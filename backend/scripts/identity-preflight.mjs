@@ -18,8 +18,10 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 
-const DEV = { branch: 'br-weathered-hall-b3dn9bub', endpoint: 'ep-square-boat-b3zomdvt', project: 'plain-wave-56430909' };
-const PROD = { branch: 'br-flat-tree-b3brt6b9', endpoint: 'ep-snowy-term-b39utxb2' };
+throw new Error('This historical identity preflight is retired.');
+
+const DEV = { branch: 'br-ancient-snow-b3si0kwz', endpoint: 'ep-cold-hill-b3lffx1r', project: 'fancy-union-28873755' };
+const PROD = { branch: 'unapproved-branch-one', endpoint: 'unapproved-endpoint' };
 const MIGRATIONS = ['20260923032421_init', '20261012181122_add_wellbeing_v2'];
 
 const backendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

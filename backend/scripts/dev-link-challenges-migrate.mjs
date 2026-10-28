@@ -9,7 +9,7 @@
  *   node scripts/dev-link-challenges-migrate.mjs --execute \
  *        --fresh-development --confirm-fresh-development \
  *        --confirm-empty-development-no-backup \
- *        --confirm-branch br-weathered-hall-b3dn9bub \
+ *        --confirm-branch br-ancient-snow-b3si0kwz \
  *        --confirm-not-default \
  *        --confirm-checksum <first 16 hex chars of the approved migration sha256>
  *                                                                   -> one-time empty-Development migration only
@@ -22,7 +22,7 @@
  *  - The only database-changing command is the fixed `prisma migrate deploy` invocation
  *    below, reachable only through the empty-Development gates. No reset / db push /
  *    migrate resolve / manual SQL / rollback path exists here.
- *  - Production (br-flat-tree-b3brt6b9 / ep-snowy-term-b39utxb2) is refused by hostname,
+ *  - Production (unapproved-branch-one / unapproved-endpoint) is refused by hostname,
  *    env pin and the ids the server itself reports, on the pooled and the direct connection.
  *  - The approved SQL is pinned by SHA-256: any edit to the migration file blocks execution.
  *  - On any failure it reports and STOPS: no retries, no rollback, no edits to _prisma_migrations.
@@ -38,8 +38,8 @@ import { PrismaClient } from '@prisma/client';
 import { validateFreshInventory } from './freshDevelopmentGuard.mjs';
 
 /* ------------------------------ constants ------------------------------ */
-const DEV = { branch: 'br-weathered-hall-b3dn9bub', endpoint: 'ep-square-boat-b3zomdvt', project: 'plain-wave-56430909' };
-const PROD = { branch: 'br-flat-tree-b3brt6b9', endpoint: 'ep-snowy-term-b39utxb2' };
+const DEV = { branch: 'br-ancient-snow-b3si0kwz', endpoint: 'ep-cold-hill-b3lffx1r', project: 'fancy-union-28873755' };
+const PROD = { branch: 'unapproved-branch-one', endpoint: 'unapproved-endpoint' };
 const APPLIED = {
   '20260923032421_init': '99889bdb34d50b0de97a17e25d926b0947dc4c1c9e4d42297158e3640d47ef9f',
   '20261012181122_add_wellbeing_v2': 'd4657ac71f55ab0b81e960ae645f0bbfedc0ab331cf022fbb4307d646f29bcc7',
@@ -379,5 +379,5 @@ const main = async () => {
 // Run only when executed directly (the pure helpers above are imported by tests).
 const samePath = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
 if (process.argv[1] && samePath(path.resolve(process.argv[1]), fileURLToPath(import.meta.url))) {
-  main().catch((e) => stop(`unexpected error: ${String(e.message).split('\n').filter(Boolean).pop().slice(0, 200)}`));
+  console.error('This historical migration runner is retired. Use reviewed Prisma migrations only.'); process.exitCode = 1;
 }

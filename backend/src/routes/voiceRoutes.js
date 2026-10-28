@@ -40,14 +40,12 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
   }
 
   console.log(`🎤 Processing voice emotion analysis for user: ${userId || 'anonymous'}`);
-  console.log(`📁 Audio file: ${audioFile.filename} (${audioFile.size} bytes)`);
 
   try {
     // Step 1: Analyze voice emotion
     const emotionResult = await analyzeVoiceEmotion(audioFile.path);
     
     console.log(`✅ Voice emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
-    console.log(`📝 Transcript: ${emotionResult.transcript}`);
 
     // Step 2: Check transcript for high-risk keywords (if transcript available)
     if (emotionResult.transcript && userId) {
@@ -55,7 +53,6 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
       console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
       
       if (riskAnalysis.matchedKeywords.length > 0) {
-        console.log(`⚠️ Detected keywords: ${riskAnalysis.matchedKeywords.join(', ')}`);
       }
 
       // Step 3: Handle emergency alert if high or medium risk detected
@@ -76,19 +73,11 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
               // Prepare user data for emergency alert
               let userData = {
                 id: userId,
-                full_name: userProfile?.full_name || userProfile?.name || 'User',
+                full_name: userProfile?.full_name || userProfile?.name || null,
                 email: userProfile?.email || userProfile?.user_email || userProfile?.auth_email || 'Not available'
               };
               
-              console.log(`👤 User data for alert: ${userData.full_name} (${userData.email})`);
-              console.log(`🔍 User profile debug:`, { 
-                profile_exists: !!userProfile,
-                available_fields: userProfile ? Object.keys(userProfile) : 'none',
-                email_field: userProfile?.email,
-                user_email_field: userProfile?.user_email,
-                auth_email_field: userProfile?.auth_email
-              });
-              console.log(`📮 Sending alert to emergency contact: ${emergencyContact.contact_email}`);
+
               
               // Send email alert via Nodemailer to the emergency contact's email
               alertSent = await sendEmergencyAlert(
@@ -98,12 +87,6 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
                 emotionResult.transcript,
                 riskAnalysis.riskLevel
               );
-              
-              if (alertSent) {
-                console.log(`✅ Emergency alert email sent successfully to ${emergencyContact.contact_email} (voice mode)`);
-              } else {
-                console.warn(`⚠️ Failed to send emergency alert email to ${emergencyContact.contact_email}`);
-              }
             }
           }
           
@@ -117,7 +100,7 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
           );
           
         } catch (alertError) {
-          console.error(`⚠️ Error handling emergency alert (voice mode):`, alertError.message);
+          console.error('Emergency alert processing failed');
           // Don't fail the voice analysis request if alert handling fails
         }
       }

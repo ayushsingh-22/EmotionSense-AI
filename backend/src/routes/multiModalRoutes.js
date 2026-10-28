@@ -66,7 +66,6 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
       
       console.log(`✅ Language detection: ${translationResult.sourceLang} (${getLanguageName(translationResult.sourceLang)})`);
       if (translationResult.needsTranslation) {
-        console.log(`🔄 Text translated for processing: "${englishText}"`);
       }
     }
 
@@ -85,7 +84,6 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
       console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
       
       if (riskAnalysis.matchedKeywords.length > 0) {
-        console.log(`⚠️ Detected keywords: ${riskAnalysis.matchedKeywords.join(', ')}`);
       }
 
       // Handle emergency alert if high or medium risk detected
@@ -106,12 +104,10 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
               // Prepare user data for emergency alert
               let userData = {
                 id: userId,
-                full_name: userProfile?.full_name || userProfile?.name || 'User',
+                full_name: userProfile?.full_name || userProfile?.name || null,
                 email: userProfile?.email || 'Not available'
               };
               
-              console.log(`👤 User data for alert: ${userData.full_name} (${userData.email})`);
-              console.log(`📮 Sending alert to emergency contact: ${emergencyContact.contact_email}`);
               
               // Send email alert via Nodemailer to the emergency contact's email
               alertSent = await sendEmergencyAlert(
@@ -121,12 +117,6 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
                 englishText,
                 riskAnalysis.riskLevel
               );
-              
-              if (alertSent) {
-                console.log(`✅ Emergency alert email sent successfully to ${emergencyContact.contact_email} (multi-modal mode)`);
-              } else {
-                console.warn(`⚠️ Failed to send emergency alert email to ${emergencyContact.contact_email}`);
-              }
             }
           }
           
@@ -140,7 +130,7 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
           );
           
         } catch (alertError) {
-          console.error(`⚠️ Error handling emergency alert (multi-modal mode):`, alertError.message);
+          console.error('Emergency alert processing failed');
           // Don't fail the multi-modal analysis request if alert handling fails
         }
       }
