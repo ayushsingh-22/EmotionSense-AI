@@ -1,6 +1,6 @@
 import { createHmac, randomInt, timingSafeEqual, randomUUID } from 'node:crypto';
 
-export function createChallengeService({ prisma, secret, clock = () => new Date(), ttlMs = 600000, maxAttempts = 5, cooldownMs = 60000, hourlyLimit = 5 }) {
+export function createChallengeService({ prisma, secret, clock = () => new Date(), ttlMs = 600000, maxAttempts = 5, cooldownMs = 60000, hourlyLimit = 5, transactionOptions = { maxWait: 10000, timeout: 15000 } }) {
   if (!prisma || typeof secret !== 'string' || Buffer.byteLength(secret) < 32) throw new Error('Invalid challenge configuration');
   if (ttlMs <= 0 || ttlMs > 600000 || maxAttempts !== 5 || cooldownMs < 60000 || hourlyLimit > 5 || hourlyLimit < 1) throw new Error('Invalid challenge policy');
   const purposes = new Set(['verify_email', 'reset_password']);
@@ -20,7 +20,7 @@ export function createChallengeService({ prisma, secret, clock = () => new Date(
         const expiresAt = new Date(now.getTime() + ttlMs);
         await tx.authChallenge.create({ data: { id, userId, purpose, codeHash: hash(userId, purpose, id, code), createdAt: now, expiresAt, lastSentAt: now, maxAttempts } });
         return { code, expiresAt };
-      });
+      }, transactionOptions);
     },
     async consume({ userId, purpose, code }, onValid = async () => {}) {
       check(userId, purpose);
@@ -35,7 +35,7 @@ export function createChallengeService({ prisma, secret, clock = () => new Date(
         await tx.authChallenge.update({ where: { id: row.id }, data: valid ? { consumedAt: now } : { attemptCount: { increment: 1 } } });
         if (valid) await onValid(tx, now);
         return valid;
-      });
+      }, transactionOptions);
     }
   };
 }

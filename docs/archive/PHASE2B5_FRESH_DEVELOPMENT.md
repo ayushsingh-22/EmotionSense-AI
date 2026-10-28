@@ -89,7 +89,7 @@ data-bearing migrations.
 5. Run the fresh-development migration preflight again.
 6. Separately approve and execute the pending migration.
 7. Verify the schema and generated Prisma client.
-8. Create fresh web/Firebase test accounts through normal flows.
+[Retired identity integration reference removed.]
 9. Test Android exchange and linking.
 10. Configure and verify an independent backup outside the two Neon branches before any
     future data-bearing migration execution approval. The empty-development migration remains

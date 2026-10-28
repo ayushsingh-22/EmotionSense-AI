@@ -21,7 +21,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { installLogRedaction } from './utils/logRedaction.js';
 import { randomUUID } from 'crypto';
-import { bindUserId, assertAuthConfigured } from './middleware/auth.js';
+import { bindUserId } from './middleware/auth.js';
 import prisma from './lib/prisma.js';
 import { createAuthServices } from './auth/index.js';
 import { createBackendAuthRouter } from './routes/backendAuthRoutes.js';
@@ -44,10 +44,6 @@ import insightsRoutes from './routes/insightsRoutes.js';
 import journalRoutes from './routes/journalRoutes.js';
 import activityRoutes from './routes/activityRoutes.js';
 import cronRoutes from './routes/cronRoutes.js';
-import { createFirebaseExchangeRouter, createIdentityMeRouter } from './routes/identityRoutes.js';
-import { createAccountLinkRouter } from './routes/accountLinkRoutes.js';
-import { isLinkingEnabled } from './identity/linkService.js';
-import { isExchangeEnabled, assertFirebaseConfigured } from './identity/firebaseVerifier.js';
 import { journalService } from './journal-service/index.js';
 
 // Load environment variables
@@ -110,10 +106,10 @@ const configureMiddleware = () => {
 
   app.use('/api/auth', noStore, rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false }), express.json({ limit: '8kb' }), express.urlencoded({ extended: true, limit: '8kb' }));
   // Authentication bodies are parsed above; other routes retain the global limit.
-  const skipForExchange = (parser) => (req, res, next) =>
+  const skipForAuth = (parser) => (req, res, next) =>
     (req.path.startsWith('/api/auth/') ? next() : parser(req, res, next));
-  app.use(skipForExchange(express.json({ limit: '1mb' })));
-  app.use(skipForExchange(express.urlencoded({ extended: true, limit: '1mb' })));
+  app.use(skipForAuth(express.json({ limit: '1mb' })));
+  app.use(skipForAuth(express.urlencoded({ extended: true, limit: '1mb' })));
   // Server-generated request id (never trusted from the client): echoed in the
   // X-Request-Id header and in error responses so support can find the log line.
   app.use((req, res, next) => {
@@ -144,15 +140,6 @@ const configureRoutes = (authServices) => {
   app.use('/api/health', healthRoutes);
   // Secret-gated, not user-facing.
   app.use('/api/cron', cronRoutes);
-  // Public by design (the caller has no API token yet; the Firebase ID token IS the credential).
-  // Registered explicitly BEFORE the authenticated chain below and limited to this one path.
-  // Invisible (404) unless FIREBASE_EXCHANGE_ENABLED=true; refuses (503) on a database without
-  // the Phase 2B.2 identity schema.
-  app.use('/api/auth/firebase/exchange', createFirebaseExchangeRouter());
-  // Same model for account linking (Firebase ID token + web password; no API token exists yet). Terminal router limited
-  // to /start and /complete. Invisible (404) unless ACCOUNT_LINKING_ENABLED=true AND FIREBASE_EXCHANGE_ENABLED=true;
-  // refuses (503) on a database without the identity + link-challenge schema.
-  app.use('/api/auth/firebase/link', createAccountLinkRouter());
   app.use('/api/auth', backendAuth.router);
 
   // Everything below requires a valid bearer token. Failed attempts are
@@ -172,7 +159,6 @@ const configureRoutes = (authServices) => {
   app.use('/api/insights', ...authed);
   app.use('/api/activity', ...authed);
   app.use('/api/journal', ...authed);
-  app.use('/api/identity', ...authed);
 
   app.use('/api/analyze/text', textRoutes);
   app.use('/api/analyze/voice', voiceRoutes);
@@ -184,7 +170,6 @@ const configureRoutes = (authServices) => {
   app.use('/api/insights', insightsRoutes);
   app.use('/api/activity', activityRoutes);
   app.use('/api/journal', journalRoutes);
-  app.use('/api/identity', createIdentityMeRouter());
 
   app.get('/', (req, res) => {
     res.json({
@@ -218,17 +203,6 @@ export const buildApp = (authServices) => {
  */
 const startServer = async () => {
   try {
-    assertAuthConfigured();
-    if (isExchangeEnabled()) {
-      // Enabled but misconfigured must fail the boot, not every request.
-      assertFirebaseConfigured();
-      console.log('✅ Firebase identity exchange enabled');
-    }
-    if (isLinkingEnabled()) {
-      console.log(isExchangeEnabled()
-        ? '✅ Account linking enabled'
-        : '⚠️ ACCOUNT_LINKING_ENABLED is set but FIREBASE_EXCHANGE_ENABLED is not: account linking stays disabled');
-    }
     createRequiredDirectories();
 
     buildApp();

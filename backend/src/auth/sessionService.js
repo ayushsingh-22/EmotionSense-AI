@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fresh = () => randomBytes(32).toString('base64url');
 
-export function createSessionService({ prisma, tokens, replayKey, clock = () => new Date(), graceMs = 30000, familyMs = 30 * 86400000 }) {
+export function createSessionService({ prisma, tokens, replayKey, clock = () => new Date(), graceMs = 30000, familyMs = 30 * 86400000, transactionOptions = { maxWait: 10000, timeout: 15000 } }) {
   if (!prisma || !tokens || typeof replayKey !== 'string' || !/^[a-f0-9]{64}$/i.test(replayKey)) throw new Error('Invalid session service configuration');
   if (graceMs !== 30000 || familyMs <= 0 || familyMs > 30 * 86400000) throw new Error('Invalid session lifetime');
   const key = Buffer.from(replayKey, 'hex');
@@ -49,7 +49,7 @@ export function createSessionService({ prisma, tokens, replayKey, clock = () => 
         }
         await tx.authSession.create({ data: { id, userId, familyId, tokenHash: digest(refreshToken), deviceLabel, createdAt: now, expiresAt: expiry } });
         return true;
-      });
+      }, transactionOptions);
       return created ? pair : null;
     },
     async rotate(refreshToken) {
@@ -79,7 +79,7 @@ export function createSessionService({ prisma, tokens, replayKey, clock = () => 
         await tx.authSession.update({ where: { id: row.id }, data: { consumedAt: now, firstUsedAt: row.firstUsedAt ?? now, lastUsedAt: now,
           replacedById: childId, replayCiphertext: seal(pair, row, childId), replayExpiresAt: new Date(now.getTime() + graceMs) } });
         return pair;
-      });
+      }, transactionOptions);
       return outcome;
     },
     async markUsed({ userId, sessionId }) {
@@ -91,7 +91,7 @@ export function createSessionService({ prisma, tokens, replayKey, clock = () => 
         await tx.authSession.update({ where: { id: sessionId }, data: { firstUsedAt: row.firstUsedAt ?? now, lastUsedAt: now } });
         await tx.authSession.updateMany({ where: { replacedById: sessionId }, data: { replayCiphertext: null, replayExpiresAt: null } });
         return true;
-      });
+      }, transactionOptions);
     },
     async logout({ userId, sessionId }) {
       const hint = await prisma.authSession.findUnique({ where: { id: sessionId } });
@@ -102,10 +102,10 @@ export function createSessionService({ prisma, tokens, replayKey, clock = () => 
         if(!row || row.userId!==userId || row.revokedAt || row.expiresAt<=now) return false;
         // Accept a rotated generation solely to revoke its entire still-live family.
         await revokeFamily(tx, hint.familyId, now); return true;
-      });
+      }, transactionOptions);
     },
     async logoutAll(userId) {
-      return prisma.$transaction(async tx => { await lockUser(tx, userId); return tx.authSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: clock(), replayCiphertext: null, replayExpiresAt: null } }); });
+      return prisma.$transaction(async tx => { await lockUser(tx, userId); return tx.authSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: clock(), replayCiphertext: null, replayExpiresAt: null } }); }, transactionOptions);
     },
     async cleanup() {
       return prisma.authSession.updateMany({ where: { replayExpiresAt: { lte: clock() } }, data: { replayCiphertext: null, replayExpiresAt: null } });

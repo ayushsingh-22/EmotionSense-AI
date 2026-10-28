@@ -13,7 +13,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
-import { setTestEnv, mintToken, bearer } from './helpers.js';
+import { setTestEnv, bearer } from './helpers.js';
 
 const originalNodeEnv = process.env.NODE_ENV;
 if (String(originalNodeEnv || '').trim().toLowerCase() === 'production') throw new Error('Refusing to run integration tests with NODE_ENV=production');
@@ -22,7 +22,7 @@ setTestEnv({
   RATE_LIMIT_AUTH_FAILURES_PER_15MIN: '10000',
   // Hard isolation from every external provider: with no keys and email disabled,
   // no test can reach an LLM / TTS / STT / email / notification service even by mistake.
-  GEMINI_API_KEY: 'test-placeholder-not-a-real-key' /* keeps config's startup warning quiet; no call can be made */, GEMINI_API_KEY1: '', GEMINI_API_KEY2: '', GROQ_API_KEY: '',
+  GEMINI_API_KEY: 'test-placeholder-not-a-real-key' /* keeps config's startup warning quiet; no call can be made */, GEMINI_API_KEY1: '', GEMINI_API_KEY2: '', GROQ_API_KEY: 'test-placeholder-not-a-real-key',
   GOOGLE_TTS_API_KEY: '', SARVAM_API_KEY: '', MURF_API_KEY: '', HUGGINGFACE_API_KEY: '', OPENAI_API_KEY: '',
   EMAIL_ENABLED: 'false', GMAIL_EMAIL: '', GMAIL_APP_PASSWORD: '', ENABLE_EMERGENCY_ALERTS: 'false'
 });
@@ -31,9 +31,17 @@ const hasDb = !!process.env.DATABASE_URL;
 const { buildApp } = await import('../src/server.js');
 const prisma = hasDb ? (await import('../src/lib/prisma.js')).default : null;
 const app = buildApp();
+const { createAuthServices } = await import('../src/auth/index.js');
+const services = hasDb ? createAuthServices({prisma}) : null;
 
 const PREFIX = 'phase2a-test-';
 let A; let B; let tokA; let tokB; let sessionB; let activityB;
+const mintToken = async userId => {
+  if(!dbApproved) throw new Error('Database guard must pass before creating test sessions');
+  let user=await prisma.user.findUnique({where:{id:userId}});
+  if(!user) user=await prisma.user.create({data:{id:userId,email:`${PREFIX}${randomUUID()}@example.invalid`,passwordHash:'!'}});
+  return (await services.sessions.create({userId:user.id})).accessToken;
+};
 
 /**
  * Safety net: these tests WRITE rows (throwaway users + their data), so they run
@@ -93,6 +101,12 @@ const cleanup = async () => {
   await prisma.user.deleteMany({ where: { email: { startsWith: PREFIX, endsWith: '@example.invalid' } } });
 };
 const finish = async () => { await cleanup(); await prisma?.$disconnect(); };
+after(async()=>{
+  try {
+    await cleanup();
+    if(dbApproved){const [users,sessions,challenges]=await Promise.all([prisma.user.count(),prisma.authSession.count(),prisma.authChallenge.count()]);console.log(`FINAL_COUNTS users=${users} sessions=${sessions} challenges=${challenges}`);assert.equal(users+sessions+challenges,0)}
+  } finally {await prisma?.$disconnect()}
+});
 
 describe('public surface', () => {
   test('GET /api/health and / are public and minimal', async () => {

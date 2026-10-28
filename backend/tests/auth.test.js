@@ -2,11 +2,14 @@ import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
-import { setTestEnv, mintToken, bearer, OTHER_SECRET } from './helpers.js';
+import { setTestEnv, mintToken, bearer, OTHER_SECRET, TEST_SECRET } from './helpers.js';
+import { createTokenService } from '../src/auth/tokenService.js';
+import { createBackendAuthRouter } from '../src/routes/backendAuthRoutes.js';
 
 setTestEnv();
 const auth = await import('../src/middleware/auth.js');
-const { requireAuth, bindUserId, requireSelfParam, requireCronSecret } = auth;
+const { bindUserId, requireSelfParam, requireCronSecret } = auth;
+const { auth: requireAuth } = createBackendAuthRouter({prisma:{},services:{tokens:createTokenService({secret:TEST_SECRET}),sessions:{markUsed:async()=>true}}});
 
 const makeApp = () => {
   const app = express();
@@ -55,7 +58,7 @@ describe('requireAuth', () => {
   test('rejects alg=none (unsigned) tokens', async () => {
     const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
     const now = Math.floor(Date.now() / 1000);
-    const t = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ sub: 'user-a', iss: 'mantra-web', aud: 'mantra-api', exp: now + 300 })}.`;
+    const t = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ sub: 'user-a', iss: 'mindhaven-auth', aud: 'mindhaven-api', exp: now + 300 })}.`;
     await request(app).get('/p/echo').set(bearer(t)).expect(401);
   });
 
@@ -128,40 +131,3 @@ describe('requireCronSecret', () => {
   });
 });
 
-describe('API_JWT_SECRET is required (no NEXTAUTH_SECRET fallback)', () => {
-  const withEnv = async (env, fn) => {
-    const saved = { API_JWT_SECRET: process.env.API_JWT_SECRET, NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET };
-    for (const [k, v] of Object.entries(env)) {
-      if (v === undefined) delete process.env[k]; else process.env[k] = v;
-    }
-    try { await fn(); } finally {
-      for (const [k, v] of Object.entries(saved)) {
-        if (v === undefined) delete process.env[k]; else process.env[k] = v;
-      }
-    }
-  };
-  test('NEXTAUTH_SECRET alone does not authenticate: boot check throws and requests fail closed', async () => {
-    const t = await mintToken('user-a', { secret: 'n'.repeat(40) });
-    await withEnv({ API_JWT_SECRET: undefined, NEXTAUTH_SECRET: 'n'.repeat(40) }, async () => {
-      assert.throws(() => auth.assertAuthConfigured(), /API_JWT_SECRET is not configured/);
-      const res = await request(makeApp()).get('/p/echo').set(bearer(t));
-      assert.equal(res.status, 500);
-    });
-  });
-  test('short secret is rejected', async () => {
-    await withEnv({ API_JWT_SECRET: 'short' }, async () => {
-      assert.throws(() => auth.assertAuthConfigured(), /at least 32/);
-    });
-  });
-  test('API_JWT_SECRET equal to NEXTAUTH_SECRET is rejected', async () => {
-    await withEnv({ API_JWT_SECRET: 'x'.repeat(40), NEXTAUTH_SECRET: 'x'.repeat(40) }, async () => {
-      assert.throws(() => auth.assertAuthConfigured(), /must differ/);
-    });
-  });
-  test('a token signed with NEXTAUTH_SECRET is rejected when API_JWT_SECRET differs', async () => {
-    await withEnv({ NEXTAUTH_SECRET: 'n'.repeat(40) }, async () => {
-      const t = await mintToken('user-a', { secret: 'n'.repeat(40) });
-      await request(makeApp()).get('/p/echo').set(bearer(t)).expect(401);
-    });
-  });
-});

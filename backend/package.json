@@ -14,7 +14,7 @@
         "postinstall": "prisma generate --schema=../prisma/schema.prisma",
         "test": "node --test --test-concurrency=1 \"tests/*.test.js\"",
         "migrate:master-activity": "node scripts/migrate-to-master-activity-new.js",
-        "test:unit": "node --test --test-concurrency=1 tests/authCore.unit.test.js tests/environmentHealth.unit.test.js tests/emergencyEmail.unit.test.js tests/emergencyConsent.unit.test.js tests/backendAuthMount.unit.test.js tests/backendAuthRoutes.unit.test.js tests/bcryptAsync.test.js tests/errors.test.js tests/auth.test.js tests/security.test.js tests/identity-schema.test.js tests/identity.unit.test.js tests/firebaseVerifier.test.js tests/identity.exchange.test.js tests/identity.server.test.js tests/journalScheduler.test.js tests/linkChallenge-schema.test.js tests/linkMigrateRunner.test.js tests/freshDevelopmentGuard.test.js tests/accountLink.service.test.js tests/accountLink.routes.test.js tests/accountLink.server.test.js tests/email.nodemailer.test.js"
+        "test:unit": "node --test --test-concurrency=1 tests/authCore.unit.test.js tests/authTransactionConfig.unit.test.js tests/environmentHealth.unit.test.js tests/emergencyEmail.unit.test.js tests/emergencyConsent.unit.test.js tests/backendAuthMount.unit.test.js tests/backendAuthRoutes.unit.test.js tests/bcryptAsync.test.js tests/errors.test.js tests/auth.test.js tests/security.test.js tests/journalScheduler.test.js tests/email.nodemailer.test.js"
     },
     "prisma": {
         "schema": "../prisma/schema.prisma"
@@ -41,7 +41,6 @@
         "dotenv": "^16.3.1",
         "express": "^4.18.2",
         "express-rate-limit": "^7.5.1",
-        "firebase-admin": "13.10.0",
         "fluent-ffmpeg": "^2.1.3",
         "groq-sdk": "^0.33.0",
         "helmet": "^7.2.0",

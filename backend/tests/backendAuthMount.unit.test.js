@@ -15,9 +15,9 @@ test('server mounts backend auth and enforces its JSON size limit',async()=>{
   assert.equal(oversized.status,413);assert.equal(oversized.headers['cache-control'],'no-store');
 });
 test('server protected route checks session and reports database outage',async()=>{
-  let response=await request(app).get('/api/identity/me').set('Authorization','Bearer opaque');
+  let response=await request(app).get('/api/chat/sessions').set('Authorization','Bearer opaque');
   assert.equal(response.status,401);
   services.sessions.markUsed=async()=>{throw Error('offline')};
-  response=await request(app).get('/api/identity/me').set('Authorization','Bearer opaque');
+  response=await request(app).get('/api/chat/sessions').set('Authorization','Bearer opaque');
   assert.equal(response.status,503);
 });

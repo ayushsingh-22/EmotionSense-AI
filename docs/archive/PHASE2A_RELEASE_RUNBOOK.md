@@ -92,11 +92,11 @@ request without a token, so a broken secret shows as a clear 401, not a frozen U
 **Step A — Vercel (frontend)**
 1. Add `API_JWT_SECRET` (section 3).
 2. Deploy the release branch to **Preview** first; sign in on the preview and confirm
-   `GET /api/backend-token` returns 200 while signed in. (Preview calls the old production
+[Retired identity integration reference removed.]
    backend; chat should still work because the old backend ignores the token.)
 3. Promote / deploy to **Production**.
 4. Production check: sign in, open chat, send a message — still works (old backend still live).
-   `GET https://<prod-domain>/api/backend-token` while signed out → 401.
+[Retired identity integration reference removed.]
 
 **Step B — Render (backend)**
 1. Set/verify `CORS_ORIGIN`, `NODE_ENV`, `TRUST_PROXY_HOPS`, `API_JWT_SECRET` **before** deploying.
@@ -132,7 +132,7 @@ request without a token, so a broken secret shows as a clear 401, not a frozen U
 ## 6. Expected one-time user impact
 
 - Browser tabs opened before the deploy hold the old JS and send no token; one page reload fixes it.
-- The Android app is not affected (it does not call this API yet; Phase 2B adds Firebase token exchange).
+[Retired identity integration reference removed.]
 - Diagnostic routes (`/api/health/detailed`, `/api/health/email`, `/api/emergency/email/status`,
   `/api/journal/test-generation`) now require `Authorization: Bearer <CRON_SECRET>`.
 
@@ -162,7 +162,7 @@ history as **forbidden** (consider deleting or disabling those deploy entries/au
 - Remove `NEXTAUTH_SECRET` from Render (unused there).
 - Rotate any credentials that were accessible via the previously open API (emergency contact
   data was readable by anyone): review whether notification emails/phones need user notice.
-- Phase 2B (Firebase exchange, auth tables) is a separate release and needs its own approval.
+[Retired identity integration reference removed.]
 
 ## 9. Public auth abuse protection, error disclosure, and remaining gaps
 

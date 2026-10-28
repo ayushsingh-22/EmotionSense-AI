@@ -11,13 +11,13 @@ export const setTestEnv = (extra = {}) => {
   Object.assign(process.env, extra);
 };
 
-/** Mint a token exactly as frontend/lib/backendAuth.ts does (HS256, iss, aud). */
+/** Mint a backend access token for unit tests. */
 export const mintToken = async (userId, opts = {}) => {
   const {
-    secret = TEST_SECRET, alg = 'HS256', iss = 'mantra-web', aud = 'mantra-api',
+    secret = TEST_SECRET, alg = 'HS256', iss = 'mindhaven-auth', aud = 'mindhaven-api',
     expiresIn = '5m', iat
   } = opts;
-  let jwt = new SignJWT({}).setProtectedHeader({ alg }).setIssuedAt(iat);
+  let jwt = new SignJWT({ sid: 'unit-session' }).setProtectedHeader({ alg }).setIssuedAt(iat).setJti('unit-jti');
   if (userId !== null) jwt = jwt.setSubject(userId);
   if (iss) jwt = jwt.setIssuer(iss);
   if (aud) jwt = jwt.setAudience(aud);

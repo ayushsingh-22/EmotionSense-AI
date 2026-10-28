@@ -116,12 +116,6 @@ Deletes analysis results older than specified days.
 
 ## Setting Up Databases
 
-### Firestore Setup
-1. Create Firebase project
-2. Enable Firestore database
-3. Create service account and download JSON key
-4. Add credentials to `.env`
-
 ### SQLite Setup
 1. Set `DATABASE_TYPE=sqlite` in `.env`
 2. Database file will be created automatically

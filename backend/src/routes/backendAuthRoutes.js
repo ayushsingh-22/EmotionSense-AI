@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 
 // Dependencies are injected so automated tests can substitute a fake email adapter.
 export function createBackendAuthRouter({ prisma, services }) {
-  const { passwords, tokens, sessions, challenges, email } = services;
+  const { passwords, tokens, sessions, challenges, email, transactionOptions = { maxWait: 10000, timeout: 15000 } } = services;
   const router = express.Router();
   const limiter = (limit, windowMs) => rateLimit({ windowMs, limit, standardHeaders: true, legacyHeaders: false,
     message: { error: 'Please try again later' } });
@@ -27,7 +27,9 @@ export function createBackendAuthRouter({ prisma, services }) {
     return res.status(202).json({ message: 'If eligible, instructions will be sent.' });
   };
   const invalid = res => res.status(401).json({ success: false, error: 'Invalid credentials or session', code: 'UNAUTHENTICATED' });
-  const fail = fn => async(req,res) => { try { await fn(req,res); } catch (error) { const code = typeof error?.code === 'string' && /^P\d{4}$/.test(error.code) ? error.code : 'unclassified'; console.error(`Auth dependency failure (${code})`); if (!res.headersSent) res.status(503).json({ error: 'Service temporarily unavailable' }); } };
+  const logDependencyError = error => { const code = typeof error?.code === 'string' && /^P\d{4}$/.test(error.code) ? error.code : 'unclassified'; console.error(`Auth dependency failure (${code})`); };
+  const unavailable = (res,error) => { logDependencyError(error); if (['P2028','P2024','P1001','P1008'].includes(error?.code)) res.set('Retry-After','3'); return res.status(503).json({error:'Service temporarily unavailable'}); };
+  const fail = fn => async(req,res) => { try { await fn(req,res); } catch (error) { if (!res.headersSent) unavailable(res,error); } };
   async function challenge(user,purpose) {
     const result=await challenges.issue({userId:user.id,purpose});
     return result ? {to:user.email,subject:'Verification code',text:`Your code is ${result.code}. It expires in 10 minutes.`} : null;
@@ -44,7 +46,7 @@ export function createBackendAuthRouter({ prisma, services }) {
     try {
       if(!await sessions.markUsed({userId:claims.sub,sessionId:claims.sid})) return invalid(res);
       req.userId=claims.sub; req.sessionId=claims.sid; req.user={id:claims.sub,role:'user'}; next();
-    } catch { res.status(503).json({error:'Service temporarily unavailable'}); }
+    } catch (error) { unavailable(res,error); }
   }
   async function logoutAuth(req,res,next) {
     const header=req.get('authorization')||'';
@@ -100,13 +102,13 @@ export function createBackendAuthRouter({ prisma, services }) {
     if(!(await passwords.verify(req.body?.currentPassword,user?.passwordHash)).valid) return invalid(res);
     try { passwords.validate(req.body?.newPassword); } catch { return res.status(400).json({error:'Invalid request'}); }
     const hash=await passwords.hash(req.body.newPassword);
-    const changed=await prisma.$transaction(async tx=>{await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`auth-user:${req.userId}`}, 0))::text AS locked`;const updated=await tx.user.updateMany({where:{id:req.userId,passwordHash:user.passwordHash},data:{passwordHash:hash}});if(!updated.count)return false;await tx.authSession.updateMany({where:{userId:req.userId},data:{revokedAt:new Date(),replayCiphertext:null,replayExpiresAt:null}});return true});
+    const changed=await prisma.$transaction(async tx=>{await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`auth-user:${req.userId}`}, 0))::text AS locked`;const updated=await tx.user.updateMany({where:{id:req.userId,passwordHash:user.passwordHash},data:{passwordHash:hash}});if(!updated.count)return false;await tx.authSession.updateMany({where:{userId:req.userId},data:{revokedAt:new Date(),replayCiphertext:null,replayExpiresAt:null}});return true},transactionOptions);
     return changed?res.json({success:true}):invalid(res);
   }));
   router.delete('/account',auth,fail(async(req,res)=>{
     const user=await prisma.user.findUnique({where:{id:req.userId}});
     if(!(await passwords.verify(req.body?.password,user?.passwordHash)).valid) return invalid(res);
-    const deleted=await prisma.$transaction(async tx=>{await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`auth-user:${req.userId}`}, 0))::text AS locked`;return tx.user.deleteMany({where:{id:req.userId,passwordHash:user.passwordHash}})});
+    const deleted=await prisma.$transaction(async tx=>{await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`auth-user:${req.userId}`}, 0))::text AS locked`;return tx.user.deleteMany({where:{id:req.userId,passwordHash:user.passwordHash}})},transactionOptions);
     return deleted.count?res.json({success:true}):invalid(res);
   }));
   return {router,auth};
