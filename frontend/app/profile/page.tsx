@@ -103,18 +103,18 @@ export default function ProfilePage() {
     }
   };
 
-  const handleDeleteAllData = async () => {
+  const handleDeleteAllData = async (password: string) => {
     if (!user) return;
 
     try {
       setIsDeletingData(true);
 
-      const { error } = await deleteAllData();
+      const { error } = await deleteAllData(password);
       if (error) throw new Error(error);
 
       toast({
         title: 'Data deleted',
-        description: 'All your emotion data and chat history have been permanently deleted.',
+        description: 'Your account and all its data have been permanently deleted.',
       });
       setDeleteDataDialogOpen(false);
       router.push('/');
@@ -130,13 +130,13 @@ export default function ProfilePage() {
     }
   };
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = async (password: string) => {
     if (!user) return;
 
     try {
       setIsDeletingAccount(true);
 
-      const { error } = await deleteAccount();
+      const { error } = await deleteAccount(password);
       if (error) throw new Error(error);
 
       router.push('/');
@@ -373,24 +373,6 @@ export default function ProfilePage() {
         delay={0.5}
       >
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border-2 border-orange-200 dark:border-orange-800 rounded-xl bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-950/20 dark:to-yellow-950/20 hover:from-orange-100 hover:to-yellow-100 dark:hover:from-orange-950/40 dark:hover:to-yellow-950/40 transition-all duration-200">
-            <div className="mb-3 sm:mb-0">
-              <h4 className="font-semibold text-orange-800 dark:text-orange-200">Delete All Emotion Data</h4>
-              <p className="text-sm text-orange-600 dark:text-orange-300">
-                Permanently delete all your emotion sessions and chat history
-              </p>
-            </div>
-            <Button
-              onClick={() => setDeleteDataDialogOpen(true)}
-              variant="destructive"
-              size="sm"
-              className="bg-gradient-to-r from-orange-600 to-yellow-600 hover:from-orange-700 hover:to-yellow-700 text-white font-medium"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Data
-            </Button>
-          </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border-2 border-red-200 dark:border-red-800 rounded-xl bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-950/20 dark:to-pink-950/20 hover:from-red-100 hover:to-pink-100 dark:hover:from-red-950/40 dark:hover:to-pink-950/40 transition-all duration-200">
             <div className="mb-3 sm:mb-0">
               <h4 className="font-semibold text-red-800 dark:text-red-200">Delete Account</h4>

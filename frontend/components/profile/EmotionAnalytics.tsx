@@ -1,5 +1,7 @@
 'use client';
 
+import { api } from '@/lib/api';
+
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { BarChart3, TrendingUp, Filter } from 'lucide-react';
@@ -76,16 +78,7 @@ export function EmotionAnalytics({ userId }: EmotionAnalyticsProps) {
         params.set('emotion', selectedEmotion);
       }
 
-      const response = await fetch(`/api/messages/emotion-history?${params.toString()}`, {
-        credentials: 'same-origin',
-      });
-
-      if (!response.ok) {
-        console.error('Error fetching analytics:', await response.text());
-        return;
-      }
-
-      const { messages } = (await response.json()) as { messages: EmotionHistoryMessage[] };
+      const { data: { messages } } = await api.get<{ messages: EmotionHistoryMessage[] }>('/api/messages/emotion-history', { params });
 
       if (!messages || messages.length === 0) {
         setData({

@@ -32,6 +32,7 @@ import {
 } from './middleware/security.js';
 
 // Import routes
+import profileRoutes from './routes/profileRoutes.js';
 import textRoutes from './routes/textRoutes.js';
 import voiceRoutes from './routes/voiceRoutes.js';
 import multiModalRoutes from './routes/multiModalRoutes.js';
@@ -150,6 +151,8 @@ const configureRoutes = (authServices) => {
   const paidAi = [aiBurstLimiter(), aiDailyLimiter()];
 
   // Paid LLM / STT / TTS / emotion-model endpoints: authenticated + per-user limits.
+  app.use(['/api/profile', '/api/messages/emotion-history'], ...authed);
+  app.use('/api', profileRoutes);
   app.use('/api/analyze', ...authed, ...paidAi);
   app.use('/api/response', ...authed, ...paidAi);
   app.use('/api/tts', ...authed, ...paidAi);

@@ -1,24 +1,4 @@
-// Canonical schema for EmotionSense AI, targeting Neon (Postgres).
-// Both backend (Express) and frontend (Next.js/NextAuth) generate their
-// Prisma Client from this single file — see each app's package.json
-// "prisma.schema" pointer.
-//
-// Table/column names are kept snake_case via @map/@@map so the JSON shapes
-// returned to existing frontend components (which expect e.g. user_id,
-// created_at) don't have to change.
-//
-// IMPORTANT: this schema lives at the repo root, a sibling of backend/ and
-// frontend/, not inside either app. Prisma's default `output` (when left
-// unset) resolves relative to *this file's own directory*, not the directory
-// `prisma generate` was invoked from and not the consuming app's node_modules
-// — so without an explicit `output` per app, generate silently writes into
-// the repo root's node_modules instead of backend's or frontend's, and
-// whichever app actually imports @prisma/client ends up loading its own
-// un-generated placeholder client instead (this is what caused the
-// "PrismaClientInitializationError ... built on Vercel" build failures: the
-// message is generic and doesn't actually mean caching is at fault). Two
-// explicit generator blocks below make the output location deterministic
-// for both apps regardless of which one runs `generate`.
+// Canonical backend Prisma schema targeting Neon Postgres.
 
 generator client_backend {
   provider      = "prisma-client-js"
@@ -26,13 +6,6 @@ generator client_backend {
   // "native" covers local dev (Windows/Mac/whatever you run on); the Linux
   // targets cover Render's actual container runtime, which doesn't always
   // match the build machine's own reported platform.
-  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
-}
-
-generator client_frontend {
-  provider      = "prisma-client-js"
-  output        = "../frontend/node_modules/.prisma/client"
-  // Same reasoning as above, but for Vercel's serverless runtime.
   binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 

@@ -210,6 +210,22 @@ describe('ownership / IDOR (user A attacking user B)', { skip: !hasDb && 'DATABA
   before(seed);
   after(finish);
 
+  test('profile and emotion history are scoped to the authenticated user', async () => {
+    const profile = await request(app).get('/api/profile').set(bearer(tokA));
+    assert.equal(profile.status, 200); assert.equal(profile.body.id, A.id);
+    assert.equal((await request(app).get('/api/profile').query({userId:B.id}).set(bearer(tokA))).status, 403);
+    assert.equal((await request(app).patch('/api/profile').send({userId:B.id,fullName:'unauthorized'}).set(bearer(tokA))).status, 403);
+    assert.equal((await prisma.user.findUnique({where:{id:B.id},select:{fullName:true}})).fullName, B.fullName);
+    assert.equal((await request(app).patch('/api/profile').send({fullName:'Updated'}).set(bearer(tokA))).status, 200);
+    const privateMessage = await prisma.message.create({data:{userId:B.id,sessionId:sessionB.id,role:'user',content:'private',emotion:'sadness'}});
+    const history = await request(app).get('/api/messages/emotion-history').set(bearer(tokA));
+    assert.equal(history.status, 200); assert.ok(history.body.messages.every(m => m.id !== privateMessage.id));
+    const ownHistory = await request(app).get('/api/messages/emotion-history').set(bearer(tokB));
+    assert.ok(ownHistory.body.messages.some(m => m.id === privateMessage.id));
+    assert.equal((await request(app).get('/api/messages/emotion-history').query({userId:B.id}).set(bearer(tokA))).status, 403);
+    await prisma.message.delete({where:{id:privateMessage.id}});
+  });
+
   test('chat: supplying B as userId is rejected, never silently honoured', async () => {
     await request(app).get(`/api/chat/sessions?userId=${B.id}`).set(bearer(tokA)).expect(403);
     await request(app).post('/api/chat/sessions').set(bearer(tokA)).send({ userId: B.id }).expect(403);
