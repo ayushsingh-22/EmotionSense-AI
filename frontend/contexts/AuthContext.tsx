@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react';
 import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { clearBackendToken } from '@/lib/api';
 
 interface AuthUser {
   id: string;
@@ -78,15 +79,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!result || result.error) {
-        const message =
-          result?.error === 'TooManyAttempts'
-            ? 'Too many attempts. Please wait a few minutes and try again.'
-            : 'Invalid email or password.';
-        toast({
-          title: 'Authentication Error',
-          description: message,
-          variant: 'destructive',
-        });
+        if (result?.error === 'EmailNotVerified') return { error: 'EmailNotVerified' };
+        const message = result?.error === 'ServiceUnavailable' ? 'Service unavailable. Please try again.' : 'Invalid email or password.';
+        toast({ title: 'Authentication Error', description: message, variant: 'destructive' });
         return { error: message };
       }
 
@@ -102,64 +97,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Sign up: register via our own API route, then sign in immediately
-  // (there's no email verification step in this app, unlike Supabase Auth).
+  // Registration always returns a neutral acknowledgement; verification follows.
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, fullName }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        const message = data?.error || 'Failed to create account. Please try again.';
-        toast({
-          title: 'Registration Error',
-          description: message,
-          variant: 'destructive',
-        });
-        return { error: message };
-      }
-
-      const signInResult = await nextAuthSignIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      });
-
-      if (!signInResult || signInResult.error) {
-        toast({
-          title: 'Account created',
-          description: 'Your account was created. Please sign in.',
-        });
-        return {};
-      }
-
-      toast({
-        title: 'Account created!',
-        description: 'Welcome to MantrAI! You can now start chatting.',
-      });
-
+      const response=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,fullName}),cache:'no-store'});
+      if(!response.ok) return {error: response.status>=500 ? 'Service unavailable. Please try again.' : 'Unable to process the request.'};
+      sessionStorage.setItem('mindhaven-verification-email',email);
       return {};
-    } catch (error) {
-      console.error('Unexpected signup error:', error);
-      toast({
-        title: 'Registration Error',
-        description: 'An unexpected error occurred. Please try again.',
-        variant: 'destructive',
-      });
-      return { error: error instanceof Error ? error.message : 'An unexpected error occurred.' };
-    }
+    } catch { return {error:'Service unavailable. Please try again.'}; }
   };
 
   // Sign out
   const signOut = async () => {
     try {
-      setProfile(null);
-      await nextAuthSignOut({ redirect: false });
+      if (!navigator.locks) throw new Error('Unable to coordinate sign out.');
+      await navigator.locks.request('mindhaven-access-token', async () => {
+        const current=await fetch('/api/access-token',{credentials:'same-origin',cache:'no-store'});
+        if(!current.ok) throw new Error('Unable to sign out. Please try again.');
+        const {token}=await current.json();
+        const response=await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`,{method:'POST',headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+        if(!response.ok) throw new Error('Unable to sign out. Please try again.');
+        clearBackendToken();setProfile(null);
+        await nextAuthSignOut({redirect:false});
+      });
       toast({
         title: 'Signed out',
         description: 'You have been successfully signed out.',

@@ -72,7 +72,7 @@ export const resetKey = (key: string) => store.reset(key);
 
 /* ------------------------------ identifiers ------------------------------ */
 
-const SALT = () => process.env.API_JWT_SECRET || process.env.NEXTAUTH_SECRET || 'rl-dev-salt';
+const SALT = () => process.env.NEXTAUTH_SECRET || 'rl-dev-salt';
 
 /** Stable, non-reversible key part for an email or IP. */
 export const hashPart = (value: string) =>

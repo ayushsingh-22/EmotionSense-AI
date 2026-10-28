@@ -365,6 +365,7 @@ export default function ProfilePage() {
       </GlassPanel>
 
       {/* Account Actions */}
+      <a href="/auth/change-password" className="inline-block text-blue-700 underline">Change password</a>
       <GlassPanel 
         title="Danger Zone"
         icon={<AlertTriangle className="h-6 w-6 text-white" />}
