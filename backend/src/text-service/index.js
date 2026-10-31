@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Text Service Module
  * Handles text preprocessing and emotion detection with caching
@@ -67,7 +68,7 @@ export const detectEmotionFromText = async (text) => {
     const cacheKey = getCacheKey(text);
     const cached = getCachedResult(cacheKey);
     if (cached) {
-      console.log(`💾 Using cached HuggingFace result for text emotion detection`);
+      safeLog.log(`💾 Using cached HuggingFace result for text emotion detection`);
       return cached;
     }
 
@@ -75,8 +76,8 @@ export const detectEmotionFromText = async (text) => {
     const model = config.huggingface.textEmotionModel;
     const apiUrl = `${config.huggingface.apiUrl}/${model}`;
 
-    console.log(`🧠 Calling HuggingFace API for text emotion detection...`);
-    console.log(`   Model: ${model}`);
+    safeLog.log(`🧠 Calling HuggingFace API for text emotion detection...`);
+    safeLog.log(`   Model: ${model}`);
     
     const response = await axios.post(
       apiUrl,
@@ -107,7 +108,7 @@ export const detectEmotionFromText = async (text) => {
     const scores = {};
     predictions.forEach(pred => (scores[pred.label] = pred.score));
 
-    console.log(`✅ HuggingFace detected: ${dominantEmotion.label} (${(dominantEmotion.score * 100).toFixed(1)}%)`);
+    safeLog.log(`✅ HuggingFace detected: ${dominantEmotion.label} (${(dominantEmotion.score * 100).toFixed(1)}%)`);
 
     const result = {
       emotion: dominantEmotion.label,
@@ -122,18 +123,18 @@ export const detectEmotionFromText = async (text) => {
     // Only log once per hour to avoid spam
     if (!hfErrorLogged) {
       if (error.response?.status === 410) {
-        console.warn('⚠️  HuggingFace model deprecated (410), using BiLSTM fallback only');
+        safeLog.warn('⚠️  HuggingFace model deprecated (410), using BiLSTM fallback only');
       } else if (error.response?.status === 503) {
-        console.warn('⚠️  HuggingFace model is loading (503), will retry automatically');
-        console.warn('   This is normal for the first request. The model is being loaded.');
+        safeLog.warn('⚠️  HuggingFace model is loading (503), will retry automatically');
+        safeLog.warn('   This is normal for the first request. The model is being loaded.');
       } else if (error.response?.status === 401) {
-        console.warn('⚠️  HuggingFace API authentication failed. Please check your API key.');
+        safeLog.warn('⚠️  HuggingFace API authentication failed. Please check your API key.');
       } else if (error.response?.data?.error) {
-        console.warn('⚠️  HuggingFace API error:', error.response.data.error);
+    // Sensitive provider or user content is intentionally not logged.
       } else {
-        console.warn('⚠️  HuggingFace API error:', error.message);
+        safeLog.warn('⚠️  HuggingFace API error:', error.message);
       }
-      console.warn('   (Further HuggingFace errors will be suppressed for 1 hour)');
+      safeLog.warn('   (Further HuggingFace errors will be suppressed for 1 hour)');
       hfErrorLogged = true;
       
       // Reset error flag after duration
@@ -155,13 +156,13 @@ export const detectEmotionFromText = async (text) => {
 // BiLSTM ONNX model inference
 // BiLSTM ONNX model inference
 export const detectEmotionBiLSTM = async (text) => {
-  console.log(`🧠 Running BiLSTM ONNX model for text emotion...`);
+  safeLog.log(`🧠 Running BiLSTM ONNX model for text emotion...`);
   const result = await runBiLSTMInference(text);
   
   if (result.useFallback) {
-    console.warn(`⚠️ BiLSTM model failed: ${result.error || 'Unknown error'}`);
+    safeLog.warn(`⚠️ BiLSTM model failed: ${result.error || 'Unknown error'}`);
   } else {
-    console.log(`✅ BiLSTM detected: ${result.emotion} (${(result.confidence * 100).toFixed(1)}%)`);
+    safeLog.log(`✅ BiLSTM detected: ${result.emotion} (${(result.confidence * 100).toFixed(1)}%)`);
   }
   
   return result;
@@ -172,7 +173,7 @@ export const detectEmotionBiLSTM = async (text) => {
  * HuggingFace-dominant weighted fusion with disagreement handling
  */
 export const combineTextEmotionResults = (bilstmResult, hfResult) => {
-  console.log(`🔀 Combining BiLSTM and HuggingFace results...`);
+  safeLog.log(`🔀 Combining BiLSTM and HuggingFace results...`);
 
   // Normalize emotion labels to match BiLSTM format
   const emotionMap = { 
@@ -195,7 +196,7 @@ export const combineTextEmotionResults = (bilstmResult, hfResult) => {
 
   // If one fails, return the other (with normalized labels)
   if (bilstmResult.useFallback && !hfResult.useFallback) {
-    console.log(`   Using HuggingFace only (BiLSTM failed)`);
+    safeLog.log(`   Using HuggingFace only (BiLSTM failed)`);
     const normalizedEmotion = normalize(hfResult.emotion);
     const normalizedScores = normalizeScores(hfResult.scores);
     return { 
@@ -207,11 +208,11 @@ export const combineTextEmotionResults = (bilstmResult, hfResult) => {
     };
   }
   if (!bilstmResult.useFallback && hfResult.useFallback) {
-    console.log(`   Using BiLSTM only (HuggingFace failed)`);
+    safeLog.log(`   Using BiLSTM only (HuggingFace failed)`);
     return { ...bilstmResult, models_used: ['bilstm_onnx'], combination_strategy: 'single_model' };
   }
   if (bilstmResult.useFallback && hfResult.useFallback) {
-    console.log(`   Both models failed, using neutral`);
+    safeLog.log(`   Both models failed, using neutral`);
     return {
       emotion: 'neutral',
       confidence: 0.5,
@@ -230,7 +231,7 @@ export const combineTextEmotionResults = (bilstmResult, hfResult) => {
 
   // Reduce BiLSTM influence if disagreement occurs
   if (bilstmEmotion !== hfEmotion) {
-    console.log(`⚖️ Models disagree (BiLSTM: ${bilstmEmotion}, HF: ${hfEmotion}) — reducing BiLSTM influence.`);
+    safeLog.log(`⚖️ Models disagree (BiLSTM: ${bilstmEmotion}, HF: ${hfEmotion}) — reducing BiLSTM influence.`);
     w_bilstm *= 0.1;
   }
 
@@ -259,9 +260,9 @@ export const combineTextEmotionResults = (bilstmResult, hfResult) => {
     }
   });
 
-  console.log(`✅ Combined emotion: ${dominantEmotion} (${(maxScore * 100).toFixed(2)}%)`);
-  console.log(`   BiLSTM: ${bilstmEmotion} (${(bilstmResult.confidence * 100).toFixed(1)}%)`);
-  console.log(`   HuggingFace: ${hfEmotion} (${(hfResult.confidence * 100).toFixed(1)}%)`);
+  safeLog.log(`✅ Combined emotion: ${dominantEmotion} (${(maxScore * 100).toFixed(2)}%)`);
+  safeLog.log(`   BiLSTM: ${bilstmEmotion} (${(bilstmResult.confidence * 100).toFixed(1)}%)`);
+  safeLog.log(`   HuggingFace: ${hfEmotion} (${(hfResult.confidence * 100).toFixed(1)}%)`);
 
   return {
     emotion: dominantEmotion,
@@ -278,9 +279,8 @@ export const combineTextEmotionResults = (bilstmResult, hfResult) => {
 
 // Main analysis function
 export const analyzeTextEmotion = async (text) => {
-  console.log(`📝 Analyzing text emotion with dual models...`);
+  safeLog.log(`📝 Analyzing text emotion with dual models...`);
   const cleanedText = preprocessText(text);
-  console.log(`✅ Text preprocessed: "${cleanedText}"`);
 
   const [bilstmResult, hfResult] = await Promise.all([
     detectEmotionBiLSTM(cleanedText),

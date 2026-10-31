@@ -90,3 +90,19 @@ describe('CronScheduler.start', () => {
     assert.equal(cron.calls.length, 0);
   });
 });
+
+test('node-cron fires the 23:30 Kolkata schedule', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: new Date('2026-01-01T17:59:50Z') });
+  const scheduler = new CronScheduler();
+  let fired = 0;
+  scheduler.runNightly = async () => { fired++; };
+  try {
+    scheduler.start({ env: { NODE_ENV: 'production' } });
+    assert.equal(fired, 0);
+    t.mock.timers.tick(10000);
+    await Promise.resolve(); await Promise.resolve();
+    t.mock.timers.tick(1);
+    await Promise.resolve(); await Promise.resolve();
+    assert.equal(fired, 1);
+  } finally { scheduler.stop(); t.mock.timers.reset(); }
+});

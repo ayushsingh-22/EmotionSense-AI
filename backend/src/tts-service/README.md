@@ -28,7 +28,7 @@ This module converts text responses from the LLM into natural-sounding speech au
 import { generateSpeech } from './tts-service/index.js';
 
 const audio = await generateSpeech("Hello, how can I help you today?");
-console.log(audio);
+  // Process the result without logging user content.
 // Output:
 // {
 //   audioData: "base64_encoded_audio...",

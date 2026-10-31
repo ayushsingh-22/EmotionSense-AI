@@ -222,7 +222,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           ));
         },
         onDone: (chatResult) => {
-          console.log('✅ Stream done, finalizing messages:', chatResult);
 
           const updatedUserMessage: ChatMessage = {
             ...userMessage,

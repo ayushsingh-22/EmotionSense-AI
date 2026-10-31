@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Multi-Modal Analysis Routes
  * Handles combined text and voice emotion detection with multi-language support and emergency contact alerts
@@ -46,7 +47,7 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
     });
   }
 
-  console.log(`🎭 Processing multi-modal emotion analysis for user: ${userId || 'anonymous'}`);
+  safeLog.log(`🎭 Processing multi-modal emotion analysis for user: ${userId || 'anonymous'}`);
 
   try {
     // Analyze voice emotion (includes transcription)
@@ -60,13 +61,12 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
     let englishText = textToAnalyze;
     
     if (textToAnalyze && textToAnalyze.trim().length > 0) {
-      console.log(`🌐 Detecting language and translating if needed...`);
+      safeLog.log(`🌐 Detecting language and translating if needed...`);
       translationResult = await translateToEnglishIfNeeded(textToAnalyze);
       englishText = translationResult.translatedText;
       
-      console.log(`✅ Language detection: ${translationResult.sourceLang} (${getLanguageName(translationResult.sourceLang)})`);
+      safeLog.log(`✅ Language detection: ${translationResult.sourceLang} (${getLanguageName(translationResult.sourceLang)})`);
       if (translationResult.needsTranslation) {
-        console.log(`🔄 Text translated for processing: "${englishText}"`);
       }
     }
 
@@ -82,10 +82,9 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
     // Check for high-risk keywords in transcript/text (if userId provided)
     if (userId && englishText && englishText.trim().length > 0) {
       const riskAnalysis = detectRiskLevel(englishText);
-      console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
+      safeLog.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
       
       if (riskAnalysis.matchedKeywords.length > 0) {
-        console.log(`⚠️ Detected keywords: ${riskAnalysis.matchedKeywords.join(', ')}`);
       }
 
       // Handle emergency alert if high or medium risk detected
@@ -95,10 +94,10 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
           let alertSent = false;
           
           if (emergencyContact && emergencyContact.notify_enabled) {
-            console.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
+            safeLog.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
             
             if (shouldTriggerEmergencyAlert(fusedResult.emotion, riskAnalysis.riskLevel)) {
-              console.log(`📧 Attempting to send emergency alert via email (multi-modal mode)...`);
+              safeLog.log(`📧 Attempting to send emergency alert via email (multi-modal mode)...`);
               
               // Fetch user profile from Supabase to get accurate user information
               const userProfile = await getUserProfile(userId);
@@ -106,12 +105,10 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
               // Prepare user data for emergency alert
               let userData = {
                 id: userId,
-                full_name: userProfile?.full_name || userProfile?.name || 'User',
+                full_name: userProfile?.full_name || userProfile?.name || null,
                 email: userProfile?.email || 'Not available'
               };
               
-              console.log(`👤 User data for alert: ${userData.full_name} (${userData.email})`);
-              console.log(`📮 Sending alert to emergency contact: ${emergencyContact.contact_email}`);
               
               // Send email alert via Nodemailer to the emergency contact's email
               alertSent = await sendEmergencyAlert(
@@ -121,12 +118,6 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
                 englishText,
                 riskAnalysis.riskLevel
               );
-              
-              if (alertSent) {
-                console.log(`✅ Emergency alert email sent successfully to ${emergencyContact.contact_email} (multi-modal mode)`);
-              } else {
-                console.warn(`⚠️ Failed to send emergency alert email to ${emergencyContact.contact_email}`);
-              }
             }
           }
           
@@ -140,7 +131,7 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
           );
           
         } catch (alertError) {
-          console.error(`⚠️ Error handling emergency alert (multi-modal mode):`, alertError.message);
+          safeLog.error('Emergency alert processing failed');
           // Don't fail the multi-modal analysis request if alert handling fails
         }
       }

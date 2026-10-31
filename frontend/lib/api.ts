@@ -22,8 +22,8 @@ export const api = axios.create({
 });
 
 // ---- Backend authentication -------------------------------------------------
-// The Express API (Render) trusts only a short-lived bearer token minted by this
-// app's /api/backend-token route from the NextAuth session. The user id is
+// The Express API accepts the short-lived token returned by /api/access-token.
+// The user id is
 // derived from that token server-side; any userId we still send is ignored
 // (and rejected if it differs).
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -38,31 +38,28 @@ export const getBackendAuthToken = async (forceRefresh = false): Promise<string>
     return cachedToken.token;
   }
   if (!inflight) {
-    inflight = fetch('/api/backend-token', { credentials: 'same-origin', cache: 'no-store' })
+    const obtain = () => fetch('/api/access-token', { credentials: 'same-origin', cache: 'no-store' })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Not authenticated (${res.status})`);
-        const data = (await res.json()) as { token: string; expiresAt: number };
-        cachedToken = { token: data.token, expiresAt: data.expiresAt };
+        const data = (await res.json()) as { token: string };
+        const payload=JSON.parse(atob(data.token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+        if(typeof payload.exp!=='number') throw new Error('Invalid access token');
+        cachedToken = { token: data.token, expiresAt: payload.exp * 1000 };
         return data.token;
       })
-      .finally(() => {
+      ;
+    if (typeof navigator === 'undefined' || !navigator.locks) throw new Error('Secure session coordination is unavailable');
+    inflight = Promise.resolve(navigator.locks.request<Promise<string>>('mindhaven-access-token', obtain)).finally(() => {
         inflight = null;
       });
   }
+  if (!inflight) throw new Error('Secure session coordination is unavailable');
   return inflight;
 };
 
 /** Authorization header for raw fetch() calls to the backend. */
 export const authHeaders = async (): Promise<Record<string, string>> => {
-  try {
-    return { Authorization: `Bearer ${await getBackendAuthToken()}` };
-  } catch (error) {
-    // Send the request unauthenticated: an authenticated backend answers 401
-    // (clear failure) and a not-yet-upgraded backend keeps working. Never block
-    // the whole UI on a token hiccup.
-    console.warn('[API] Could not obtain backend token:', error instanceof Error ? error.message : error);
-    return {};
-  }
+  return { Authorization: `Bearer ${await getBackendAuthToken()}` };
 };
 
 api.interceptors.request.use(async (config) => {
@@ -106,7 +103,7 @@ api.interceptors.response.use(
     }
     const requestId = `${error.config?.method?.toUpperCase()}-${error.config?.url}`;
     PerformanceMonitor.end(requestId);
-    console.error('[API Response Error]', error.response?.data || error.message);
+    console.error('[API Response Error]', error.response?.status ?? 'network failure');
     return Promise.reject(error);
   }
 );
@@ -573,6 +570,11 @@ export interface EmergencyContact {
   created_at: string;
   updated_at: string;
 }
+
+export const setEmergencyContactNotifications = async (notifyEnabled: boolean): Promise<EmergencyContact> => {
+  const response = await api.put<{ success: boolean; data: EmergencyContact }>('/api/emergency/notifications', { notifyEnabled });
+  return response.data.data;
+};
 
 /**
  * Check if user has an emergency contact

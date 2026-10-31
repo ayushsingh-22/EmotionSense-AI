@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Request Logger Middleware
  * Logs incoming requests for debugging and monitoring
@@ -7,6 +8,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { isProduction } from '../config/environment.js';
+import { redact } from '../utils/logRedaction.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,12 +25,12 @@ const getTimestamp = () => {
  * Write log to file (if enabled)
  */
 const writeLogToFile = (logMessage) => {
-  if (process.env.NODE_ENV === 'production') {
+  if (!isProduction()) {
     const logDir = path.join(__dirname, '..', '..', 'logs');
     const logFile = path.join(logDir, `requests-${new Date().toISOString().split('T')[0]}.log`);
     
-    fs.appendFile(logFile, logMessage + '\n', (err) => {
-      if (err) console.error('Failed to write log:', err);
+    fs.appendFile(logFile, redact(logMessage) + '\n', (err) => {
+      if (err) safeLog.error('Failed to write log:', err);
     });
   }
 };
@@ -39,19 +42,19 @@ export const requestLogger = (req, res, next) => {
   const startTime = Date.now();
   
   // Log request
-  const requestLog = `[${getTimestamp()}] ${req.id ?? '-'} ${req.method} ${req.originalUrl.split('?')[0]} - IP: ${req.ip}`;
-  console.log(`📥 ${requestLog}`);
+  const requestLog = `[${getTimestamp()}] ${req.id ?? '-'} ${req.method}`;
+  safeLog.log(`📥 ${requestLog}`);
   writeLogToFile(requestLog);
 
   // Log response when finished
   res.on('finish', () => {
     const duration = Date.now() - startTime;
-    const responseLog = `[${getTimestamp()}] ${req.id ?? '-'} ${req.method} ${req.originalUrl.split('?')[0]} - ${res.statusCode} - ${duration}ms`;
+    const responseLog = `[${getTimestamp()}] ${req.id ?? '-'} ${req.method} - ${res.statusCode} - ${duration}ms`;
     
     if (res.statusCode >= 400) {
-      console.error(`📤❌ ${responseLog}`);
+      safeLog.error(`📤❌ ${responseLog}`);
     } else {
-      console.log(`📤✅ ${responseLog}`);
+      safeLog.log(`📤✅ ${responseLog}`);
     }
     
     writeLogToFile(responseLog);

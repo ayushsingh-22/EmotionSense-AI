@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Storage Service Module
  * Handles data persistence for emotion analysis results
@@ -6,7 +7,7 @@
  * It provides retrieval and query functions used throughout the app.
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'node:crypto';
 import prisma from '../lib/prisma.js';
 import { saveActivity } from './masterActivityService.js';
 
@@ -15,7 +16,6 @@ import { saveActivity } from './masterActivityService.js';
  * alertLogger.js previously) imported this. It simply returns the shared
  * Prisma client so any lingering callers keep working.
  */
-export const initializeSupabase = async () => prisma;
 
 const normalizeMessageRow = (row) => {
   if (!row) {
@@ -65,6 +65,7 @@ const normalizeEmergencyContactRow = (row) => {
     contact_name: row.contactName,
     contact_email: row.contactEmail,
     contact_phone: row.contactPhone,
+    notify_enabled: row.notifyEnabled,
     created_at: row.createdAt,
     updated_at: row.updatedAt
   };
@@ -92,7 +93,7 @@ const normalizeSafetyAlertRow = (row) => {
  * This is the primary export used by routes
  */
 export const saveAnalysisResult = async (data) => {
-  console.log(`💾 Saving analysis result...`);
+  safeLog.log(`💾 Saving analysis result...`);
 
   try {
     const recordId = data.id || uuidv4();
@@ -114,10 +115,10 @@ export const saveAnalysisResult = async (data) => {
       }
     });
 
-    console.log(`✅ Saved analysis result: ${created.id}`);
+    safeLog.log(`✅ Saved analysis result: ${created.id}`);
     return created.id;
   } catch (error) {
-    console.error('❌ Failed to save analysis result:', error.message);
+    safeLog.error('❌ Failed to save analysis result:', error.message);
     // Don't throw - storage failure shouldn't break the API response
     return null;
   }
@@ -139,10 +140,10 @@ export const createChatSession = async (userId, sessionTitle = 'New Chat') => {
       }
     });
 
-    console.log(`✅ Created chat session: ${created.id}`);
+    safeLog.log(`✅ Created chat session: ${created.id}`);
     return normalizeChatSessionRow(created);
   } catch (error) {
-    console.error('❌ Error creating chat session:', error.message);
+    safeLog.error('❌ Error creating chat session:', error.message);
     throw error;
   }
 };
@@ -195,12 +196,12 @@ export const saveChatMessage = async (userId, sessionId, role, message, emotionD
       }
     }
 
-    console.log('📋 Attempting to insert message with fields:', Object.keys(messageData));
+    safeLog.log('📋 Attempting to insert message with fields:', Object.keys(messageData));
 
     const created = await prisma.message.create({ data: messageData });
 
     const normalized = normalizeMessageRow(created);
-    console.log(`✅ Saved chat message: ${normalized.id}`);
+    safeLog.log(`✅ Saved chat message: ${normalized.id}`);
 
     // CRITICAL: Also save to master_user_activity for unified data architecture
     try {
@@ -221,15 +222,15 @@ export const saveChatMessage = async (userId, sessionId, role, message, emotionD
         }
       });
 
-      console.log(`✅ Also saved to master_user_activity`);
+      safeLog.log(`✅ Also saved to master_user_activity`);
     } catch (activityError) {
-      console.error('⚠️ Failed to save to master_user_activity (non-critical):', activityError.message);
+      safeLog.error('⚠️ Failed to save to master_user_activity (non-critical):', activityError.message);
       // Don't fail the entire operation if master activity save fails
     }
 
     return normalized;
   } catch (error) {
-    console.error('❌ Error saving chat message:', error.message);
+    safeLog.error('❌ Error saving chat message:', error.message);
     throw error;
   }
 };
@@ -259,7 +260,7 @@ export const getUserChatSessions = async (userId) => {
 
     return rows.map(normalizeChatSessionRow);
   } catch (error) {
-    console.error('❌ Error fetching chat sessions:', error.message);
+    safeLog.error('❌ Error fetching chat sessions:', error.message);
     throw error;
   }
 };
@@ -277,7 +278,7 @@ export const getChatMessages = async (userId, sessionId, limit = null) => {
 
     return rows.map(normalizeMessageRow);
   } catch (error) {
-    console.error('❌ Error fetching chat messages:', error.message);
+    safeLog.error('❌ Error fetching chat messages:', error.message);
     throw error;
   }
 };
@@ -308,7 +309,7 @@ export const getRecentChatMessages = async (userId, sessionId, limit = 10) => {
     // Return in chronological order (oldest first) for context
     return rows.map(normalizeMessageRow).reverse();
   } catch (error) {
-    console.error('❌ Error fetching recent chat messages:', error.message);
+    safeLog.error('❌ Error fetching recent chat messages:', error.message);
     throw error;
   }
 };
@@ -329,10 +330,10 @@ export const updateChatSessionTitle = async (userId, sessionId, newTitle) => {
 
     const updated = await prisma.chatSession.findUnique({ where: { id: sessionId } });
 
-    console.log(`✅ Updated session title: ${sessionId}`);
+    safeLog.log(`✅ Updated session title: ${sessionId}`);
     return normalizeChatSessionRow(updated);
   } catch (error) {
-    console.error('❌ Error updating session title:', error.message);
+    safeLog.error('❌ Error updating session title:', error.message);
     throw error;
   }
 };
@@ -352,10 +353,10 @@ export const deleteChatSession = async (userId, sessionId) => {
       where: { userId, id: sessionId }
     });
 
-    console.log(`✅ Deleted chat session: ${sessionId}`);
+    safeLog.log(`✅ Deleted chat session: ${sessionId}`);
     return true;
   } catch (error) {
-    console.error('❌ Error deleting chat session:', error.message);
+    safeLog.error('❌ Error deleting chat session:', error.message);
     throw error;
   }
 };
@@ -378,7 +379,7 @@ const transformAnalysisRow = (row) => ({
  * Retrieve analysis results by user ID
  */
 export const getAnalysisResultsByUser = async (userId, limit = 10) => {
-  console.log(`🔍 Retrieving analysis results for user: ${userId}`);
+  safeLog.log(`🔍 Retrieving analysis results for user: ${userId}`);
 
   try {
     const rows = await prisma.emotionAnalysis.findMany({
@@ -389,10 +390,10 @@ export const getAnalysisResultsByUser = async (userId, limit = 10) => {
 
     const results = rows.map(transformAnalysisRow);
 
-    console.log(`✅ Retrieved ${results.length} results`);
+    safeLog.log(`✅ Retrieved ${results.length} results`);
     return results;
   } catch (error) {
-    console.error('❌ Error retrieving analysis results:', error.message);
+    safeLog.error('❌ Error retrieving analysis results:', error.message);
     throw error;
   }
 };
@@ -401,7 +402,7 @@ export const getAnalysisResultsByUser = async (userId, limit = 10) => {
  * Retrieve analysis result by ID
  */
 export const getAnalysisResultById = async (recordId) => {
-  console.log(`🔍 Retrieving analysis result: ${recordId}`);
+  safeLog.log(`🔍 Retrieving analysis result: ${recordId}`);
 
   try {
     const row = await prisma.emotionAnalysis.findUnique({ where: { id: recordId } });
@@ -409,14 +410,14 @@ export const getAnalysisResultById = async (recordId) => {
     const result = row ? transformAnalysisRow(row) : null;
 
     if (result) {
-      console.log(`✅ Found result: ${recordId}`);
+      safeLog.log(`✅ Found result: ${recordId}`);
     } else {
-      console.log(`⚠️  Result not found: ${recordId}`);
+      safeLog.log(`⚠️  Result not found: ${recordId}`);
     }
 
     return result;
   } catch (error) {
-    console.error('❌ Error retrieving analysis result:', error.message);
+    safeLog.error('❌ Error retrieving analysis result:', error.message);
     throw error;
   }
 };
@@ -425,7 +426,7 @@ export const getAnalysisResultById = async (recordId) => {
  * Delete old analysis results (cleanup)
  */
 export const deleteOldResults = async (daysOld = 30) => {
-  console.log(`🗑️  Deleting results older than ${daysOld} days...`);
+  safeLog.log(`🗑️  Deleting results older than ${daysOld} days...`);
 
   try {
     const cutoffDate = new Date();
@@ -435,10 +436,10 @@ export const deleteOldResults = async (daysOld = 30) => {
       where: { timestamp: { lt: cutoffDate } }
     });
 
-    console.log(`✅ Deleted ${result.count} old results`);
+    safeLog.log(`✅ Deleted ${result.count} old results`);
     return result.count;
   } catch (error) {
-    console.error('❌ Error deleting old results:', error.message);
+    safeLog.error('❌ Error deleting old results:', error.message);
     throw error;
   }
 };
@@ -471,7 +472,7 @@ export const getUserProfile = async (userId) => {
       updated_at: user.updatedAt
     };
   } catch (error) {
-    console.error('❌ Error fetching user profile:', error.message);
+    safeLog.error('❌ Error fetching user profile:', error.message);
     return null;
   }
 };
@@ -488,7 +489,7 @@ export const getEmergencyContact = async (userId) => {
     const row = await prisma.emergencyContact.findUnique({ where: { userId } });
     return row ? normalizeEmergencyContactRow(row) : null;
   } catch (error) {
-    console.error('❌ Error fetching emergency contact:', error.message);
+    safeLog.error('❌ Error fetching emergency contact:', error.message);
     return null;
   }
 };
@@ -501,7 +502,7 @@ export const hasEmergencyContact = async (userId) => {
     const count = await prisma.emergencyContact.count({ where: { userId } });
     return count > 0;
   } catch (error) {
-    console.error('❌ Error checking emergency contact:', error.message);
+    safeLog.error('❌ Error checking emergency contact:', error.message);
     return false;
   }
 };
@@ -511,12 +512,17 @@ export const hasEmergencyContact = async (userId) => {
  */
 export const createOrUpdateEmergencyContact = async (userId, contactName, contactEmail, contactPhone = null) => {
   try {
-    const saved = await prisma.emergencyContact.upsert({
+    const saved = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`emergency-contact:${userId}`}, 0))::text`;
+      const existing = await tx.emergencyContact.findUnique({where:{userId}});
+      const replaced = !existing || existing.contactEmail.toLowerCase() !== contactEmail.toLowerCase();
+      const saved = await tx.emergencyContact.upsert({
       where: { userId },
       update: {
         contactName,
         contactEmail,
-        contactPhone
+        contactPhone,
+        ...(replaced ? {notifyEnabled:true} : {})
       },
       create: {
         userId,
@@ -524,15 +530,27 @@ export const createOrUpdateEmergencyContact = async (userId, contactName, contac
         contactEmail,
         contactPhone
       }
+      });
+      if(replaced) await tx.userConsent.create({data:{userId,purpose:'emergency_alert_sharing',noticeVersion:'emergency-alert-v1',granted:true,source:'in_app'}});
+      return saved;
     });
 
-    console.log(`✅ Emergency contact saved for user: ${userId}`);
+    safeLog.log(`✅ Emergency contact saved for user: ${userId}`);
     return normalizeEmergencyContactRow(saved);
   } catch (error) {
-    console.error('❌ Error saving emergency contact:', error.message);
+    safeLog.error('❌ Error saving emergency contact:', error.message);
     throw error;
   }
 };
+
+export const setEmergencyContactNotifications = async (userId, enabled) => prisma.$transaction(async tx => {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`emergency-contact:${userId}`}, 0))::text`;
+  const current=await tx.emergencyContact.findUnique({where:{userId}});
+  if(!current) return null;
+  const updated=await tx.emergencyContact.update({where:{userId},data:{notifyEnabled:enabled}});
+  if(enabled && !current.notifyEnabled) await tx.userConsent.create({data:{userId,purpose:'emergency_alert_sharing',noticeVersion:'emergency-alert-v1',granted:true,source:'in_app'}});
+  return normalizeEmergencyContactRow(updated);
+});
 
 /**
  * Delete emergency contact
@@ -541,10 +559,10 @@ export const deleteEmergencyContact = async (userId) => {
   try {
     await prisma.emergencyContact.deleteMany({ where: { userId } });
 
-    console.log(`✅ Emergency contact deleted for user: ${userId}`);
+    safeLog.log(`✅ Emergency contact deleted for user: ${userId}`);
     return true;
   } catch (error) {
-    console.error('❌ Error deleting emergency contact:', error.message);
+    safeLog.error('❌ Error deleting emergency contact:', error.message);
     throw error;
   }
 };
@@ -565,10 +583,10 @@ export const logSafetyAlert = async (userId, detectedEmotion, messageText, emerg
       }
     });
 
-    console.log(`✅ Safety alert logged for user: ${userId}`);
+    safeLog.log(`✅ Safety alert logged for user: ${userId}`);
     return normalizeSafetyAlertRow(created);
   } catch (error) {
-    console.error('❌ Error logging safety alert:', error.message);
+    safeLog.error('❌ Error logging safety alert:', error.message);
     return null;
   }
 };
@@ -683,7 +701,7 @@ export const getDailyEmotionSummary = async (userId, dateISO) => {
   return row ? transformDailySummaryRow(row) : null;
 };
 
-export const upsertDailyEmotionSummary = async (payload) => {
+export const upsertDailyEmotionSummary = async (payload, { preserveExistingJournal = false } = {}) => {
   const data = {
     dominantEmotion: payload.dominantEmotion,
     emotionDistribution: payload.emotionDistribution || {},
@@ -698,6 +716,20 @@ export const upsertDailyEmotionSummary = async (payload) => {
     summaryText: payload.summaryText || null,
     eJournalEntry: payload.eJournalEntry || null
   };
+
+  if (preserveExistingJournal) {
+    const updated = await prisma.dailyEmotionSummary.updateMany({
+      where: { userId: payload.userId, date: payload.date, eJournalEntry: null }, data
+    });
+    if (updated.count) {
+      const row = await prisma.dailyEmotionSummary.findUnique({ where: { userId_date: { userId: payload.userId, date: payload.date } } });
+      return row ? transformDailySummaryRow(row) : null;
+    }
+    try {
+      const row = await prisma.dailyEmotionSummary.create({ data: { id: payload.id || uuidv4(), userId: payload.userId, date: payload.date, ...data } });
+      return transformDailySummaryRow(row);
+    } catch (error) { if (error.code === 'P2002') return null; throw error; }
+  }
 
   const saved = await prisma.dailyEmotionSummary.upsert({
     where: { userId_date: { userId: payload.userId, date: payload.date } },

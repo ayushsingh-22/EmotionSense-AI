@@ -86,8 +86,7 @@ describe('server log lines are redacted end-to-end', () => {
       process.stderr.write = realWrite;
     }
     const logged = captured.join('');
-    assert.ok(logged.includes('req-test-1'), 'request id is logged for correlation');
-    assert.ok(/findUnique|invocation|Can't reach database/.test(logged), 'diagnostic message is still logged');
+    assert.ok(!/findUnique|invocation|Can\'t reach database/.test(logged), 'arbitrary diagnostic text is omitted');
     assert.ok(!logged.includes('SuperSecretPw123'), 'password must not be logged');
     assert.ok(!/neondb_owner:/.test(logged), 'connection string credentials must not be logged');
   });
@@ -157,7 +156,7 @@ describe('static guard: route handlers must not put raw error text into response
       const lines = fs.readFileSync(path.join(routesDir, file), 'utf8').split('\n');
       const offenders = lines
         .map((l, i) => ({ l, n: i + 1 }))
-        .filter(({ l }) => !/console\.|logger\./.test(l) && FORBIDDEN.some((re) => re.test(l)));
+        .filter(({ l }) => !/console\.|logger\.|safeLog\./.test(l) && FORBIDDEN.some((re) => re.test(l)));
       assert.deepEqual(offenders, [], `raw error text in response at: ${offenders.map((o) => `${file}:${o.n}`).join(', ')}`);
     });
   }

@@ -15,11 +15,6 @@ const nextConfig = {
     remotePatterns: [],
   },
 
-  // Next.js 16 name for the former experimental.serverComponentsExternalPackages. Prisma must be resolved through
-  // normal node_modules require() instead of being bundled, or its query-engine lookup breaks at runtime (seen on
-  // Vercel as PrismaClientInitializationError). @prisma/client is also on Next's built-in list; kept explicit on purpose.
-  serverExternalPackages: ['@prisma/client'],
-
   experimental: {
     optimizePackageImports: [
       '@radix-ui/react-icons',

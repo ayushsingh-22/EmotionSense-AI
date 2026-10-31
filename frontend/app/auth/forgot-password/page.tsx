@@ -1,0 +1,5 @@
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { authRequest } from '@/lib/publicAuth';
+export default function ForgotPasswordPage(){const [email,setEmail]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);const router=useRouter();async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);try{await authRequest('forgot-password',{email});sessionStorage.setItem('mindhaven-reset-email',email);router.push('/auth/reset-password')}catch(err){setMessage(err instanceof Error?err.message:'Unable to proceed.')}finally{setBusy(false)}}return <main className="mx-auto max-w-md p-6"><h1 className="text-2xl font-semibold">Reset password</h1><p className="mt-2">If eligible, a reset code will be sent.</p><form onSubmit={submit} className="mt-6 space-y-4"><label className="block">Email<input className="block w-full border p-2" type="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><button disabled={busy} className="rounded bg-blue-700 px-4 py-2 text-white">Send code</button></form>{message&&<p role="status">{message}</p>}</main>}

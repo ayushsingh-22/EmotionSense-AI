@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 2/**
  * Indian Languages Configuration
  * Supported major Indian languages for voice chat
@@ -129,7 +130,7 @@ export function normalizeIndianLanguageCode(languageCode) {
   const lowerLanguage = languageCode.toLowerCase();
   if (WHISPER_LANGUAGE_NAME_TO_CODE[lowerLanguage]) {
     const mappedCode = WHISPER_LANGUAGE_NAME_TO_CODE[lowerLanguage];
-    console.log(`🔄 Mapped Whisper language name '${languageCode}' → '${mappedCode}'`);
+    safeLog.log(`🔄 Mapped Whisper language name '${languageCode}' → '${mappedCode}'`);
     return mappedCode;
   }
   
@@ -138,7 +139,7 @@ export function normalizeIndianLanguageCode(languageCode) {
   
   // If not in supported list, default to English
   if (!SUPPORTED_LANGUAGE_CODES.includes(baseCode) && languageCode !== 'hi-Latn') {
-    console.warn(`⚠️  Language '${languageCode}' not in Indian languages list. Defaulting to English.`);
+    safeLog.warn(`⚠️  Language '${languageCode}' not in Indian languages list. Defaulting to English.`);
     return 'en';
   }
   

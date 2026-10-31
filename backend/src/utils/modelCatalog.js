@@ -1,3 +1,4 @@
+import safeLog from './logger.js';
 /**
  * Model Catalog
  *
@@ -48,7 +49,7 @@ function saveCacheToDisk() {
     fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
     fs.writeFileSync(CACHE_PATH, JSON.stringify(cache, null, 2));
   } catch (error) {
-    console.warn('⚠️ Could not persist model catalog cache:', error.message);
+    safeLog.warn('⚠️ Could not persist model catalog cache:', error.message);
   }
 }
 
@@ -71,12 +72,12 @@ async function withDailyCache(key, fetcher, fallback) {
     }
     throw new Error('Fetcher returned an empty result');
   } catch (error) {
-    console.warn(`⚠️ Model catalog refresh failed for "${key}": ${error.message}`);
+    safeLog.warn(`⚠️ Model catalog refresh failed for "${key}": ${error.message}`);
     if (cached?.value) {
-      console.warn(`   Using last known-good cached value for "${key}" instead.`);
+      safeLog.warn(`   Using last known-good cached value for "${key}" instead.`);
       return cached.value;
     }
-    console.warn(`   No cache available for "${key}" — using hardcoded fallback.`);
+    safeLog.warn(`   No cache available for "${key}" — using hardcoded fallback.`);
     return fallback;
   }
 }

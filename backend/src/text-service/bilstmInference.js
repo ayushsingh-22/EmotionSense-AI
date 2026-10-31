@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -101,9 +102,9 @@ const loadModel = async () => {
     if (!session) {
         try {
             session = await onnx.InferenceSession.create(MODEL_PATH);
-            console.log('✅ BiLSTM ONNX model loaded successfully');
+            safeLog.log('✅ BiLSTM ONNX model loaded successfully');
         } catch (error) {
-            console.error('❌ Failed to load BiLSTM ONNX model:', error);
+            safeLog.error('❌ Failed to load BiLSTM ONNX model:', error);
             throw error;
         }
     }
@@ -169,7 +170,7 @@ export const runBiLSTMInference = async (text) => {
         };
         
     } catch (error) {
-        console.error('❌ BiLSTM Inference Error:', error);
+        safeLog.error('❌ BiLSTM Inference Error:', error);
         return {
             emotion: 'neutral',
             confidence: 0.5,

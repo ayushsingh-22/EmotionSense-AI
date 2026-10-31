@@ -18,7 +18,7 @@ import { AlertTriangle, Trash2 } from 'lucide-react';
 interface DeleteAccountDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<void>;
+  onConfirm: (password: string) => Promise<void>;
   userEmail?: string;
   isLoading?: boolean;
 }
@@ -31,17 +31,19 @@ export function DeleteAccountDialog({
   isLoading = false,
 }: DeleteAccountDialogProps) {
   const [confirmText, setConfirmText] = useState('');
+  const [password, setPassword] = useState('');
   const [confirmEmail, setConfirmEmail] = useState('');
   
   const isConfirmValid = 
     confirmText.toLowerCase() === 'delete my account' && 
-    confirmEmail.toLowerCase() === userEmail.toLowerCase();
+    confirmEmail.toLowerCase() === userEmail.toLowerCase() && password.length > 0;
 
   const handleConfirm = async () => {
     if (!isConfirmValid) return;
     
     try {
-      await onConfirm();
+      await onConfirm(password);
+      setPassword('');
       setConfirmText('');
       setConfirmEmail('');
     } catch (error) {
@@ -67,7 +69,7 @@ export function DeleteAccountDialog({
               Delete Account Permanently
             </AlertDialogTitle>
           </div>
-          <AlertDialogDescription>
+          <AlertDialogDescription asChild>
             <div className="space-y-3">
               <div>
                 <strong className="text-red-600">This action cannot be undone.</strong> This will permanently delete your account and remove all your data from our servers.
@@ -117,6 +119,7 @@ export function DeleteAccountDialog({
                   />
                 </div>
               </div>
+              <div><Label htmlFor="confirm-password">Password</Label><Input id="confirm-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} /></div>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -150,7 +153,7 @@ export function DeleteAccountDialog({
 interface DeleteDataDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<void>;
+  onConfirm: (password: string) => Promise<void>;
   isLoading?: boolean;
 }
 
@@ -161,14 +164,16 @@ export function DeleteDataDialog({
   isLoading = false,
 }: DeleteDataDialogProps) {
   const [confirmText, setConfirmText] = useState('');
+  const [password, setPassword] = useState('');
   
-  const isConfirmValid = confirmText.toLowerCase() === 'delete all data';
+  const isConfirmValid = confirmText.toLowerCase() === 'delete all data' && password.length > 0;
 
   const handleConfirm = async () => {
     if (!isConfirmValid) return;
     
     try {
-      await onConfirm();
+      await onConfirm(password);
+      setPassword('');
       setConfirmText('');
     } catch (error) {
       console.error('Delete data confirmation error:', error);
@@ -177,6 +182,7 @@ export function DeleteDataDialog({
 
   const handleCancel = () => {
     setConfirmText('');
+    setPassword('');
     onOpenChange(false);
   };
 
@@ -192,10 +198,10 @@ export function DeleteDataDialog({
               Delete All Data
             </AlertDialogTitle>
           </div>
-          <AlertDialogDescription>
+          <AlertDialogDescription asChild>
             <div className="space-y-3">
               <div>
-                <strong className="text-orange-600">This action cannot be undone.</strong> This will permanently delete all your emotion data while keeping your account active.
+                <strong className="text-orange-600">This action cannot be undone.</strong> This will permanently delete all your emotion data including your account.
               </div>
               
               <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
@@ -225,6 +231,7 @@ export function DeleteDataDialog({
                   disabled={isLoading}
                 />
               </div>
+              <div><Label htmlFor="confirm-password">Password</Label><Input id="confirm-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} /></div>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>

@@ -1,5 +1,7 @@
 'use client';
 
+import { api } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { EMOTION_CONFIG, type EmotionType } from '@/types';
@@ -21,12 +23,7 @@ export function SessionStats() {
         setIsLoading(true);
 
         // Fetch all of the current user's emotion-tagged messages
-        const response = await fetch('/api/messages/emotion-history', { credentials: 'same-origin' });
-        if (!response.ok) {
-          console.error('Error fetching stats:', await response.text());
-          return;
-        }
-        const { messages } = (await response.json()) as { messages: EmotionHistoryMessage[] };
+        const { data: { messages } } = await api.get<{ messages: EmotionHistoryMessage[] }>('/api/messages/emotion-history');
 
         setTotalAnalyses(messages?.length || 0);
 

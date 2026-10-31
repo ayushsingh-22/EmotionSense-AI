@@ -58,11 +58,8 @@ export default function SignUpPage() {
       const result = await signUp(email, password, fullName);
       
       if (!result.error) {
-        toast({
-          title: 'Account created successfully!',
-          description: 'Welcome to MantrAI! You can now start chatting.',
-        });
-        router.push('/');
+        toast({ title: 'Check your email', description: 'If eligible, a verification code will be sent.' });
+        router.push('/auth/verify-email');
       } else {
         setError(result.error || 'Failed to create account. Please try again.');
       }

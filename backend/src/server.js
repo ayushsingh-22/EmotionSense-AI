@@ -1,3 +1,4 @@
+import safeLog from './utils/logger.js';
 /**
  * Main Server Entry Point
  * Initializes Express server and connects all modules
@@ -12,22 +13,28 @@ import fs from 'fs';
 
 // Import configuration
 import config from './config/index.js';
+import { normalizeNodeEnv } from './config/environment.js';
+import { resolveTrustProxyHops } from './config/proxy.js';
 
 // Import services
-import { initializeNodemailer } from './utils/nodemailerHelper.js';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { installLogRedaction } from './utils/logRedaction.js';
 import { randomUUID } from 'crypto';
-import { requireAuth, bindUserId, assertAuthConfigured } from './middleware/auth.js';
+import { bindUserId } from './middleware/auth.js';
+import prisma from './lib/prisma.js';
+import { createAuthServices } from './auth/index.js';
+import { createBackendAuthRouter } from './routes/backendAuthRoutes.js';
+import rateLimit from 'express-rate-limit';
 import {
   buildCors, securityHeaders, noStore, globalLimiter, authFailureLimiter,
   aiBurstLimiter, aiDailyLimiter
 } from './middleware/security.js';
 
 // Import routes
+import profileRoutes from './routes/profileRoutes.js';
 import textRoutes from './routes/textRoutes.js';
 import voiceRoutes from './routes/voiceRoutes.js';
 import multiModalRoutes from './routes/multiModalRoutes.js';
@@ -40,10 +47,7 @@ import insightsRoutes from './routes/insightsRoutes.js';
 import journalRoutes from './routes/journalRoutes.js';
 import activityRoutes from './routes/activityRoutes.js';
 import cronRoutes from './routes/cronRoutes.js';
-import { createFirebaseExchangeRouter, createIdentityMeRouter } from './routes/identityRoutes.js';
-import { createAccountLinkRouter } from './routes/accountLinkRoutes.js';
-import { isLinkingEnabled } from './identity/linkService.js';
-import { isExchangeEnabled, assertFirebaseConfigured } from './identity/firebaseVerifier.js';
+import internalRoutes from './routes/internalRoutes.js';
 import { journalService } from './journal-service/index.js';
 
 // Load environment variables
@@ -73,7 +77,7 @@ const createRequiredDirectories = () => {
   directories.forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
-      console.log(`✅ Created directory: ${dir}`);
+      safeLog.log(`✅ Created directory: ${dir}`);
     }
   });
 };
@@ -95,20 +99,20 @@ const configureMiddleware = () => {
     }
   }));
 
-  // Render terminates TLS behind exactly one proxy hop; needed for correct
-  // client IPs (rate limiting) and req.secure.
-  app.set('trust proxy', parseInt(process.env.TRUST_PROXY_HOPS || '1', 10));
+  // Render's Express example trusts one hop; confirm actual ingress before changing it.
+  app.set('trust proxy', resolveTrustProxyHops());
   app.disable('x-powered-by');
 
   app.use(securityHeaders());
   app.use(buildCors());
   app.use(globalLimiter());
 
-  // The Firebase exchange route parses its own, much smaller JSON body (8kb).
-  const skipForExchange = (parser) => (req, res, next) =>
-    (req.path.startsWith('/api/auth/firebase/') ? next() : parser(req, res, next));
-  app.use(skipForExchange(express.json({ limit: '1mb' })));
-  app.use(skipForExchange(express.urlencoded({ extended: true, limit: '1mb' })));
+  app.use('/api/auth', noStore, rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false }), express.json({ limit: '8kb' }), express.urlencoded({ extended: true, limit: '8kb' }));
+  // Authentication bodies are parsed above; other routes retain the global limit.
+  const skipForAuth = (parser) => (req, res, next) =>
+    (req.path.startsWith('/api/auth/') ? next() : parser(req, res, next));
+  app.use(skipForAuth(express.json({ limit: '1mb' })));
+  app.use(skipForAuth(express.urlencoded({ extended: true, limit: '1mb' })));
   // Server-generated request id (never trusted from the client): echoed in the
   // X-Request-Id header and in error responses so support can find the log line.
   app.use((req, res, next) => {
@@ -133,29 +137,25 @@ const configureMiddleware = () => {
 /**
  * Configure API routes
  */
-const configureRoutes = () => {
+const configureRoutes = (authServices) => {
+  const backendAuth = createBackendAuthRouter({ prisma, services: authServices });
   // Public: minimal liveness only (see healthRoutes.js).
   app.use('/api/health', healthRoutes);
   // Secret-gated, not user-facing.
   app.use('/api/cron', cronRoutes);
-  // Public by design (the caller has no API token yet; the Firebase ID token IS the credential).
-  // Registered explicitly BEFORE the authenticated chain below and limited to this one path.
-  // Invisible (404) unless FIREBASE_EXCHANGE_ENABLED=true; refuses (503) on a database without
-  // the Phase 2B.2 identity schema.
-  app.use('/api/auth/firebase/exchange', createFirebaseExchangeRouter());
-  // Same model for account linking (Firebase ID token + web password; no API token exists yet). Terminal router limited
-  // to /start and /complete. Invisible (404) unless ACCOUNT_LINKING_ENABLED=true AND FIREBASE_EXCHANGE_ENABLED=true;
-  // refuses (503) on a database without the identity + link-challenge schema.
-  app.use('/api/auth/firebase/link', createAccountLinkRouter());
+  app.use('/api/internal', internalRoutes);
+  app.use('/api/auth', backendAuth.router);
 
   // Everything below requires a valid bearer token. Failed attempts are
   // rate-limited per IP before verification runs. bindUserId then pins the
   // caller's identity to the token (multipart routes re-run it inside the route,
   // after multer has parsed the form).
-  const authed = [authFailureLimiter(), requireAuth, noStore, bindUserId];
+  const authed = [authFailureLimiter(), backendAuth.auth, noStore, bindUserId];
   const paidAi = [aiBurstLimiter(), aiDailyLimiter()];
 
   // Paid LLM / STT / TTS / emotion-model endpoints: authenticated + per-user limits.
+  app.use(['/api/profile', '/api/messages/emotion-history'], ...authed);
+  app.use('/api', profileRoutes);
   app.use('/api/analyze', ...authed, ...paidAi);
   app.use('/api/response', ...authed, ...paidAi);
   app.use('/api/tts', ...authed, ...paidAi);
@@ -165,7 +165,6 @@ const configureRoutes = () => {
   app.use('/api/insights', ...authed);
   app.use('/api/activity', ...authed);
   app.use('/api/journal', ...authed);
-  app.use('/api/identity', ...authed);
 
   app.use('/api/analyze/text', textRoutes);
   app.use('/api/analyze/voice', voiceRoutes);
@@ -177,7 +176,6 @@ const configureRoutes = () => {
   app.use('/api/insights', insightsRoutes);
   app.use('/api/activity', activityRoutes);
   app.use('/api/journal', journalRoutes);
-  app.use('/api/identity', createIdentityMeRouter());
 
   app.get('/', (req, res) => {
     res.json({
@@ -197,10 +195,10 @@ const configureRoutes = () => {
  * beyond router imports). Exported for the automated test-suite.
  */
 let built = false;
-export const buildApp = () => {
+export const buildApp = (authServices) => {
   if (built) return app;
   configureMiddleware();
-  configureRoutes();
+  configureRoutes(authServices || createAuthServices({ prisma }));
   app.use(errorHandler);
   built = true;
   return app;
@@ -211,61 +209,46 @@ export const buildApp = () => {
  */
 const startServer = async () => {
   try {
-    assertAuthConfigured();
-    if (isExchangeEnabled()) {
-      // Enabled but misconfigured must fail the boot, not every request.
-      assertFirebaseConfigured();
-      console.log('✅ Firebase identity exchange enabled');
-    }
-    if (isLinkingEnabled()) {
-      console.log(isExchangeEnabled()
-        ? '✅ Account linking enabled'
-        : '⚠️ ACCOUNT_LINKING_ENABLED is set but FIREBASE_EXCHANGE_ENABLED is not: account linking stays disabled');
-    }
     createRequiredDirectories();
-
-    console.log('📧 Initializing email...');
-    const ok = await initializeNodemailer();
-    if (!ok) console.log('⚠️ Email disabled');
 
     buildApp();
 
     try {
-      console.log('🚀 Journal Service starting...');
+      safeLog.log('🚀 Journal Service starting...');
       await journalService.initialize();
-      console.log('✅ Journal Service Ready');
+      safeLog.log('✅ Journal Service Ready');
     } catch (err) {
-      console.warn('⚠️ Journal service failed:', err.message);
+      safeLog.warn('⚠️ Journal service failed:', err.message);
     }
 
     app.listen(PORT, () => {
-      console.log('='.repeat(50));
-      console.log(`🚀 Server Running → http://localhost:${PORT}`);
-      console.log(`🌍 NODE ENV → ${process.env.NODE_ENV}`);
-      console.log(`🔓 CORS Mode → ${process.env.CORS_ORIGIN ? "allow-list" : "default (no cross-origin in production)"}`);
-      console.log('='.repeat(50));
+      safeLog.log('='.repeat(50));
+      safeLog.log(`🚀 Server Running → http://localhost:${PORT}`);
+      safeLog.log(`🌍 NODE ENV → ${normalizeNodeEnv() || 'development'}`);
+      safeLog.log(`🔓 CORS Mode → ${process.env.CORS_ORIGIN ? "allow-list" : "default (no cross-origin in production)"}`);
+      safeLog.log('='.repeat(50));
     });
 
   } catch (err) {
-    console.error('❌ Boot failed:', err);
+    safeLog.error('❌ Boot failed:', err);
     process.exit(1);
   }
 };
 
-const isTest = process.env.NODE_ENV === 'test';
+const isTest = normalizeNodeEnv() === 'test';
 
 if (!isTest) {
-process.on('uncaughtException', e => { console.error('💥', e); process.exit(1); });
-process.on('unhandledRejection', (r,p) => { console.error('💥', p, r); process.exit(1); });
+process.on('uncaughtException', e => { safeLog.error('💥', e); process.exit(1); });
+process.on('unhandledRejection', (r,p) => { safeLog.error('💥', p, r); process.exit(1); });
 
 process.on('SIGINT', async () => {
-  console.log('\n🛑 SIGINT — shutting down');
+  safeLog.log('\n🛑 SIGINT — shutting down');
   if (journalService.isInitialized) await journalService.shutdown();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n🛑 SIGTERM — shutting down');
+  safeLog.log('\n🛑 SIGTERM — shutting down');
   if (journalService.isInitialized) await journalService.shutdown();
   process.exit(0);
 });

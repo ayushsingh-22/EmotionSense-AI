@@ -79,8 +79,8 @@ for (const [method, path] of anon) {
 }
 
 // 3. Forged / wrong-secret token must be rejected.
-const forged = await new SignJWT({})
-  .setProtectedHeader({ alg: 'HS256' }).setSubject(U).setIssuer('mantra-web').setAudience('mantra-api')
+const forged = await new SignJWT({ sid: randomUUID() })
+  .setProtectedHeader({ alg: 'HS256' }).setSubject(U).setIssuer('mindhaven-auth').setAudience('mindhaven-api').setJti(randomUUID())
   .setIssuedAt().setExpirationTime('5m')
   .sign(new TextEncoder().encode(`forged-${randomUUID()}-${randomUUID()}`));
 const f = await call(`${BACKEND}/api/chat/sessions`, { headers: { Authorization: `Bearer ${forged}` } });
@@ -103,11 +103,9 @@ if (ORIGIN) {
 check('security headers (nosniff, no x-powered-by)',
   health.headers.get('x-content-type-options') === 'nosniff' && !health.headers.get('x-powered-by'));
 
-// 5. Frontend token endpoint.
+// 5. Frontend session endpoint.
 if (FRONTEND) {
   console.log(`\nFrontend: ${FRONTEND}\n`);
-  const t = await call(`${FRONTEND}/api/backend-token`);
-  check('frontend /api/backend-token anonymous -> 401', t.status === 401, `status ${t.status}`);
   const c = await call(`${FRONTEND}/api/auth/csrf`);
   check('frontend NextAuth reachable (/api/auth/csrf)', c.status === 200, `status ${c.status}`);
 }

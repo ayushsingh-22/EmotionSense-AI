@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Text-to-Speech (TTS) Service Module
  * Converts text responses to audio using Google TTS (primary), Sarvam AI (fallback), or Murf AI (third fallback)
@@ -94,7 +95,7 @@ export const generateSpeechGoogle = async (text, languageCode = 'en-US', voice =
   // Convert short language codes to full locale codes for Google TTS
   const fullLanguageCode = convertToGoogleTTSLanguageCode(languageCode);
   const selectedVoice = voice || getGoogleVoiceForLanguage(fullLanguageCode);
-  console.log(`🔊 Generating speech using Google TTS (language: ${fullLanguageCode}, voice: ${selectedVoice})...`);
+  safeLog.log(`🔊 Generating speech using Google TTS (language: ${fullLanguageCode}, voice: ${selectedVoice})...`);
 
   if (!config.tts.google.apiKey) {
     throw new Error('Google TTS API key not configured');
@@ -128,7 +129,7 @@ export const generateSpeechGoogle = async (text, languageCode = 'en-US', voice =
     const audioContent = response.data.audioContent;
     const audioBuffer = Buffer.from(audioContent, 'base64');
     
-    console.log(`✅ Google TTS synthesis complete (${audioBuffer.length} bytes)`);
+    safeLog.log(`✅ Google TTS synthesis complete (${audioBuffer.length} bytes)`);
 
     return {
       audio: audioContent, // Already base64 encoded
@@ -140,12 +141,7 @@ export const generateSpeechGoogle = async (text, languageCode = 'en-US', voice =
       sampleRate: 24000 // Google TTS typically uses 24kHz
     };
   } catch (error) {
-    console.error('❌ Google TTS Error Details:', {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data
-    });
+    safeLog.error('❌ Google TTS Error Details:');
     
     if (error.response) {
       throw new Error(`Google TTS API error: ${error.response.status} - ${error.response.statusText}`);
@@ -194,7 +190,7 @@ const convertToSarvamLanguageCode = (languageCode) => {
  */
 export const generateSpeechSarvam = async (text, languageCode = 'en-IN') => {
   const sarvamLanguage = convertToSarvamLanguageCode(languageCode);
-  console.log(`🔊 Generating speech using Sarvam AI TTS (language: ${sarvamLanguage})...`);
+  safeLog.log(`🔊 Generating speech using Sarvam AI TTS (language: ${sarvamLanguage})...`);
 
   const apiKey = process.env.SARVAM_API_KEY;
   
@@ -223,7 +219,7 @@ export const generateSpeechSarvam = async (text, languageCode = 'en-IN') => {
     const audioBase64 = response.audios[0];
     const audioBuffer = Buffer.from(audioBase64, 'base64');
     
-    console.log(`✅ Sarvam AI TTS synthesis complete (${audioBuffer.length} bytes)`);
+    safeLog.log(`✅ Sarvam AI TTS synthesis complete (${audioBuffer.length} bytes)`);
 
     return {
       audio: audioBase64, // Already base64 encoded
@@ -234,12 +230,7 @@ export const generateSpeechSarvam = async (text, languageCode = 'en-IN') => {
       sampleRate: 8000    // Sarvam AI default sample rate
     };
   } catch (error) {
-    console.error('❌ Sarvam AI TTS Error Details:', {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data
-    });
+    safeLog.error('❌ Sarvam AI TTS Error Details:');
     
     if (error.response) {
       throw new Error(`Sarvam AI TTS API error: ${error.response.status} - ${error.response.statusText}`);
@@ -306,7 +297,7 @@ const getMurfVoiceAndLocale = (requestedLocale) => {
   
   // For non-English languages, use en-US locale with Matthew voice
   // This is a fallback - ideally you would have language-specific voices
-  console.log(`⚠️  No native voice for ${requestedLocale}, using Matthew (en-US) voice`);
+  safeLog.log(`⚠️  No native voice for ${requestedLocale}, using Matthew (en-US) voice`);
   return {
     voiceId: configuredVoice || 'Matthew',
     locale: 'en-US'  // Fallback to supported locale
@@ -321,7 +312,7 @@ const getMurfVoiceAndLocale = (requestedLocale) => {
 export const generateSpeechMurf = async (text, languageCode = 'en-US') => {
   const requestedLocale = convertToMurfLanguageCode(languageCode);
   const { voiceId, locale } = getMurfVoiceAndLocale(requestedLocale);
-  console.log(`🔊 Generating speech using Murf AI TTS (requested: ${requestedLocale}, using locale: ${locale}, voice: ${voiceId})...`);
+  safeLog.log(`🔊 Generating speech using Murf AI TTS (requested: ${requestedLocale}, using locale: ${locale}, voice: ${voiceId})...`);
 
   const apiKey = config.tts.murf.apiKey;
   
@@ -353,7 +344,7 @@ export const generateSpeechMurf = async (text, languageCode = 'en-US') => {
     const audioBuffer = Buffer.from(response.data);
     const audioBase64 = audioBuffer.toString('base64');
     
-    console.log(`✅ Murf AI TTS synthesis complete (${audioBuffer.length} bytes)`);
+    safeLog.log(`✅ Murf AI TTS synthesis complete (${audioBuffer.length} bytes)`);
 
     return {
       audio: audioBase64, // Base64 encoded audio
@@ -365,12 +356,7 @@ export const generateSpeechMurf = async (text, languageCode = 'en-US') => {
       sampleRate: 44100   // Murf AI high-quality sample rate
     };
   } catch (error) {
-    console.error('❌ Murf AI TTS Error Details:', {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data ? error.response.data.toString() : null
-    });
+    safeLog.error('❌ Murf AI TTS Error Details:');
     
     if (error.response) {
       throw new Error(`Murf AI TTS API error: ${error.response.status} - ${error.response.statusText}`);
@@ -400,15 +386,15 @@ const estimateDuration = (text) => {
  * Strategy: Use Google TTS -> Sarvam AI -> Murf AI fallback chain
  */
 export const generateSpeech = async (text, voice = null, languageCode = null) => {
-  console.log(`🎙️ Converting text to speech...`);
+  safeLog.log(`🎙️ Converting text to speech...`);
 
   if (!config.tts.enabled) {
-    console.log('ℹ️  TTS is disabled in configuration');
+    safeLog.log('ℹ️  TTS is disabled in configuration');
     return null;
   }
 
   if (!text || text.trim().length === 0) {
-    console.warn('⚠️  No text provided for TTS');
+    safeLog.warn('⚠️  No text provided for TTS');
     return null;
   }
 
@@ -423,7 +409,7 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
                              config.tts.google.apiKey !== 'your_google_tts_api_key_here';
   
   if (!hasValidGoogleKey) {
-    console.warn('⚠️ Google TTS API key is not configured. Will attempt Sarvam AI fallback...');
+    safeLog.warn('⚠️ Google TTS API key is not configured. Will attempt Sarvam AI fallback...');
   }
 
   // Selected language for TTS
@@ -432,10 +418,10 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
   // Try Google TTS first (if API key is valid)
   if (hasValidGoogleKey) {
     try {
-      console.log(`🌐 Using Google TTS with multilingual support...`);
+      safeLog.log(`🌐 Using Google TTS with multilingual support...`);
       const selectedVoice = voice || null; // Let auto-selection pick best voice
-      console.log(`   Language: ${selectedLanguage}`);
-      console.log(`   API Key: ${config.tts.google.apiKey.substring(0, 10)}...${config.tts.google.apiKey.slice(-4)}`);
+      safeLog.log(`   Language: ${selectedLanguage}`);
+    // Sensitive provider or user content is intentionally not logged.
       
       const speechResult = await generateSpeechGoogle(
         text, 
@@ -443,7 +429,7 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
         selectedVoice
       );
       
-      console.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
+      safeLog.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
       
       return {
         audioData: speechResult.audio,
@@ -454,25 +440,20 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
         text: text
       };
     } catch (googleError) {
-      console.error(`❌ Google TTS failed:`, {
-        message: googleError.message,
-        status: googleError.response?.status,
-        statusText: googleError.response?.statusText,
-        error: googleError.response?.data?.error
-      });
+      safeLog.error(`❌ Google TTS failed:`);
       
-      console.warn('⚠️ Google TTS failed, switching to Sarvam AI fallback...');
+      safeLog.warn('⚠️ Google TTS failed, switching to Sarvam AI fallback...');
     }
   }
 
   // Fallback to Sarvam AI TTS
   try {
-    console.log(`🌐 Using Sarvam AI TTS as fallback...`);
-    console.log(`   Language: ${selectedLanguage}`);
+    safeLog.log(`🌐 Using Sarvam AI TTS as fallback...`);
+    safeLog.log(`   Language: ${selectedLanguage}`);
     
     const speechResult = await generateSpeechSarvam(text, selectedLanguage);
     
-    console.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
+    safeLog.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
     
     return {
       audioData: speechResult.audio,
@@ -483,24 +464,19 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
       text: text
     };
   } catch (sarvamError) {
-    console.error(`❌ Sarvam AI TTS failed:`, {
-      message: sarvamError.message,
-      status: sarvamError.response?.status,
-      statusText: sarvamError.response?.statusText,
-      error: sarvamError.response?.data?.error
-    });
+    safeLog.error(`❌ Sarvam AI TTS failed:`);
     
-    console.warn('⚠️ Sarvam AI TTS failed, switching to Murf AI fallback...');
+    safeLog.warn('⚠️ Sarvam AI TTS failed, switching to Murf AI fallback...');
   }
 
   // Third fallback to Murf AI TTS
   try {
-    console.log(`🌐 Using Murf AI TTS as third fallback...`);
-    console.log(`   Language: ${selectedLanguage}`);
+    safeLog.log(`🌐 Using Murf AI TTS as third fallback...`);
+    safeLog.log(`   Language: ${selectedLanguage}`);
     
     const speechResult = await generateSpeechMurf(text, selectedLanguage);
     
-    console.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
+    safeLog.log(`✅ Speech generated successfully (${speechResult.duration}s, ${speechResult.provider})`);
     
     return {
       audioData: speechResult.audio,
@@ -511,12 +487,7 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
       text: text
     };
   } catch (murfError) {
-    console.error(`❌ Murf AI TTS failed:`, {
-      message: murfError.message,
-      status: murfError.response?.status,
-      statusText: murfError.response?.statusText,
-      error: murfError.response?.data?.error
-    });
+    safeLog.error(`❌ Murf AI TTS failed:`);
     
     // All TTS systems failed
     throw new Error(`All TTS systems failed. Google: ${hasValidGoogleKey ? 'failed' : 'not configured'}. Sarvam AI: failed. Murf AI: ${murfError.message}`);
@@ -529,7 +500,7 @@ export const generateSpeech = async (text, voice = null, languageCode = null) =>
  */
 export const convertAudioFormat = async (audioData, fromFormat, toFormat) => {
   // TODO: Implement audio format conversion using ffmpeg or similar
-  console.log(`🔄 Converting audio from ${fromFormat} to ${toFormat}...`);
+  safeLog.log(`🔄 Converting audio from ${fromFormat} to ${toFormat}...`);
   
   // Placeholder - return original data
   return audioData;

@@ -1,72 +1,69 @@
-# Root gitignore for polyrepo structure# Dependencies
-
+# Dependencies
 node_modules/
 
-# Backend artifactspackage-lock.json
+# Lockfiles
+# Ignore only the root npm lockfile; backend and frontend lockfiles stay tracked.
+/package-lock.json
+yarn.lock
 
-backend/node_modules/yarn.lock
+# Environment variables
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+!**/.env.local.example
 
-# backend/package-lock.json is committed (reproducible installs)
+# Neon local project context
+.neon
 
-backend/temp/# Environment variables
-
-backend/logs/.env
-
+# Backend artifacts
+backend/temp/
+backend/logs/
 backend/data/*.db
+backend/models/
 
-backend/.env# Temporary files
-
-temp/
-
-# Frontend artifacts*.tmp
-
-frontend/node_modules/
-
-frontend/package-lock.json# Logs
-
+# Frontend artifacts
 frontend/dist/logs/
-
 frontend/build/*.log
 
-frontend/.envnpm-debug.log*
+# Temporary files
+temp/
+*.tmp
 
-frontend/.env.local
+# Logs
+*.log
+npm-debug.log*
 
 # Database
+data/*.db
+*.sqlite
 
-# OS filesdata/*.db
-
-.DS_Store*.sqlite
-
-Thumbs.db
-
-# Model files (too large for git)
-
-# IDEmodels/
-
-.vscode/
-
-.idea/# OS files
-
-*.swp.DS_Store
-
-*.swoThumbs.db
-
-
-
-# Logs# IDE
-
-*.log.vscode/
-
-npm-debug.log*.idea/
-
-*.swp
-
-# Optional: Keep models out of git (large files)*.swo
-
-backend/models/
+# Model files
+models/
 
 # Firebase
 firebase-credentials.json
 serviceAccountKey.json
+
+# OS files
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Frontend and deployment artifacts
 frontend/frontend_main.log
+.vercel/
+coverage/
+frontend/.next/
+frontend/out/
+frontend/build/
+*.pem
+*.tsbuildinfo
+next-env.d.ts

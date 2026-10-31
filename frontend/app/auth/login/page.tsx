@@ -31,8 +31,10 @@ export default function LoginPage() {
 
     setIsLoading(true);
     const { error } = await signIn(email, password);
-    
-    if (!error) {
+    if (error === 'EmailNotVerified') {
+      sessionStorage.setItem('mindhaven-verification-email', email);
+      router.push('/auth/verify-email');
+    } else if (!error) {
       router.push('/');
     }
     setIsLoading(false);
@@ -112,6 +114,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-8 text-center">
+            <Link href="/auth/forgot-password" className="text-blue-600 hover:underline">Forgot password?</Link>
             <p className="text-sm text-muted-foreground">
               Don&apos;t have an account?{' '}
               <Link href="/auth/signup" className="text-blue-600 hover:text-blue-700 font-medium hover:underline transition-colors">

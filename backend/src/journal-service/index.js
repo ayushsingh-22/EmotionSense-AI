@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 import cronScheduler from './cronScheduler.js';
 import journalGenerator from './journalGenerator.js';
 
@@ -21,23 +22,23 @@ class JournalService {
    */
   async initialize() {
     try {
-      console.log('🚀 Initializing Journal Service...');
+      safeLog.log('🚀 Initializing Journal Service...');
       
       // Start cron scheduler for nightly generation (not registered in local development unless enabled)
       const scheduled = cronScheduler.start();
       
       this.isInitialized = true;
-      console.log('✅ Journal Service initialized successfully');
+      safeLog.log('✅ Journal Service initialized successfully');
       
       if (scheduled) {
-        console.log(`📅 Nightly journal generation scheduled for: ${cronScheduler.cronSchedule}`);
-        console.log(`🌍 Timezone: Asia/Kolkata (IST)`);
+        safeLog.log(`📅 Nightly journal generation scheduled for: ${cronScheduler.cronSchedule}`);
+        safeLog.log(`🌍 Timezone: Asia/Kolkata (IST)`);
       } else {
-        console.log('⏸️ Nightly journal generation disabled in local development (JOURNAL_SCHEDULER_ENABLED=true enables it)');
+        safeLog.log('⏸️ Nightly journal generation disabled in local development (JOURNAL_SCHEDULER_ENABLED=true enables it)');
       }
       
     } catch (error) {
-      console.error('❌ Failed to initialize Journal Service:', error);
+      safeLog.error('❌ Failed to initialize Journal Service:', error);
       throw error;
     }
   }
@@ -47,15 +48,15 @@ class JournalService {
    */
   async shutdown() {
     try {
-      console.log('🛑 Shutting down Journal Service...');
+      safeLog.log('🛑 Shutting down Journal Service...');
       
       cronScheduler.stop();
       
       this.isInitialized = false;
-      console.log('✅ Journal Service shut down successfully');
+      safeLog.log('✅ Journal Service shut down successfully');
       
     } catch (error) {
-      console.error('❌ Error during Journal Service shutdown:', error);
+      safeLog.error('❌ Error during Journal Service shutdown:', error);
     }
   }
 

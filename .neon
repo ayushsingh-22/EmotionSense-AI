@@ -1,8 +1,5 @@
 {
-  "_init": {
-    "features": [
-      "database",
-      "auth"
-    ]
-  }
+  "orgId": "org-still-brook-28619843",
+  "projectId": "fancy-union-28873755",
+  "branch": "production"
 }

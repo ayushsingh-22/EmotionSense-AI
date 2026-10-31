@@ -62,7 +62,6 @@ def classify_audio(model_name, audio_path):
     """
     try:
         # Validate model type first
-        print(f"Loading model config: {model_name}...", file=sys.stderr)
         config = AutoConfig.from_pretrained(model_name)
         
         # Check if this is an audio model
@@ -73,7 +72,6 @@ def classify_audio(model_name, audio_path):
             }
         
         # Load model and processor
-        print(f"Loading model: {model_name}...", file=sys.stderr)
         model = Wav2Vec2ForSequenceClassification.from_pretrained(model_name)
         processor = Wav2Vec2FeatureExtractor.from_pretrained(model_name)
         
@@ -81,7 +79,6 @@ def classify_audio(model_name, audio_path):
         id2label = get_label_mapping(model_name, config)
         
         # Load and resample audio to 16kHz
-        print(f"Loading audio: {audio_path}...", file=sys.stderr)
         speech, sample_rate = librosa.load(audio_path, sr=16000)
         
         # Process audio
@@ -116,7 +113,6 @@ def classify_audio(model_name, audio_path):
         dominant_idx = probs.index(max_prob)
         dominant_emotion = id2label.get(str(dominant_idx), f"emotion_{dominant_idx}")
         
-        print(f"✓ Detected: {dominant_emotion} ({max_prob:.1%})", file=sys.stderr)
         
         return {
             "success": True,
@@ -127,9 +123,6 @@ def classify_audio(model_name, audio_path):
         }
         
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"Error details:\n{error_details}", file=sys.stderr)
         
         return {
             "success": False,

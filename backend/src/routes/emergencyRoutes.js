@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Emergency Contact Routes
  * Handles emergency contact management and setup
@@ -8,6 +9,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import {
   getEmergencyContact,
   createOrUpdateEmergencyContact,
+  setEmergencyContactNotifications,
   deleteEmergencyContact,
   hasEmergencyContact
 } from '../storage-service/index.js';
@@ -21,6 +23,13 @@ const router = express.Router();
 // Any :userId path segment must equal the authenticated caller.
 router.param('userId', requireSelfParam);
 const contactWrite = [sensitiveWriteLimiter(), validate({ body: emergencyContactBody })];
+
+router.put('/notifications', sensitiveWriteLimiter(), asyncHandler(async (req,res) => {
+  if(typeof req.body?.notifyEnabled !== 'boolean') return res.status(400).json({success:false,error:'Invalid notification preference'});
+  const contact=await setEmergencyContactNotifications(req.userId, req.body.notifyEnabled);
+  if(!contact) return res.status(404).json({success:false,error:'No emergency contact found'});
+  return res.json({success:true,data:contact});
+}));
 
 /**
  * POST /api/emergency/save
@@ -69,7 +78,7 @@ router.post('/save', ...contactWrite, asyncHandler(async (req, res) => {
   }
 
   try {
-    console.log(`💾 Saving emergency contact for user: ${userId}`);
+    safeLog.log(`💾 Saving emergency contact for user: ${userId}`);
 
     const savedContact = await createOrUpdateEmergencyContact(
       userId,
@@ -84,7 +93,7 @@ router.post('/save', ...contactWrite, asyncHandler(async (req, res) => {
       data: savedContact
     });
   } catch (error) {
-    console.error('Error saving emergency contact:', error);
+    safeLog.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to save emergency contact',
@@ -110,7 +119,7 @@ router.get('/:userId', asyncHandler(async (req, res) => {
   }
 
   try {
-    console.log(`📋 Fetching emergency contact for user: ${userId}`);
+    safeLog.log(`📋 Fetching emergency contact for user: ${userId}`);
 
     const contact = await getEmergencyContact(userId);
 
@@ -128,14 +137,14 @@ router.get('/:userId', asyncHandler(async (req, res) => {
   } catch (error) {
     // Handle missing emergency_contacts table
     if (error.message?.includes('emergency_contacts') || error.code === 'PGRST205') {
-      console.warn('⚠️ emergency_contacts table not found - returning 404');
+      safeLog.warn('⚠️ emergency_contacts table not found - returning 404');
       return res.status(404).json({
         success: false,
         error: 'No emergency contact found for this user'
       });
     }
     
-    console.error('Error fetching emergency contact:', error);
+    safeLog.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to fetch emergency contact',
@@ -191,7 +200,7 @@ const updateHandler = asyncHandler(async (req, res) => {
   }
 
   try {
-    console.log(`✏️  Updating emergency contact for user: ${userId}`);
+    safeLog.log(`✏️  Updating emergency contact for user: ${userId}`);
 
     const updatedContact = await createOrUpdateEmergencyContact(
       userId,
@@ -206,7 +215,7 @@ const updateHandler = asyncHandler(async (req, res) => {
       data: updatedContact
     });
   } catch (error) {
-    console.error('Error updating emergency contact:', error);
+    safeLog.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to update emergency contact',
@@ -236,7 +245,7 @@ router.get('/check/:userId', asyncHandler(async (req, res) => {
   }
 
   try {
-    console.log(`🔍 Checking emergency contact for user: ${userId}`);
+    safeLog.log(`🔍 Checking emergency contact for user: ${userId}`);
 
     const hasContact = await hasEmergencyContact(userId);
 
@@ -247,14 +256,14 @@ router.get('/check/:userId', asyncHandler(async (req, res) => {
   } catch (error) {
     // Handle missing emergency_contacts table
     if (error.message?.includes('emergency_contacts') || error.code === 'PGRST205') {
-      console.warn('⚠️ emergency_contacts table not found - returning false');
+      safeLog.warn('⚠️ emergency_contacts table not found - returning false');
       return res.status(200).json({
         success: true,
         hasEmergencyContact: false
       });
     }
     
-    console.error('Error checking emergency contact:', error);
+    safeLog.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to check emergency contact',
@@ -280,7 +289,7 @@ router.delete('/:userId', asyncHandler(async (req, res) => {
   }
 
   try {
-    console.log(`🗑️  Deleting emergency contact for user: ${userId}`);
+    safeLog.log(`🗑️  Deleting emergency contact for user: ${userId}`);
 
     await deleteEmergencyContact(userId);
 
@@ -289,7 +298,7 @@ router.delete('/:userId', asyncHandler(async (req, res) => {
       message: 'Emergency contact deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting emergency contact:', error);
+    safeLog.error('Emergency operation failed');
     return res.status(500).json({
       success: false,
       error: 'Failed to delete emergency contact',

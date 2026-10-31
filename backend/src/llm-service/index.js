@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * LLM Service Module
  * Generates empathetic responses using LLM (Gemini primary, LLaMA fallback)
@@ -467,7 +468,7 @@ export const generateWithGemini = async (prompt) => {
   for (const [keyIndex, apiKey] of apiKeys.entries()) {
     for (const modelName of models) {
       try {
-        console.log(`🤖 Attempting Gemini API Key ${keyIndex + 1} with model: ${modelName}`);
+        safeLog.log(`🤖 Attempting Gemini API Key ${keyIndex + 1} with model: ${modelName}`);
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
           model: modelName,
@@ -483,7 +484,7 @@ export const generateWithGemini = async (prompt) => {
 
         // Check if response was blocked by safety filters
         if (response.promptFeedback?.blockReason) {
-          console.warn(`⚠️ Response blocked by safety filter: ${response.promptFeedback.blockReason}`);
+          safeLog.warn(`⚠️ Response blocked by safety filter: ${response.promptFeedback.blockReason}`);
           throw new Error(`Response blocked: ${response.promptFeedback.blockReason}`);
         }
 
@@ -491,19 +492,18 @@ export const generateWithGemini = async (prompt) => {
 
         // Validate that we got actual content
         if (!text || text.length === 0) {
-          console.warn(`⚠️ Empty response received from Gemini model: ${modelName}`);
+          safeLog.warn(`⚠️ Empty response received from Gemini model: ${modelName}`);
           throw new Error('Empty response received from Gemini');
         }
 
-        console.log(`✅ Gemini response generated with ${modelName} (API Key ${keyIndex + 1})`);
-        console.log(`📝 Response preview: "${text.substring(0, 100)}..."`);
+        safeLog.log(`✅ Gemini response generated with ${modelName} (API Key ${keyIndex + 1})`);
         return {
           text,
           model: `gemini-${modelName}`,
           success: true
         };
       } catch (err) {
-        console.warn(`API Key ${keyIndex + 1} with ${modelName} failed:`, err.message);
+        safeLog.warn(`API Key ${keyIndex + 1} with ${modelName} failed:`, err.message);
         error = err;
       }
     }
@@ -555,7 +555,7 @@ export const generateWithGeminiStream = async (prompt, onToken) => {
       let accumulated = '';
       let emittedAnyToken = false;
       try {
-        console.log(`🤖 [stream] Attempting Gemini API Key ${keyIndex + 1} with model: ${modelName}`);
+        safeLog.log(`🤖 [stream] Attempting Gemini API Key ${keyIndex + 1} with model: ${modelName}`);
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
           model: modelName,
@@ -588,18 +588,18 @@ export const generateWithGeminiStream = async (prompt, onToken) => {
         }
 
         if (!accumulated || accumulated.trim().length === 0) {
-          console.warn(`⚠️ Empty streamed response received from Gemini model: ${modelName}`);
+          safeLog.warn(`⚠️ Empty streamed response received from Gemini model: ${modelName}`);
           throw new Error('Empty response received from Gemini stream');
         }
 
-        console.log(`✅ Gemini stream completed with ${modelName} (API Key ${keyIndex + 1})`);
+        safeLog.log(`✅ Gemini stream completed with ${modelName} (API Key ${keyIndex + 1})`);
         return {
           text: accumulated.trim(),
           model: `gemini-${modelName}`,
           success: true
         };
       } catch (err) {
-        console.warn(`[stream] API Key ${keyIndex + 1} with ${modelName} failed:`, err.message);
+        safeLog.warn(`[stream] API Key ${keyIndex + 1} with ${modelName} failed:`, err.message);
         error = err;
 
         // If we already streamed some tokens to the client before failing,
@@ -626,7 +626,7 @@ export const generateWithGeminiStream = async (prompt, onToken) => {
 export const generateWithLLaMA = async (prompt) => {
   // Check if LLaMA is enabled before attempting
   if (!config.llama.enabled) {
-    console.log(`⚠️  LLaMA is disabled in configuration, skipping...`);
+    safeLog.log(`⚠️  LLaMA is disabled in configuration, skipping...`);
     throw new Error('LLaMA is not enabled in configuration');
   }
 
@@ -636,7 +636,7 @@ export const generateWithLLaMA = async (prompt) => {
 
   try {
     const modelName = await getGroqChatModel();
-    console.log(`🤖 Calling LLaMA via Groq (${modelName})...`);
+    safeLog.log(`🤖 Calling LLaMA via Groq (${modelName})...`);
 
     const response = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
@@ -668,7 +668,7 @@ export const generateWithLLaMA = async (prompt) => {
       throw new Error('No response text from Groq LLaMA API');
     }
 
-    console.log(`✅ LLaMA (Groq) response generated successfully`);
+    safeLog.log(`✅ LLaMA (Groq) response generated successfully`);
 
     return {
       text: generatedText.trim(),
@@ -676,7 +676,7 @@ export const generateWithLLaMA = async (prompt) => {
       success: true
     };
   } catch (error) {
-    console.error('❌ Error calling LLaMA API:', error.response?.data?.error?.message || error.message);
+    safeLog.error('❌ Error calling LLaMA API:', error.response?.data?.error?.message || error.message);
     throw new Error('LLaMA API call failed: ' + (error.response?.data?.error?.message || error.message));
   }
 };
@@ -710,13 +710,12 @@ export const generateFallbackResponse = (emotion) => {
  * Implements auto-switch logic: Gemini -> LLaMA -> Fallback
  */
 export const generateResponse = async ({ emotion, confidence, context, transcript, conversationHistory = [] }) => {
-  console.log(`💬 Generating empathetic response for emotion: ${emotion}`);
-  console.log(`🇮🇳 Indian Context Awareness: ENABLED - Responses will be tailored for Indian users`);
+  safeLog.log(`💬 Generating empathetic response for emotion: ${emotion}`);
+  safeLog.log(`🇮🇳 Indian Context Awareness: ENABLED - Responses will be tailored for Indian users`);
 
   // Guardrail: block non-emotional requests
   const scopeCheck = detectNonEmotionalIntent(transcript, conversationHistory);
   if (scopeCheck.blocked) {
-    console.log(`🚧 Message appears outside emotional support scope (category: ${scopeCheck.category}, keyword: ${scopeCheck.keyword})`);
     return {
       text: buildScopeBoundaryMessage(scopeCheck.category),
       model: 'scope-guard',
@@ -733,27 +732,27 @@ export const generateResponse = async ({ emotion, confidence, context, transcrip
   // Try Gemini first
   try {
     const geminiResponse = await generateWithGemini(prompt);
-    console.log(`✅ Response generated with Indian context awareness (Gemini)`);
+    safeLog.log(`✅ Response generated with Indian context awareness (Gemini)`);
     return geminiResponse;
   } catch (geminiError) {
-    console.warn(`⚠️  Gemini failed: ${geminiError.message}`);
+    safeLog.warn(`⚠️  Gemini failed: ${geminiError.message}`);
 
     // Try LLaMA as fallback only if enabled
     if (config.llama.enabled) {
-      console.log('🔄 Attempting LLaMA fallback with Indian context...');
+      safeLog.log('🔄 Attempting LLaMA fallback with Indian context...');
       try {
         const llamaResponse = await generateWithLLaMA(prompt);
-        console.log(`✅ Response generated with Indian context awareness (LLaMA)`);
+        safeLog.log(`✅ Response generated with Indian context awareness (LLaMA)`);
         return llamaResponse;
       } catch (llamaError) {
-        console.warn(`⚠️  LLaMA fallback failed: ${llamaError.message}`);
+        safeLog.warn(`⚠️  LLaMA fallback failed: ${llamaError.message}`);
       }
     } else {
-      console.log('⚠️  LLaMA is disabled, skipping fallback...');
+      safeLog.log('⚠️  LLaMA is disabled, skipping fallback...');
     }
 
     // Use static fallback if LLaMA is disabled or failed
-    console.log('📝 Using static fallback response with Indian context awareness...');
+    safeLog.log('📝 Using static fallback response with Indian context awareness...');
     const fallbackResponse = generateFallbackResponse(emotion);
     return fallbackResponse;
   }
@@ -770,12 +769,11 @@ export const generateResponse = async ({ emotion, confidence, context, transcrip
  * Returns the same shape as generateResponse: { text, model, success, ... }
  */
 export const generateResponseStream = async ({ emotion, confidence, context, transcript, conversationHistory = [] }, onToken) => {
-  console.log(`💬 [stream] Generating empathetic response for emotion: ${emotion}`);
+  safeLog.log(`💬 [stream] Generating empathetic response for emotion: ${emotion}`);
 
   // Guardrail: block non-emotional requests
   const scopeCheck = detectNonEmotionalIntent(transcript, conversationHistory);
   if (scopeCheck.blocked) {
-    console.log(`🚧 [stream] Message appears outside emotional support scope (category: ${scopeCheck.category}, keyword: ${scopeCheck.keyword})`);
     const text = buildScopeBoundaryMessage(scopeCheck.category);
     onToken(text);
     return {
@@ -793,10 +791,10 @@ export const generateResponseStream = async ({ emotion, confidence, context, tra
   // Try Gemini streaming first
   try {
     const geminiResponse = await generateWithGeminiStream(prompt, onToken);
-    console.log(`✅ [stream] Response generated with Indian context awareness (Gemini)`);
+    safeLog.log(`✅ [stream] Response generated with Indian context awareness (Gemini)`);
     return geminiResponse;
   } catch (geminiError) {
-    console.warn(`⚠️  [stream] Gemini failed: ${geminiError.message}`);
+    safeLog.warn(`⚠️  [stream] Gemini failed: ${geminiError.message}`);
 
     // If tokens were already streamed to the client before the failure, we
     // can't cleanly retry as if nothing happened — but we can still append
@@ -805,23 +803,23 @@ export const generateResponseStream = async ({ emotion, confidence, context, tra
     const alreadyStreamedText = geminiError.isPartialStreamFailure ? (geminiError.partialText || '') : '';
 
     if (config.llama.enabled) {
-      console.log('🔄 [stream] Attempting LLaMA fallback with Indian context...');
+      safeLog.log('🔄 [stream] Attempting LLaMA fallback with Indian context...');
       try {
         const llamaResponse = await generateWithLLaMA(prompt);
-        console.log(`✅ [stream] Response generated with Indian context awareness (LLaMA)`);
+        safeLog.log(`✅ [stream] Response generated with Indian context awareness (LLaMA)`);
         onToken(llamaResponse.text);
         return {
           ...llamaResponse,
           text: alreadyStreamedText + llamaResponse.text
         };
       } catch (llamaError) {
-        console.warn(`⚠️  [stream] LLaMA fallback failed: ${llamaError.message}`);
+        safeLog.warn(`⚠️  [stream] LLaMA fallback failed: ${llamaError.message}`);
       }
     } else {
-      console.log('⚠️  [stream] LLaMA is disabled, skipping fallback...');
+      safeLog.log('⚠️  [stream] LLaMA is disabled, skipping fallback...');
     }
 
-    console.log('📝 [stream] Using static fallback response with Indian context awareness...');
+    safeLog.log('📝 [stream] Using static fallback response with Indian context awareness...');
     const fallbackResponse = generateFallbackResponse(emotion);
     onToken(fallbackResponse.text);
     return {
@@ -835,7 +833,7 @@ export const generateResponseStream = async ({ emotion, confidence, context, tra
  * Generate conversational response (for chat continuation)
  */
 export const generateConversationalResponse = async ({ message, emotion = 'neutral', conversationHistory = [] }) => {
-  console.log(`💬 Generating conversational response...`);
+  safeLog.log(`💬 Generating conversational response...`);
 
   // Build conversation context
   let conversationContext = '';
@@ -872,7 +870,7 @@ Provide a helpful, empathetic response (2-3 sentences):`;
  * @returns {Promise<string>} Generated journal entry
  */
 export const generateDailyJournal = async (journalData) => {
-  console.log(`📔 Generating daily journal entry...`);
+  safeLog.log(`📔 Generating daily journal entry...`);
 
   const {
     date,
@@ -1006,27 +1004,27 @@ GENERATE THE JOURNAL ENTRY NOW (start with 🌙, no other text before it):`;
     const response = await generateWithGemini(prompt);
     // Extract text from response object
     const journalEntry = typeof response === 'object' && response.text ? response.text : response;
-    console.log(`✅ Journal entry generated with Gemini`);
-    console.log(`📝 Journal preview: "${journalEntry.substring(0, 100)}..."`);
+    safeLog.log(`✅ Journal entry generated with Gemini`);
+    // Sensitive provider or user content is intentionally not logged.
     return journalEntry;
   } catch (geminiError) {
-    console.warn(`⚠️ Gemini failed for journal generation: ${geminiError.message}`);
+    safeLog.warn(`⚠️ Gemini failed for journal generation: ${geminiError.message}`);
     
     if (config.llama.enabled) {
-      console.log('🔄 Attempting LLaMA fallback for journal...');
+      safeLog.log('🔄 Attempting LLaMA fallback for journal...');
       try {
         const response = await generateWithLLaMA(prompt);
         // Extract text from response object
         const journalEntry = typeof response === 'object' && response.text ? response.text : response;
-        console.log(`✅ Journal entry generated with LLaMA`);
+        safeLog.log(`✅ Journal entry generated with LLaMA`);
         return journalEntry;
       } catch (llamaError) {
-        console.warn(`⚠️ LLaMA fallback failed: ${llamaError.message}`);
+        safeLog.warn(`⚠️ LLaMA fallback failed: ${llamaError.message}`);
       }
     }
 
     // Static fallback
-    console.log('📝 Using static fallback for journal entry...');
+    safeLog.log('📝 Using static fallback for journal entry...');
     return generateFallbackJournal(emotionSummary, timeProgression, topics, date);
   }
 };

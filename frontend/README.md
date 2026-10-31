@@ -1,3 +1,5 @@
+> Historical documentation: authentication and data-access sections below describe a retired setup. See `docs/DEPLOYMENT_ENV.md` at the repository root for the current deployment configuration.
+
 # 🎭 EmotionSense AI - Contextual Emotion Chat Platform
 
 A cutting-edge emotion detection and AI chat platform that analyzes emotions from text and voice, provides contextual AI responses, and maintains conversational memory across sessions.
@@ -61,8 +63,6 @@ A cutting-edge emotion detection and AI chat platform that analyzes emotions fro
    Create a `.env.local` file:
    ```env
    NEXT_PUBLIC_API_URL=http://localhost:8080
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
 
 3. **Run development server:**
@@ -313,8 +313,6 @@ npm run type-check # TypeScript compilation check
 NEXT_PUBLIC_API_URL=http://localhost:8080
 
 # Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # Optional: Development Settings
 NODE_ENV=development

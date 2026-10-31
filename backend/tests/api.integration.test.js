@@ -13,27 +13,35 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
-import { setTestEnv, mintToken, bearer } from './helpers.js';
+import { setTestEnv, bearer } from './helpers.js';
 
 const originalNodeEnv = process.env.NODE_ENV;
-if (originalNodeEnv === 'production') throw new Error('Refusing to run integration tests with NODE_ENV=production');
+if (String(originalNodeEnv || '').trim().toLowerCase() === 'production') throw new Error('Refusing to run integration tests with NODE_ENV=production');
 setTestEnv({
   RATE_LIMIT_AI_PER_MIN: '3',
   RATE_LIMIT_AUTH_FAILURES_PER_15MIN: '10000',
   // Hard isolation from every external provider: with no keys and email disabled,
   // no test can reach an LLM / TTS / STT / email / notification service even by mistake.
-  GEMINI_API_KEY: 'test-placeholder-not-a-real-key' /* keeps config's startup warning quiet; no call can be made */, GEMINI_API_KEY1: '', GEMINI_API_KEY2: '', GROQ_API_KEY: '',
-  GOOGLE_TTS_API_KEY: '', SARVAM_API_KEY: '', MURF_API_KEY: '', HUGGINGFACE_API_KEY: '', OPENAI_API_KEY: '',
-  EMAIL_ENABLED: 'false', GMAIL_EMAIL: '', GMAIL_APP_PASSWORD: '', ENABLE_EMERGENCY_ALERTS: 'false'
+  GEMINI_API_KEY: 'test-placeholder-not-a-real-key' /* keeps config's startup warning quiet; no call can be made */, GEMINI_API_KEY1: '', GEMINI_API_KEY2: '', GROQ_API_KEY: 'test-placeholder-not-a-real-key',
+  GOOGLE_TTS_API_KEY: '', SARVAM_API_KEY: '', MURF_API_KEY: '', HUGGINGFACE_API_KEY: '',
+  ENABLE_EMERGENCY_ALERTS: 'false'
 });
 
 const hasDb = !!process.env.DATABASE_URL;
 const { buildApp } = await import('../src/server.js');
 const prisma = hasDb ? (await import('../src/lib/prisma.js')).default : null;
 const app = buildApp();
+const { createAuthServices } = await import('../src/auth/index.js');
+const services = hasDb ? createAuthServices({prisma}) : null;
 
 const PREFIX = 'phase2a-test-';
 let A; let B; let tokA; let tokB; let sessionB; let activityB;
+const mintToken = async userId => {
+  if(!dbApproved) throw new Error('Database guard must pass before creating test sessions');
+  let user=await prisma.user.findUnique({where:{id:userId}});
+  if(!user) user=await prisma.user.create({data:{id:userId,email:`${PREFIX}${randomUUID()}@example.invalid`,passwordHash:'!'}});
+  return (await services.sessions.create({userId:user.id})).accessToken;
+};
 
 /**
  * Safety net: these tests WRITE rows (throwaway users + their data), so they run
@@ -45,19 +53,16 @@ let A; let B; let tokA; let tokB; let sessionB; let activityB;
  * Tests never run migrations, reset schemas or truncate: they only INSERT/DELETE
  * rows whose email is  phase2a-test-*@example.invalid.
  */
-const DEV = { branch: 'br-weathered-hall-b3dn9bub', endpoint: 'ep-square-boat-b3zomdvt', project: 'plain-wave-56430909' };
-const FORBIDDEN_BRANCHES = ['br-flat-tree-b3brt6b9' /* production */, 'br-lively-boat-b3vxk8t3' /* recovery */];
-const FORBIDDEN_ENDPOINTS = ['ep-snowy-term-b39utxb2' /* production */];
+const DEV = { branch: 'br-ancient-snow-b3si0kwz', endpoint: 'ep-cold-hill-b3lffx1r', project: 'fancy-union-28873755' };
 let dbApproved = false;
 const assertSafeTestDatabase = async () => {
-  const schema = new URL(process.env.DATABASE_URL).searchParams.get('schema') || 'public';
+  const url = new URL(process.env.DATABASE_URL);
+  const schema = url.searchParams.get('schema') || 'public';
+  if (url.hostname.split('.')[0].replace(/-pooler$/, '') !== DEV.endpoint || !url.hostname.endsWith('.aws.neon.tech')) throw new Error('Refusing unapproved database endpoint');
   const [id] = await prisma.$queryRawUnsafe(
     "select current_setting('neon.branch_id', true) as branch, current_setting('neon.endpoint_id', true) as endpoint, current_setting('neon.project_id', true) as project");
   const expected = process.env.EXPECTED_NEON_BRANCH_ID;
   if (!expected) throw new Error('Refusing to run: EXPECTED_NEON_BRANCH_ID must be set');
-  if (FORBIDDEN_BRANCHES.includes(id.branch) || FORBIDDEN_BRANCHES.includes(expected) || FORBIDDEN_ENDPOINTS.includes(id.endpoint)) {
-    throw new Error(`Refusing to run: ${id.branch}/${id.endpoint} is a production or recovery target`);
-  }
   if (id.branch !== DEV.branch || id.endpoint !== DEV.endpoint || id.project !== DEV.project) {
     throw new Error(`Refusing to run: database reports ${id.branch}/${id.endpoint}/${id.project}, expected the development branch`);
   }
@@ -96,6 +101,12 @@ const cleanup = async () => {
   await prisma.user.deleteMany({ where: { email: { startsWith: PREFIX, endsWith: '@example.invalid' } } });
 };
 const finish = async () => { await cleanup(); await prisma?.$disconnect(); };
+after(async()=>{
+  try {
+    await cleanup();
+    if(dbApproved){const [users,sessions,challenges]=await Promise.all([prisma.user.count(),prisma.authSession.count(),prisma.authChallenge.count()]);console.log(`FINAL_COUNTS users=${users} sessions=${sessions} challenges=${challenges}`);assert.equal(users+sessions+challenges,0)}
+  } finally {await prisma?.$disconnect()}
+});
 
 describe('public surface', () => {
   test('GET /api/health and / are public and minimal', async () => {
@@ -198,6 +209,22 @@ describe('every protected endpoint rejects unauthenticated callers (401)', () =>
 describe('ownership / IDOR (user A attacking user B)', { skip: !hasDb && 'DATABASE_URL not set' }, () => {
   before(seed);
   after(finish);
+
+  test('profile and emotion history are scoped to the authenticated user', async () => {
+    const profile = await request(app).get('/api/profile').set(bearer(tokA));
+    assert.equal(profile.status, 200); assert.equal(profile.body.id, A.id);
+    assert.equal((await request(app).get('/api/profile').query({userId:B.id}).set(bearer(tokA))).status, 403);
+    assert.equal((await request(app).patch('/api/profile').send({userId:B.id,fullName:'unauthorized'}).set(bearer(tokA))).status, 403);
+    assert.equal((await prisma.user.findUnique({where:{id:B.id},select:{fullName:true}})).fullName, B.fullName);
+    assert.equal((await request(app).patch('/api/profile').send({fullName:'Updated'}).set(bearer(tokA))).status, 200);
+    const privateMessage = await prisma.message.create({data:{userId:B.id,sessionId:sessionB.id,role:'user',content:'private',emotion:'sadness'}});
+    const history = await request(app).get('/api/messages/emotion-history').set(bearer(tokA));
+    assert.equal(history.status, 200); assert.ok(history.body.messages.every(m => m.id !== privateMessage.id));
+    const ownHistory = await request(app).get('/api/messages/emotion-history').set(bearer(tokB));
+    assert.ok(ownHistory.body.messages.some(m => m.id === privateMessage.id));
+    assert.equal((await request(app).get('/api/messages/emotion-history').query({userId:B.id}).set(bearer(tokA))).status, 403);
+    await prisma.message.delete({where:{id:privateMessage.id}});
+  });
 
   test('chat: supplying B as userId is rejected, never silently honoured', async () => {
     await request(app).get(`/api/chat/sessions?userId=${B.id}`).set(bearer(tokA)).expect(403);

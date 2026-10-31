@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Text Analysis Routes
  * Handles text-based emotion detection requests with multi-language support and emergency contact alerts
@@ -51,10 +52,10 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
     });
   }
 
-  console.log(`🔤 Processing text emotion analysis for user: ${userId || 'anonymous'}`);
+  safeLog.log(`🔤 Processing text emotion analysis for user: ${userId || 'anonymous'}`);
 
   // Language detection and translation
-  console.log(`🌐 Detecting language and translating if needed...`);
+  safeLog.log(`🌐 Detecting language and translating if needed...`);
   const translationResult = await translateToEnglishIfNeeded(text);
   
   const {
@@ -65,18 +66,17 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
     translationFailed
   } = translationResult;
 
-  console.log(`✅ Language detection: ${detectedLanguage} (${getLanguageName(detectedLanguage)})`);
+  safeLog.log(`✅ Language detection: ${detectedLanguage} (${getLanguageName(detectedLanguage)})`);
   
   if (needsTranslation) {
-    console.log(`🔄 Text translated for processing: "${englishText}"`);
   }
 
   if (usedTranslationFallback) {
-    console.log(`⚠️ Used Gemini fallback for translation`);
+    safeLog.log(`⚠️ Used Gemini fallback for translation`);
   }
 
   if (translationFailed) {
-    console.log(`⚠️ Translation failed, proceeding with original text`);
+    safeLog.log(`⚠️ Translation failed, proceeding with original text`);
   }
 
   // Analyze text emotion using English text
@@ -85,10 +85,9 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
   // Check for high-risk keywords (if userId provided)
   if (userId && englishText && englishText.trim().length > 0) {
     const riskAnalysis = detectRiskLevel(englishText);
-    console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
+    safeLog.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
     
     if (riskAnalysis.matchedKeywords.length > 0) {
-      console.log(`⚠️ Detected keywords: ${riskAnalysis.matchedKeywords.join(', ')}`);
     }
 
     // Handle emergency alert if high or medium risk detected
@@ -98,10 +97,10 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
         let alertSent = false;
         
         if (emergencyContact && emergencyContact.notify_enabled) {
-          console.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
+          safeLog.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
           
           if (shouldTriggerEmergencyAlert(emotionResult.emotion, riskAnalysis.riskLevel)) {
-            console.log(`📧 Attempting to send emergency alert via email (text mode)...`);
+            safeLog.log(`📧 Attempting to send emergency alert via email (text mode)...`);
             
             // Fetch user profile from Supabase to get accurate user information
             const userProfile = await getUserProfile(userId);
@@ -109,19 +108,11 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
             // Prepare user data for emergency alert
             let userData = {
               id: userId,
-              full_name: userProfile?.full_name || userProfile?.name || 'User',
+              full_name: userProfile?.full_name || userProfile?.name || null,
               email: userProfile?.email || userProfile?.user_email || userProfile?.auth_email || 'Not available'
             };
             
-            console.log(`👤 User data for alert: ${userData.full_name} (${userData.email})`);
-            console.log(`🔍 User profile debug:`, { 
-              profile_exists: !!userProfile,
-              available_fields: userProfile ? Object.keys(userProfile) : 'none',
-              email_field: userProfile?.email,
-              user_email_field: userProfile?.user_email,
-              auth_email_field: userProfile?.auth_email
-            });
-            console.log(`📮 Sending alert to emergency contact: ${emergencyContact.contact_email}`);
+
             
             // Send email alert via Nodemailer to the emergency contact's email
             alertSent = await sendEmergencyAlert(
@@ -131,12 +122,6 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
               englishText,
               riskAnalysis.riskLevel
             );
-            
-            if (alertSent) {
-              console.log(`✅ Emergency alert email sent successfully to ${emergencyContact.contact_email} (text mode)`);
-            } else {
-              console.warn(`⚠️ Failed to send emergency alert email to ${emergencyContact.contact_email}`);
-            }
           }
         }
         
@@ -150,7 +135,7 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
         );
         
       } catch (alertError) {
-        console.error(`⚠️ Error handling emergency alert (text mode):`, alertError.message);
+        safeLog.error('Emergency alert processing failed');
         // Don't fail the text analysis request if alert handling fails
       }
     }

@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Insights Storage Service
  * Handles all database operations for emotion insights, daily journals, and weekly summaries
@@ -141,7 +142,7 @@ async function getWeeklyInsights(userId, limit = 4) {
       updatedAt: row.updatedAt
     }));
   } catch (error) {
-    console.error('Error fetching weekly insights:', error);
+    safeLog.error('Error fetching weekly insights:', error);
     throw error;
   }
 }
@@ -233,7 +234,7 @@ async function getUserStats(userId) {
       emotionDistribution: emotionCounts
     };
   } catch (error) {
-    console.error('Error fetching user stats:', error);
+    safeLog.error('Error fetching user stats:', error);
     return {
       trackedDays: 0,
       firstChatDate: null,
@@ -372,7 +373,7 @@ async function upsertDailyJournal(userId, date, data) {
 
     return journalGenerator._toJournalShape(userId, date, saved);
   } catch (error) {
-    console.error('Error upserting daily journal:', error);
+    safeLog.error('Error upserting daily journal:', error);
     throw error;
   }
 }
@@ -404,7 +405,7 @@ async function upsertWeeklyInsight(userId, weekStart, data) {
 
     return toWeeklyShape(userId, saved);
   } catch (error) {
-    console.error('Error upserting weekly insight:', error);
+    safeLog.error('Error upserting weekly insight:', error);
     throw error;
   }
 }

@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Voice Service Module
  * Handles speech-to-text, audio feature extraction, and voice emotion detection
@@ -39,9 +40,9 @@ const convertToWav = async (inputPath) => {
   return new Promise((resolve, reject) => {
     const outputPath = inputPath.replace(/\.[^.]+$/, '.wav');
     
-    console.log(`🎵 Converting audio to WAV format...`);
-    console.log(`   Input: ${inputPath}`);
-    console.log(`   Output: ${outputPath}`);
+    safeLog.log(`🎵 Converting audio to WAV format...`);
+    safeLog.log(`   Input: ${inputPath}`);
+    safeLog.log(`   Output: ${outputPath}`);
     
     ffmpeg(inputPath)
       .toFormat('wav')
@@ -49,11 +50,11 @@ const convertToWav = async (inputPath) => {
       .audioFrequency(16000) // Standard sample rate for speech recognition
       .audioChannels(1) // Mono
       .on('end', () => {
-        console.log(`✅ Audio converted to WAV successfully`);
+        safeLog.log(`✅ Audio converted to WAV successfully`);
         resolve(outputPath);
       })
       .on('error', (err) => {
-        console.error(`❌ FFmpeg conversion error:`, err.message);
+        safeLog.error(`❌ FFmpeg conversion error:`, err.message);
         reject(new Error(`Audio conversion failed: ${err.message}`));
       })
       .save(outputPath);
@@ -65,7 +66,7 @@ const convertToWav = async (inputPath) => {
  * Supports multiple languages including English and Hindi
  */
 export const speechToTextGroq = async (audioPath) => {
-  console.log(`🎙️ Converting speech to text using Groq Whisper...`);
+  safeLog.log(`🎙️ Converting speech to text using Groq Whisper...`);
   
   let wavPath = audioPath;
   let tempWavFile = null;
@@ -85,13 +86,13 @@ export const speechToTextGroq = async (audioPath) => {
     if (fileStats.size === 0) {
       throw new Error(`Audio file is empty (0 bytes): ${audioPath}`);
     }
-    console.log(`📁 Audio file size: ${fileStats.size} bytes`);
+    safeLog.log(`📁 Audio file size: ${fileStats.size} bytes`);
 
     // Convert WebM or other formats to WAV for better Groq compatibility
     if (audioPath.toLowerCase().endsWith('.webm') || 
         audioPath.toLowerCase().endsWith('.mp3') ||
         audioPath.toLowerCase().endsWith('.ogg')) {
-      console.log(`🔄 Converting audio format to WAV for Groq compatibility...`);
+      safeLog.log(`🔄 Converting audio format to WAV for Groq compatibility...`);
       tempWavFile = audioPath.replace(/\.[^.]+$/, '_converted.wav');
       wavPath = await convertToWav(audioPath);
       
@@ -100,13 +101,13 @@ export const speechToTextGroq = async (audioPath) => {
         throw new Error(`WAV conversion failed: output file not created`);
       }
       const wavStats = fs.statSync(wavPath);
-      console.log(`✅ WAV file created: ${wavStats.size} bytes`);
+      safeLog.log(`✅ WAV file created: ${wavStats.size} bytes`);
     }
 
     // Create transcription with auto language detection
     const sttModel = await getGroqSttModel();
-    console.log(`🌐 Calling Groq API with model: ${sttModel}`);
-    console.log(`🌐 Language detection: ${config.stt.groq.language ? config.stt.groq.language : 'AUTO-DETECT (All languages)'}`);
+    safeLog.log(`🌐 Calling Groq API with model: ${sttModel}`);
+    safeLog.log(`🌐 Language detection: ${config.stt.groq.language ? config.stt.groq.language : 'AUTO-DETECT (All languages)'}`);
 
     // Build transcription options - only include language if explicitly set
     const transcriptionOptions = {
@@ -140,9 +141,8 @@ const transcription = await groq.audio.transcriptions.create(transcriptionOption
     // Get detected language from Whisper response
     const detectedLanguage = transcription.language || config.stt.groq.language || 'en';
     
-    console.log(`✅ Groq transcription: "${transcript}"`);
-    console.log(`   Confidence: ${(confidence * 100).toFixed(1)}%`);
-    console.log(`   Detected Language: ${detectedLanguage} (auto-detected by Whisper)`);
+    safeLog.log(`   Confidence: ${(confidence * 100).toFixed(1)}%`);
+    safeLog.log(`   Detected Language: ${detectedLanguage} (auto-detected by Whisper)`);
 
     return {
       transcript: transcript.trim(),
@@ -156,8 +156,8 @@ const transcription = await groq.audio.transcriptions.create(transcriptionOption
     };
 
   } catch (error) {
-    console.error('❌ Groq STT Error:', error.message);
-    console.error('   Stack:', error.stack);
+    safeLog.error('❌ Groq STT Error:', error.message);
+    safeLog.error('   Stack:', error.stack);
     
     // Return empty transcript on error
     return {
@@ -171,9 +171,9 @@ const transcription = await groq.audio.transcriptions.create(transcriptionOption
     if (tempWavFile && fs.existsSync(tempWavFile)) {
       try {
         fs.unlinkSync(tempWavFile);
-        console.log(`🧹 Cleaned up temporary WAV file`);
+        safeLog.log(`🧹 Cleaned up temporary WAV file`);
       } catch (err) {
-        console.warn(`⚠️ Failed to clean up temp file: ${err.message}`);
+        safeLog.warn(`⚠️ Failed to clean up temp file: ${err.message}`);
       }
     }
   }
@@ -197,7 +197,7 @@ const convertToWav_REMOVED = async (inputPath) => {
  * This would typically use Librosa (Python) or meyda/web-audio-api (JS)
  */
 export const extractAudioFeatures = async (audioPath) => {
-  console.log(`🎵 Extracting audio features...`);
+  safeLog.log(`🎵 Extracting audio features...`);
   
   // TODO: Implement actual feature extraction
   // Options:
@@ -234,13 +234,13 @@ export const detectEmotionFromVoice = async (audioPath) => {
       const scriptPath = path.resolve('./src/voice-service/huggingface_emotion.py');
 
       if (!fs.existsSync(scriptPath)) {
-        console.warn(`⚠️  HuggingFace Python script not found at: ${scriptPath}`);
+        safeLog.warn(`⚠️  HuggingFace Python script not found at: ${scriptPath}`);
         resolve({ emotion: 'neutral', confidence: 0.5, scores: { neutral: 0.5 }, useFallback: true });
         return;
       }
 
-      console.log(`🧠 Running HuggingFace local model inference...`);
-      console.log(`   Model: ${model}`);
+      safeLog.log(`🧠 Running HuggingFace local model inference...`);
+      safeLog.log(`   Model: ${model}`);
 
       // Use full Python path to ensure correct environment
       const pythonPath = process.platform === 'win32' 
@@ -268,7 +268,7 @@ export const detectEmotionFromVoice = async (audioPath) => {
           if (code === 0 && output) {
             const result = JSON.parse(output.trim());
             if (result.success) {
-              console.log(`✅ HuggingFace detected: ${result.emotion} (${(result.confidence * 100).toFixed(1)}%)`);
+              safeLog.log(`✅ HuggingFace detected: ${result.emotion} (${(result.confidence * 100).toFixed(1)}%)`);
               resolve({
                 emotion: result.emotion,
                 confidence: result.confidence,
@@ -277,23 +277,22 @@ export const detectEmotionFromVoice = async (audioPath) => {
               });
               return;
             } else {
-              console.warn(`⚠️  HuggingFace model error: ${result.error}`);
+              safeLog.warn(`⚠️  HuggingFace model error: ${result.error}`);
             }
           }
           
           // Failed - return fallback marker
-          console.warn(`⚠️  HuggingFace model failed, will use fallback`);
+          safeLog.warn(`⚠️  HuggingFace model failed, will use fallback`);
           if (errorOutput) {
             const errLines = errorOutput.split('\n').filter(line => 
               !line.includes('Xet Storage') && 
               !line.includes('hf_xet') &&
               line.trim().length > 0
             ).join('\n');
-            if (errLines) console.warn(`   Python stderr: ${errLines.substring(0, 500)}`);
           }
           resolve({ emotion: 'neutral', confidence: 0.5, scores: { neutral: 0.5 }, useFallback: true });
         } catch (e) {
-          console.warn(`⚠️  HuggingFace parsing error: ${e.message}`);
+          safeLog.warn(`⚠️  HuggingFace parsing error: ${e.message}`);
           resolve({ emotion: 'neutral', confidence: 0.5, scores: { neutral: 0.5 }, useFallback: true });
         }
       });
@@ -301,12 +300,12 @@ export const detectEmotionFromVoice = async (audioPath) => {
       // Timeout after 180 seconds (model download can take time first run)
       setTimeout(() => {
         python.kill();
-        console.warn(`⚠️  HuggingFace model timeout (3 minutes exceeded)`);
+        safeLog.warn(`⚠️  HuggingFace model timeout (3 minutes exceeded)`);
         resolve({ emotion: 'neutral', confidence: 0.5, scores: { neutral: 0.5 }, useFallback: true });
       }, 180000);
 
     } catch (error) {
-      console.warn(`⚠️  HuggingFace model error: ${error.message}`);
+      safeLog.warn(`⚠️  HuggingFace model error: ${error.message}`);
       resolve({ emotion: 'neutral', confidence: 0.5, scores: { neutral: 0.5 }, useFallback: true });
     }
   });
@@ -320,7 +319,7 @@ export const detectEmotionCustomModel = async (audioPath) => {
   return new Promise((resolve) => {
     try {
       if (!config.customVoiceModel.enabled) {
-        console.log(`⚠️  Custom model disabled in config`);
+        safeLog.log(`⚠️  Custom model disabled in config`);
         resolve(null);
         return;
       }
@@ -330,18 +329,18 @@ export const detectEmotionCustomModel = async (audioPath) => {
       const emotionLabels = config.customVoiceModel.emotionLabels.join(',');
 
       if (!fs.existsSync(modelPath)) {
-        console.warn(`⚠️  Custom model not found at: ${modelPath}`);
+        safeLog.warn(`⚠️  Custom model not found at: ${modelPath}`);
         resolve(null);
         return;
       }
 
       if (!fs.existsSync(scriptPath)) {
-        console.warn(`⚠️  Python inference script not found at: ${scriptPath}`);
+        safeLog.warn(`⚠️  Python inference script not found at: ${scriptPath}`);
         resolve(null);
         return;
       }
 
-      console.log(`🤖 Running custom BiLSTM model inference...`);
+      safeLog.log(`🤖 Running custom BiLSTM model inference...`);
 
       // Use full Python path to ensure correct environment
       const pythonPath = process.platform === 'win32' 
@@ -369,7 +368,7 @@ export const detectEmotionCustomModel = async (audioPath) => {
           if (code === 0 && output) {
             const result = JSON.parse(output.trim());
             if (result.success) {
-              console.log(`✅ Custom model detected: ${result.emotion} (${(result.confidence * 100).toFixed(1)}%)`);
+              safeLog.log(`✅ Custom model detected: ${result.emotion} (${(result.confidence * 100).toFixed(1)}%)`);
               resolve({
                 emotion: result.emotion,
                 confidence: result.confidence,
@@ -378,15 +377,15 @@ export const detectEmotionCustomModel = async (audioPath) => {
               });
               return;
             } else {
-              console.warn(`⚠️  Custom model error: ${result.error}`);
+              safeLog.warn(`⚠️  Custom model error: ${result.error}`);
             }
           }
           resolve(null);
         } catch (e) {
-          console.warn(`⚠️  Custom model parsing error: ${e.message}`);
+          safeLog.warn(`⚠️  Custom model parsing error: ${e.message}`);
           if (errorOutput) {
             const errLines = errorOutput.split('\n').slice(0, 5).join('\n');
-            if (errLines) console.warn(`   Python stderr: ${errLines}`);
+            if (errLines) safeLog.warn(`   Python stderr: ${errLines}`);
           }
           resolve(null);
         }
@@ -395,12 +394,12 @@ export const detectEmotionCustomModel = async (audioPath) => {
       // Timeout after 45 seconds (increased for model loading)
       setTimeout(() => {
         python.kill();
-        console.warn(`⚠️  Custom model timeout (45 seconds exceeded)`);
+        safeLog.warn(`⚠️  Custom model timeout (45 seconds exceeded)`);
         resolve(null);
       }, 45000);
 
     } catch (error) {
-      console.warn(`⚠️  Custom model error: ${error.message}`);
+      safeLog.warn(`⚠️  Custom model error: ${error.message}`);
       resolve(null);
     }
   });
@@ -423,7 +422,7 @@ const combineEmotions = (results) => {
   }
 
   // Weighted average approach
-  console.log(`🔀 Combining ${validResults.length} emotion predictions...`);
+  safeLog.log(`🔀 Combining ${validResults.length} emotion predictions...`);
   
   // Get all unique emotion labels
   const allEmotions = new Set();
@@ -457,8 +456,8 @@ const combineEmotions = (results) => {
     }
   });
 
-  console.log(`✅ Combined result: ${maxEmotion} (${(maxScore * 100).toFixed(1)}%)`);
-  console.log(`   Models used: ${validResults.map(r => r.model).join(' + ')}`);
+  safeLog.log(`✅ Combined result: ${maxEmotion} (${(maxScore * 100).toFixed(1)}%)`);
+  safeLog.log(`   Models used: ${validResults.map(r => r.model).join(' + ')}`);
 
   return {
     emotion: maxEmotion,
@@ -474,15 +473,14 @@ const combineEmotions = (results) => {
  * Flow: Groq Whisper → Text Emotion (BiLSTM + HuggingFace) → Voice Emotion (HuggingFace)
  */
 export const analyzeVoiceEmotion = async (audioPath) => {
-  console.log(`🎤 Analyzing voice emotion from: ${audioPath}`);
+  safeLog.log(`🎤 Analyzing voice emotion from: ${audioPath}`);
   
   // Step 1: Speech-to-Text using Groq Whisper API
   let transcriptResult;
   try {
     transcriptResult = await speechToTextGroq(audioPath);
-    console.log(`✅ Transcript: "${transcriptResult.transcript}"`);
   } catch (error) {
-    console.error(`❌ STT Error:`, error.message);
+    safeLog.error(`❌ STT Error:`, error.message);
     transcriptResult = { 
       transcript: "", 
       confidence: 0,
@@ -492,30 +490,30 @@ export const analyzeVoiceEmotion = async (audioPath) => {
   
   // Step 2: Extract audio features
   const audioFeatures = await extractAudioFeatures(audioPath);
-  console.log(`✅ Audio features extracted`);
+  safeLog.log(`✅ Audio features extracted`);
   
   // Step 3: Analyze text emotion from transcript (BiLSTM + HuggingFace)
   let textEmotionResult = null;
   if (transcriptResult.transcript && transcriptResult.transcript.length > 0) {
     try {
-      console.log(`📝 Analyzing text emotion from transcript using BiLSTM + HuggingFace...`);
+      safeLog.log(`📝 Analyzing text emotion from transcript using BiLSTM + HuggingFace...`);
       const { analyzeTextEmotion } = await import('../text-service/index.js');
       textEmotionResult = await analyzeTextEmotion(transcriptResult.transcript);
-      console.log(`✅ Text emotion: ${textEmotionResult.emotion} (confidence: ${textEmotionResult.confidence.toFixed(2)})`);
+      safeLog.log(`✅ Text emotion: ${textEmotionResult.emotion} (confidence: ${textEmotionResult.confidence.toFixed(2)})`);
       if (textEmotionResult.models_used) {
-        console.log(`   Models used: ${textEmotionResult.models_used.join(' + ')}`);
+        safeLog.log(`   Models used: ${textEmotionResult.models_used.join(' + ')}`);
       }
     } catch (textError) {
-      console.error(`❌ Text emotion analysis failed:`, textError.message);
+      safeLog.error(`❌ Text emotion analysis failed:`, textError.message);
       textEmotionResult = null;
     }
   }
   
   // Step 4: Attempt voice emotion detection with HuggingFace model
-  console.log(`🎙️ Attempting voice emotion detection...`);
+  safeLog.log(`🎙️ Attempting voice emotion detection...`);
   
   const huggingfaceResult = await detectEmotionFromVoice(audioPath).catch(err => {
-    console.warn(`⚠️  HuggingFace voice model failed: ${err.message}`);
+    safeLog.warn(`⚠️  HuggingFace voice model failed: ${err.message}`);
     return null;
   });
 
@@ -547,11 +545,11 @@ export const analyzeVoiceEmotion = async (audioPath) => {
   if (validResults.length > 0) {
     // We have at least one result - combine them
     emotionResult = combineEmotions(validResults);
-    console.log(`✅ Final emotion result: ${emotionResult.emotion} (confidence: ${emotionResult.confidence.toFixed(2)})`);
-    console.log(`   Combined from: ${validResults.map(r => r.source).join(' + ')}`);
+    safeLog.log(`✅ Final emotion result: ${emotionResult.emotion} (confidence: ${emotionResult.confidence.toFixed(2)})`);
+    safeLog.log(`   Combined from: ${validResults.map(r => r.source).join(' + ')}`);
   } else {
     // No valid results
-    console.warn(`⚠️  No emotion detection method succeeded, using neutral`);
+    safeLog.warn(`⚠️  No emotion detection method succeeded, using neutral`);
     emotionResult = { 
       emotion: 'neutral', 
       confidence: 0.5, 
