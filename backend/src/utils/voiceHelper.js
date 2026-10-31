@@ -1,3 +1,4 @@
+import safeLog from './logger.js';
 /**
  * Voice Helper Module
  * Handles Speech-to-Text (STT) and Text-to-Speech (TTS) operations
@@ -30,7 +31,7 @@ const __dirname = path.dirname(__filename);
  */
 export async function googleSTT(audioBuffer, languageCode = 'en-US') {
   try {
-    console.log(`🎤 Processing audio with Google STT (${languageCode})...`);
+    safeLog.log(`🎤 Processing audio with Google STT (${languageCode})...`);
 
     // Note: Requires GOOGLE_APPLICATION_CREDENTIALS environment variable
     // or GOOGLE_STT_API_KEY set in .env
@@ -83,7 +84,7 @@ export async function googleSTT(audioBuffer, languageCode = 'en-US') {
       provider: 'google',
     };
   } catch (error) {
-    console.error('❌ Google STT failed:', error.message);
+    safeLog.error('❌ Google STT failed:', error.message);
     throw error;
   }
 }
@@ -103,7 +104,7 @@ export async function googleTTS(
   voiceName = 'en-US-Neural2-C'
 ) {
   try {
-    console.log(`🔊 Converting text to speech with Google TTS (${languageCode})...`);
+    safeLog.log(`🔊 Converting text to speech with Google TTS (${languageCode})...`);
 
     const apiKey = config.googleCloud?.ttsApiKey || process.env.GOOGLE_TTS_API_KEY;
 
@@ -158,7 +159,7 @@ export async function googleTTS(
     // Generate public URL (you'll need to configure this based on your deployment)
     const audioUrl = `${process.env.API_BASE_URL || 'http://localhost:8080'}/audio/${audioFileName}`;
 
-    console.log(`✅ TTS conversion complete: ${audioFileName}`);
+    safeLog.log(`✅ TTS conversion complete: ${audioFileName}`);
 
     return {
       audioUrl: audioUrl,
@@ -168,7 +169,7 @@ export async function googleTTS(
       fileName: audioFileName,
     };
   } catch (error) {
-    console.error('❌ Google TTS failed:', error.message);
+    safeLog.error('❌ Google TTS failed:', error.message);
     throw error;
   }
 }
@@ -182,7 +183,7 @@ export async function googleTTS(
  */
 export async function piperTTS(text) {
   return new Promise((resolve, reject) => {
-    console.log(`🔊 Converting text to speech using Piper TTS (offline)...`);
+    safeLog.log(`🔊 Converting text to speech using Piper TTS (offline)...`);
 
     const outputPath = path.join(
       __dirname,
@@ -251,14 +252,14 @@ export async function piperTTS(text) {
         const fileName = path.basename(outputPath);
         const audioUrl = `${process.env.API_BASE_URL || 'http://localhost:8080'}/audio/${fileName}`;
 
-        console.log(`✅ Piper TTS conversion complete: ${fileName}`);
+        safeLog.log(`✅ Piper TTS conversion complete: ${fileName}`);
 
         // Clean up after sending response (async, don't wait)
         setTimeout(() => {
           try {
             fs.unlinkSync(outputPath);
           } catch (e) {
-            console.warn(`⚠️ Failed to clean up temp file: ${outputPath}`);
+            safeLog.warn(`⚠️ Failed to clean up temp file: ${outputPath}`);
           }
         }, 5000);
 
@@ -302,7 +303,7 @@ async function getAudioDuration(audioPath) {
 
       ffprobe.on('close', (code) => {
         if (code !== 0) {
-          console.warn(`⚠️ Failed to get audio duration, returning 0`);
+          safeLog.warn(`⚠️ Failed to get audio duration, returning 0`);
           resolve(0);
           return;
         }
@@ -311,7 +312,7 @@ async function getAudioDuration(audioPath) {
         resolve(isNaN(duration) ? 0 : Math.round(duration * 1000) / 1000);
       });
     } catch (error) {
-      console.warn(`⚠️ FFprobe not available, skipping duration calculation`);
+      safeLog.warn(`⚠️ FFprobe not available, skipping duration calculation`);
       resolve(0);
     }
   });
@@ -331,7 +332,7 @@ export async function speechToText(audioBuffer, language = 'en-US') {
     // Primary: Google STT
     return await googleSTT(audioBuffer, language);
   } catch (googleError) {
-    console.warn('⚠️ Google STT failed, frontend should use Web Speech API:', googleError.message);
+    safeLog.warn('⚠️ Google STT failed, frontend should use Web Speech API:', googleError.message);
     throw {
       fallbackToWebSpeech: true,
       error: googleError.message,
@@ -355,7 +356,7 @@ export async function textToSpeech(text, language = 'en-US') {
     // Import the updated TTS service
     const { generateSpeech } = await import('../tts-service/index.js');
     
-    console.log(`🔊 Converting text to speech using TTS service (language: ${language})...`);
+    safeLog.log(`🔊 Converting text to speech using TTS service (language: ${language})...`);
     // Pass language to TTS service for multi-language support
     const result = await generateSpeech(text, null, language);
     
@@ -380,7 +381,7 @@ export async function textToSpeech(text, language = 'en-US') {
     // Generate public URL
     const audioUrl = `${process.env.API_BASE_URL || 'http://localhost:8080'}/audio/${fileName}`;
     
-    console.log(`✅ TTS conversion complete: ${audioUrl} (${result.provider})`);
+    safeLog.log(`✅ TTS conversion complete: ${audioUrl} (${result.provider})`);
     
     return {
       audioUrl: audioUrl,
@@ -390,7 +391,7 @@ export async function textToSpeech(text, language = 'en-US') {
       format: result.format
     };
   } catch (error) {
-    console.error('❌ TTS service failed:', error.message);
+    safeLog.error('❌ TTS service failed:', error.message);
     throw error;
   }
 }
@@ -406,10 +407,10 @@ export async function textToSpeech(text, language = 'en-US') {
  */
 export async function processVoiceMessage(audioBuffer, userId, language = 'en-US') {
   try {
-    console.log(`🎙️ Processing voice message for user: ${userId}`);
+    safeLog.log(`🎙️ Processing voice message for user: ${userId}`);
 
     // Step 1: Convert speech to text (STT)
-    console.log(`📝 Converting speech to text...`);
+    safeLog.log(`📝 Converting speech to text...`);
     const sttResult = await speechToText(audioBuffer, language);
 
 
@@ -421,7 +422,7 @@ export async function processVoiceMessage(audioBuffer, userId, language = 'en-US
       audioBuffer: audioBuffer,
     };
   } catch (error) {
-    console.error('❌ Voice message processing failed:', error);
+    safeLog.error('❌ Voice message processing failed:', error);
     throw error;
   }
 }
@@ -456,7 +457,7 @@ export async function listTempAudioFiles() {
     const files = fs.readdirSync(tempAudioDir);
     return files.map((file) => path.join(tempAudioDir, file));
   } catch (error) {
-    console.error('❌ Failed to list audio files:', error.message);
+    safeLog.error('❌ Failed to list audio files:', error.message);
     return [];
   }
 }
@@ -481,17 +482,17 @@ export async function cleanupOldAudioFiles(maxAgeHours = 24) {
       if (age > maxAgeMs) {
         fs.unlinkSync(filePath);
         deletedCount++;
-        console.log(`🗑️ Deleted old audio file: ${path.basename(filePath)}`);
+        safeLog.log(`🗑️ Deleted old audio file: ${path.basename(filePath)}`);
       }
     }
 
     if (deletedCount > 0) {
-      console.log(`✅ Cleanup complete: deleted ${deletedCount} files`);
+      safeLog.log(`✅ Cleanup complete: deleted ${deletedCount} files`);
     }
 
     return deletedCount;
   } catch (error) {
-    console.error('❌ Cleanup failed:', error.message);
+    safeLog.error('❌ Cleanup failed:', error.message);
     return 0;
   }
 }

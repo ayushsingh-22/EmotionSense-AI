@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 import { safePublicMessage } from '../utils/publicError.js';
 import express from 'express';
 const router = express.Router();
@@ -48,7 +49,7 @@ router.post('/', validate({ body: activityCreateBody }), async (req, res) => {
     });
 
   } catch (error) {
-    console.error('POST /api/activity error:', error);
+    safeLog.error('POST /api/activity error:', error);
     res.status(400).json({
       success: false,
       error: safePublicMessage(error, 'Invalid request'),
@@ -107,7 +108,7 @@ router.get('/history/:userId', validate({ query: limitQuery }), async (req, res)
     });
 
   } catch (error) {
-    console.error('GET /api/activity/history/:userId error:', error);
+    safeLog.error('GET /api/activity/history/:userId error:', error);
     res.status(500).json({
       success: false,
       error: safePublicMessage(error, 'Internal server error'),
@@ -138,7 +139,7 @@ router.get('/session/:sessionId', validate({ params: sessionIdParams, query: lim
     });
 
   } catch (error) {
-    console.error('GET /api/activity/session/:sessionId error:', error);
+    safeLog.error('GET /api/activity/session/:sessionId error:', error);
     res.status(500).json({
       success: false,
       error: safePublicMessage(error, 'Internal server error'),
@@ -169,7 +170,7 @@ router.get('/session/:sessionId/messages', validate({ params: sessionIdParams, q
     });
 
   } catch (error) {
-    console.error('GET /api/activity/session/:sessionId/messages error:', error);
+    safeLog.error('GET /api/activity/session/:sessionId/messages error:', error);
     res.status(500).json({
       success: false,
       error: safePublicMessage(error, 'Internal server error'),
@@ -207,7 +208,7 @@ router.get('/latest/:userId', validate({ query: limitQuery }), async (req, res) 
     });
 
   } catch (error) {
-    console.error('GET /api/activity/latest/:userId error:', error);
+    safeLog.error('GET /api/activity/latest/:userId error:', error);
     res.status(500).json({
       success: false,
       error: safePublicMessage(error, 'Internal server error'),
@@ -252,7 +253,7 @@ router.get('/insights/:userId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('GET /api/activity/insights/:userId error:', error);
+    safeLog.error('GET /api/activity/insights/:userId error:', error);
     res.status(500).json({
       success: false,
       error: safePublicMessage(error, 'Internal server error'),
@@ -286,7 +287,7 @@ router.get('/stats/:userId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('GET /api/activity/stats/:userId error:', error);
+    safeLog.error('GET /api/activity/stats/:userId error:', error);
     res.status(500).json({
       success: false,
       error: safePublicMessage(error, 'Internal server error'),
@@ -321,7 +322,7 @@ router.put('/:activityId', validate({ params: activityIdParams }), async (req, r
     });
 
   } catch (error) {
-    console.error('PUT /api/activity/:activityId error:', error);
+    safeLog.error('PUT /api/activity/:activityId error:', error);
     res.status(500).json({
       success: false,
       error: safePublicMessage(error, 'Internal server error'),
@@ -349,7 +350,7 @@ router.delete('/:activityId', validate({ params: activityIdParams }), async (req
     });
 
   } catch (error) {
-    console.error('DELETE /api/activity/:activityId error:', error);
+    safeLog.error('DELETE /api/activity/:activityId error:', error);
     res.status(500).json({
       success: false,
       error: safePublicMessage(error, 'Internal server error'),
@@ -379,7 +380,7 @@ router.get('/types', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('GET /api/activity/types error:', error);
+    safeLog.error('GET /api/activity/types error:', error);
     res.status(500).json({
       success: false,
       error: safePublicMessage(error, 'Internal server error'),

@@ -1,4 +1,5 @@
-import { createResendEmail } from '../auth/emailService.js';
+import safeLog from './logger.js';
+import { createEmailAdapter } from '../auth/emailService.js';
 
 const escapeHtml = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -20,20 +21,20 @@ export function createEmergencySender({ email, sleep = ms => new Promise(resolve
     const to=contact?.contact_email || contact?.email;
     if (!to) return false;
     const text=emergencyAlertText(user);
-    for (let attempt=0;attempt<3;attempt++) {
+    for (let attempt=0;attempt<(email.handlesRetries ? 1 : 3);attempt++) {
       let timer;
       try {
-        const result=await Promise.race([email.send({to,subject:'MindHaven check-in',text}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),timeoutMs);timer.unref?.()})]);
+        const result = email.handlesRetries ? await email.send({to,subject:'MindHaven check-in',text}) : await Promise.race([email.send({to,subject:'MindHaven check-in',text}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),timeoutMs);timer.unref?.()})]);
         if (result?.accepted === true) return true;
       } catch { /* Retry without recording provider details. */ }
       finally { clearTimeout(timer); }
-      if (attempt<2) await sleep(250 * 2 ** attempt);
+      if (!email.handlesRetries && attempt<2) await sleep(250 * 2 ** attempt);
     }
-    console.error('Emergency alert delivery failed');
+    safeLog.error('Emergency alert delivery failed');
     return false;
   };
 }
 
 export async function sendEmergencyAlert(user, contact) {
-  return createEmergencySender({email:createResendEmail({apiKey:process.env.RESEND_API_KEY,from:process.env.RESEND_FROM})})(user,contact);
+  return createEmergencySender({email:createEmailAdapter()})(user,contact);
 }

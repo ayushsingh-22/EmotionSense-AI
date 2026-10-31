@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Cron Routes
  * Secure endpoints for external cron services (e.g., cron-job.org)
@@ -34,7 +35,7 @@ router.get('/ping', requireCronSecret, async (req, res) => {
     // returning zero rows - means the database is alive.
     const row = await prisma.emotionAnalysis.findFirst({ select: { id: true } });
 
-    console.log(`✅ Cron ping successful (${Date.now() - startTime}ms)`);
+    safeLog.log(`✅ Cron ping successful (${Date.now() - startTime}ms)`);
 
     return res.status(200).json({
       status: 'alive',
@@ -45,7 +46,7 @@ router.get('/ping', requireCronSecret, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ Cron ping exception:', err.message);
+    safeLog.error('❌ Cron ping exception:', err.message);
     return res.status(500).json({
       status: 'error',
       error: 'Internal server error',

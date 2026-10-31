@@ -44,7 +44,7 @@ const response = await generateResponse({
   context: "User shared good news"
 });
 
-console.log(response);
+  // Process the result without logging user content.
 // Output:
 // {
 //   text: "That's wonderful news! Congratulations on getting the job...",

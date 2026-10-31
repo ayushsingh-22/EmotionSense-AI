@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Text Analysis Routes
  * Handles text-based emotion detection requests with multi-language support and emergency contact alerts
@@ -51,10 +52,10 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
     });
   }
 
-  console.log(`🔤 Processing text emotion analysis for user: ${userId || 'anonymous'}`);
+  safeLog.log(`🔤 Processing text emotion analysis for user: ${userId || 'anonymous'}`);
 
   // Language detection and translation
-  console.log(`🌐 Detecting language and translating if needed...`);
+  safeLog.log(`🌐 Detecting language and translating if needed...`);
   const translationResult = await translateToEnglishIfNeeded(text);
   
   const {
@@ -65,17 +66,17 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
     translationFailed
   } = translationResult;
 
-  console.log(`✅ Language detection: ${detectedLanguage} (${getLanguageName(detectedLanguage)})`);
+  safeLog.log(`✅ Language detection: ${detectedLanguage} (${getLanguageName(detectedLanguage)})`);
   
   if (needsTranslation) {
   }
 
   if (usedTranslationFallback) {
-    console.log(`⚠️ Used Gemini fallback for translation`);
+    safeLog.log(`⚠️ Used Gemini fallback for translation`);
   }
 
   if (translationFailed) {
-    console.log(`⚠️ Translation failed, proceeding with original text`);
+    safeLog.log(`⚠️ Translation failed, proceeding with original text`);
   }
 
   // Analyze text emotion using English text
@@ -84,7 +85,7 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
   // Check for high-risk keywords (if userId provided)
   if (userId && englishText && englishText.trim().length > 0) {
     const riskAnalysis = detectRiskLevel(englishText);
-    console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
+    safeLog.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
     
     if (riskAnalysis.matchedKeywords.length > 0) {
     }
@@ -96,10 +97,10 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
         let alertSent = false;
         
         if (emergencyContact && emergencyContact.notify_enabled) {
-          console.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
+          safeLog.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
           
           if (shouldTriggerEmergencyAlert(emotionResult.emotion, riskAnalysis.riskLevel)) {
-            console.log(`📧 Attempting to send emergency alert via email (text mode)...`);
+            safeLog.log(`📧 Attempting to send emergency alert via email (text mode)...`);
             
             // Fetch user profile from Supabase to get accurate user information
             const userProfile = await getUserProfile(userId);
@@ -134,7 +135,7 @@ router.post('/', validate({ body: textBody }), asyncHandler(async (req, res) => 
         );
         
       } catch (alertError) {
-        console.error('Emergency alert processing failed');
+        safeLog.error('Emergency alert processing failed');
         // Don't fail the text analysis request if alert handling fails
       }
     }

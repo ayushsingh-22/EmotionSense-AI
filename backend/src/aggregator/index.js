@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Response Aggregator Module
  * Combines and formats final responses
@@ -28,7 +29,7 @@ const calculateProcessingTime = (startTime) => {
  * Aggregate text and audio responses
  */
 export const aggregateResponse = ({ textResponse, audioResponse, emotion, confidence, startTime }) => {
-  console.log('📦 Aggregating final response...');
+  safeLog.log('📦 Aggregating final response...');
 
   const response = {
     success: true,
@@ -62,7 +63,7 @@ export const aggregateResponse = ({ textResponse, audioResponse, emotion, confid
     response.processingTime = calculateProcessingTime(startTime);
   }
 
-  console.log(`✅ Response aggregated (hasAudio: ${response.response.hasAudio})`);
+  safeLog.log(`✅ Response aggregated (hasAudio: ${response.response.hasAudio})`);
 
   return response;
 };
@@ -71,7 +72,7 @@ export const aggregateResponse = ({ textResponse, audioResponse, emotion, confid
  * Aggregate multi-modal analysis response
  */
 export const aggregateMultiModalResponse = ({ textEmotion, voiceEmotion, fusedEmotion, transcript, startTime }) => {
-  console.log('📦 Aggregating multi-modal analysis response...');
+  safeLog.log('📦 Aggregating multi-modal analysis response...');
 
   const response = {
     success: true,
@@ -104,7 +105,7 @@ export const aggregateMultiModalResponse = ({ textEmotion, voiceEmotion, fusedEm
     response.processingTime = calculateProcessingTime(startTime);
   }
 
-  console.log(`✅ Multi-modal response aggregated`);
+  safeLog.log(`✅ Multi-modal response aggregated`);
 
   return response;
 };
@@ -113,7 +114,7 @@ export const aggregateMultiModalResponse = ({ textEmotion, voiceEmotion, fusedEm
  * Aggregate error response
  */
 export const aggregateErrorResponse = (error, statusCode = 500) => {
-  console.log('❌ Aggregating error response...');
+  safeLog.log('❌ Aggregating error response...');
 
   return {
     success: false,

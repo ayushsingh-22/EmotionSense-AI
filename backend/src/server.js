@@ -1,3 +1,4 @@
+import safeLog from './utils/logger.js';
 /**
  * Main Server Entry Point
  * Initializes Express server and connects all modules
@@ -13,6 +14,7 @@ import fs from 'fs';
 // Import configuration
 import config from './config/index.js';
 import { normalizeNodeEnv } from './config/environment.js';
+import { resolveTrustProxyHops } from './config/proxy.js';
 
 // Import services
 
@@ -45,6 +47,7 @@ import insightsRoutes from './routes/insightsRoutes.js';
 import journalRoutes from './routes/journalRoutes.js';
 import activityRoutes from './routes/activityRoutes.js';
 import cronRoutes from './routes/cronRoutes.js';
+import internalRoutes from './routes/internalRoutes.js';
 import { journalService } from './journal-service/index.js';
 
 // Load environment variables
@@ -74,7 +77,7 @@ const createRequiredDirectories = () => {
   directories.forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
-      console.log(`✅ Created directory: ${dir}`);
+      safeLog.log(`✅ Created directory: ${dir}`);
     }
   });
 };
@@ -96,9 +99,8 @@ const configureMiddleware = () => {
     }
   }));
 
-  // Render terminates TLS behind exactly one proxy hop; needed for correct
-  // client IPs (rate limiting) and req.secure.
-  app.set('trust proxy', parseInt(process.env.TRUST_PROXY_HOPS || '1', 10));
+  // Render's Express example trusts one hop; confirm actual ingress before changing it.
+  app.set('trust proxy', resolveTrustProxyHops());
   app.disable('x-powered-by');
 
   app.use(securityHeaders());
@@ -141,6 +143,7 @@ const configureRoutes = (authServices) => {
   app.use('/api/health', healthRoutes);
   // Secret-gated, not user-facing.
   app.use('/api/cron', cronRoutes);
+  app.use('/api/internal', internalRoutes);
   app.use('/api/auth', backendAuth.router);
 
   // Everything below requires a valid bearer token. Failed attempts are
@@ -211,23 +214,23 @@ const startServer = async () => {
     buildApp();
 
     try {
-      console.log('🚀 Journal Service starting...');
+      safeLog.log('🚀 Journal Service starting...');
       await journalService.initialize();
-      console.log('✅ Journal Service Ready');
+      safeLog.log('✅ Journal Service Ready');
     } catch (err) {
-      console.warn('⚠️ Journal service failed:', err.message);
+      safeLog.warn('⚠️ Journal service failed:', err.message);
     }
 
     app.listen(PORT, () => {
-      console.log('='.repeat(50));
-      console.log(`🚀 Server Running → http://localhost:${PORT}`);
-      console.log(`🌍 NODE ENV → ${normalizeNodeEnv() || 'development'}`);
-      console.log(`🔓 CORS Mode → ${process.env.CORS_ORIGIN ? "allow-list" : "default (no cross-origin in production)"}`);
-      console.log('='.repeat(50));
+      safeLog.log('='.repeat(50));
+      safeLog.log(`🚀 Server Running → http://localhost:${PORT}`);
+      safeLog.log(`🌍 NODE ENV → ${normalizeNodeEnv() || 'development'}`);
+      safeLog.log(`🔓 CORS Mode → ${process.env.CORS_ORIGIN ? "allow-list" : "default (no cross-origin in production)"}`);
+      safeLog.log('='.repeat(50));
     });
 
   } catch (err) {
-    console.error('❌ Boot failed:', err);
+    safeLog.error('❌ Boot failed:', err);
     process.exit(1);
   }
 };
@@ -235,17 +238,17 @@ const startServer = async () => {
 const isTest = normalizeNodeEnv() === 'test';
 
 if (!isTest) {
-process.on('uncaughtException', e => { console.error('💥', e); process.exit(1); });
-process.on('unhandledRejection', (r,p) => { console.error('💥', p, r); process.exit(1); });
+process.on('uncaughtException', e => { safeLog.error('💥', e); process.exit(1); });
+process.on('unhandledRejection', (r,p) => { safeLog.error('💥', p, r); process.exit(1); });
 
 process.on('SIGINT', async () => {
-  console.log('\n🛑 SIGINT — shutting down');
+  safeLog.log('\n🛑 SIGINT — shutting down');
   if (journalService.isInitialized) await journalService.shutdown();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n🛑 SIGTERM — shutting down');
+  safeLog.log('\n🛑 SIGTERM — shutting down');
   if (journalService.isInitialized) await journalService.shutdown();
   process.exit(0);
 });

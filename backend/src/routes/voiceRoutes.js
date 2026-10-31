@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Voice Analysis Routes
  * Handles voice-based emotion detection requests with emergency contact support
@@ -39,18 +40,18 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
     });
   }
 
-  console.log(`🎤 Processing voice emotion analysis for user: ${userId || 'anonymous'}`);
+  safeLog.log(`🎤 Processing voice emotion analysis for user: ${userId || 'anonymous'}`);
 
   try {
     // Step 1: Analyze voice emotion
     const emotionResult = await analyzeVoiceEmotion(audioFile.path);
     
-    console.log(`✅ Voice emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
+    safeLog.log(`✅ Voice emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
 
     // Step 2: Check transcript for high-risk keywords (if transcript available)
     if (emotionResult.transcript && userId) {
       const riskAnalysis = detectRiskLevel(emotionResult.transcript);
-      console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
+      safeLog.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
       
       if (riskAnalysis.matchedKeywords.length > 0) {
       }
@@ -62,10 +63,10 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
           let alertSent = false;
           
           if (emergencyContact && emergencyContact.notify_enabled) {
-            console.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
+            safeLog.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
             
             if (shouldTriggerEmergencyAlert(emotionResult.emotion, riskAnalysis.riskLevel)) {
-              console.log(`📧 Attempting to send emergency alert via email (voice mode)...`);
+              safeLog.log(`📧 Attempting to send emergency alert via email (voice mode)...`);
               
               // Fetch user profile from Supabase to get accurate user information
               const userProfile = await getUserProfile(userId);
@@ -100,7 +101,7 @@ router.post('/', upload.single('audio'), bindUserId, asyncHandler(async (req, re
           );
           
         } catch (alertError) {
-          console.error('Emergency alert processing failed');
+          safeLog.error('Emergency alert processing failed');
           // Don't fail the voice analysis request if alert handling fails
         }
       }

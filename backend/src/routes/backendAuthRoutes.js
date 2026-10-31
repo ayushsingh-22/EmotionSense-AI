@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 
@@ -20,14 +21,15 @@ export function createBackendAuthRouter({ prisma, services }) {
     if (delivery) res.once('finish', () => setImmediate(async () => {
       let timer;
       try {
-        await Promise.race([email.send(delivery), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 10000); timer.unref(); })]);
-      } catch { console.error('Auth email delivery failed'); }
+        if (email.handlesRetries) await email.send(delivery);
+        else await Promise.race([email.send(delivery), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 10000); timer.unref(); })]);
+      } catch { safeLog.error('Auth email delivery failed'); }
       finally { clearTimeout(timer); }
     }));
     return res.status(202).json({ message: 'If eligible, instructions will be sent.' });
   };
   const invalid = res => res.status(401).json({ success: false, error: 'Invalid credentials or session', code: 'UNAUTHENTICATED' });
-  const logDependencyError = error => { const code = typeof error?.code === 'string' && /^P\d{4}$/.test(error.code) ? error.code : 'unclassified'; console.error(`Auth dependency failure (${code})`); };
+  const logDependencyError = error => { const code = typeof error?.code === 'string' && /^P\d{4}$/.test(error.code) ? error.code : 'unclassified'; safeLog.error({ code }); };
   const unavailable = (res,error) => { logDependencyError(error); if (['P2028','P2024','P1001','P1008'].includes(error?.code)) res.set('Retry-After','3'); return res.status(503).json({error:'Service temporarily unavailable'}); };
   const fail = fn => async(req,res) => { try { await fn(req,res); } catch (error) { if (!res.headersSent) unavailable(res,error); } };
   async function challenge(user,purpose) {

@@ -26,7 +26,7 @@ The default model (j-hartmann/emotion-english-distilroberta-base) detects:
 import { analyzeTextEmotion } from './text-service/index.js';
 
 const result = await analyzeTextEmotion("I'm feeling really happy today!");
-console.log(result);
+  // Process the result without logging user content.
 // Output:
 // {
 //   emotion: "joy",

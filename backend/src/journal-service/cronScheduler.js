@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import pg from 'pg';
 import journalGenerator from './journalGenerator.js';
 import prisma from '../lib/prisma.js';
 import logger from '../utils/logger.js';
@@ -50,28 +51,42 @@ export class CronScheduler {
     
     // Schedule nightly journal generation
     this.cronTask = scheduler.schedule(this.cronSchedule, async () => {
-      if (this.isRunning) {
-        logger.warn('⚠️ Journal generation already in progress, skipping...');
-        return;
-      }
-
-      this.isRunning = true;
-      logger.info('\n🌙 Starting nightly journal generation...');
-      
-      try {
-        await this.generateNightlyJournals();
-        logger.info('✅ Nightly journal generation completed');
-      } catch (error) {
-        logger.error('❌ Nightly journal generation failed:', error);
-      } finally {
-        this.isRunning = false;
-      }
+      await this.runNightly().catch(() => logger.error());
     }, {
       timezone: 'Asia/Kolkata'
     });
 
     logger.info('✅ Journal cron scheduler started');
     return true;
+  }
+
+  /** Hold a direct, dedicated PostgreSQL session lock throughout the run. */
+  async runNightly({ date = null, clientFactory = options => new pg.Client(options) } = {}) {
+    if (this.isRunning) return { started: false };
+    const direct = process.env.DIRECT_URL;
+    if (!direct || !process.env.DATABASE_URL) throw new Error('Database connections are required');
+    const directUrl = new URL(direct), pooledUrl = new URL(process.env.DATABASE_URL);
+    if (directUrl.hostname.includes('-pooler') || pooledUrl.hostname.replace('-pooler.', '.') !== directUrl.hostname || pooledUrl.pathname !== directUrl.pathname) throw new Error('Direct and pooled database targets must match');
+    this.isRunning = true;
+    const client = clientFactory({ connectionString: direct, connectionTimeoutMillis: 15000 });
+    let locked = false; let disconnected = false;
+    client.on('error', () => { disconnected = true; });
+    client.on('end', () => { disconnected = true; });
+    try {
+      await client.connect();
+      const result = await client.query('SELECT pg_try_advisory_lock($1, $2) AS locked', [183562, 202610]);
+      locked = result.rows[0]?.locked === true;
+      if (!locked) return { started: false };
+      this.assertLock = () => { if (disconnected) throw new Error('Journal lock connection lost'); };
+      const summary = await this.generateNightlyJournals(date);
+      this.assertLock();
+      return { started: true, ...summary };
+    } finally {
+      this.assertLock = null;
+      if (locked && !disconnected) await client.query('SELECT pg_advisory_unlock($1, $2)', [183562, 202610]).catch(() => {});
+      await client.end().catch(() => {});
+      this.isRunning = false;
+    }
   }
 
   /**
@@ -88,12 +103,12 @@ export class CronScheduler {
   /**
    * Generate journals for all active users
    */
-  async generateNightlyJournals() {
+  async generateNightlyJournals(date = null) {
     const startTime = Date.now();
     
     try {
       // Use today's date (will become "yesterday" after midnight)
-      const journalDate = this.getCurrentISTDate();
+      const journalDate = date || this.getCurrentISTDate();
       
       logger.info(`📅 Generating journals for date: ${journalDate}`);
 
@@ -127,6 +142,7 @@ export class CronScheduler {
       const batchSize = 5;
       
       for (let i = 0; i < uniqueUserIds.length; i += batchSize) {
+        this.assertLock?.();
         const batch = uniqueUserIds.slice(i, i + batchSize);
         
         logger.info(`📦 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(uniqueUserIds.length / batchSize)}`);
@@ -186,7 +202,8 @@ export class CronScheduler {
       // Auto-run: force=false (skip if no messages), manual=false (auto-generated)
       const result = await journalGenerator.generateDailyJournal(userId, journalDate, {
         force: false,
-        manual: false
+        manual: false,
+        ensureLock: () => this.assertLock?.()
       });
       
       if (result.skipped) {
@@ -219,7 +236,7 @@ export class CronScheduler {
     } else {
       // Generate for all users
       logger.info(`🧪 Manual generation for all users on ${journalDate}`);
-      return await this.generateNightlyJournals();
+      return await this.runNightly({ date: journalDate });
     }
   }
 }

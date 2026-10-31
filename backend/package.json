@@ -14,7 +14,7 @@
         "postinstall": "prisma generate --schema=../prisma/schema.prisma",
         "test": "node --test --test-concurrency=1 \"tests/*.test.js\"",
         "migrate:master-activity": "node scripts/migrate-to-master-activity-new.js",
-        "test:unit": "node --test --test-concurrency=1 tests/migrationIntegrity.unit.test.js tests/databaseSafety.unit.test.js tests/authCore.unit.test.js tests/authTransactionConfig.unit.test.js tests/environmentHealth.unit.test.js tests/emergencyEmail.unit.test.js tests/emergencyConsent.unit.test.js tests/backendAuthMount.unit.test.js tests/backendAuthRoutes.unit.test.js tests/bcryptAsync.test.js tests/errors.test.js tests/auth.test.js tests/security.test.js tests/journalScheduler.test.js tests/email.nodemailer.test.js tests/profileRoutes.unit.test.js"
+        "test:unit": "node --test --test-concurrency=1 tests/migrationIntegrity.unit.test.js tests/databaseSafety.unit.test.js tests/authCore.unit.test.js tests/authTransactionConfig.unit.test.js tests/environmentHealth.unit.test.js tests/emergencyEmail.unit.test.js tests/emergencyConsent.unit.test.js tests/backendAuthMount.unit.test.js tests/backendAuthRoutes.unit.test.js tests/bcryptAsync.test.js tests/errors.test.js tests/auth.test.js tests/security.test.js tests/journalScheduler.test.js tests/profileRoutes.unit.test.js tests/redactor.unit.test.js tests/zodCompatibility.unit.test.js tests/logFiles.unit.test.js tests/safeLogger.unit.test.js tests/nightlyJournal.unit.test.js tests/proxy.unit.test.js tests/gmailEmail.unit.test.js"
     },
     "prisma": {
         "schema": "../prisma/schema.prisma"
@@ -47,14 +47,13 @@
         "jose": "^5.9.6",
         "luxon": "^3.7.2",
         "multer": "^1.4.5-lts.1",
-        "node-cron": "^3.0.3",
+        "node-cron": "^4.6.0",
         "node-wav": "^0.0.2",
-        "nodemailer": "^10.1.7",
         "onnxruntime-node": "^1.23.2",
+        "pg": "^8.23.1",
         "sarvamai": "^0.1.10",
-        "uuid": "^9.0.1",
         "wav": "^1.0.2",
-        "zod": "^3.25.76"
+        "zod": "^4.6.7"
     },
     "devDependencies": {
         "nodemon": "^3.1.11",

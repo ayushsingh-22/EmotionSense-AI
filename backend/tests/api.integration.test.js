@@ -23,8 +23,8 @@ setTestEnv({
   // Hard isolation from every external provider: with no keys and email disabled,
   // no test can reach an LLM / TTS / STT / email / notification service even by mistake.
   GEMINI_API_KEY: 'test-placeholder-not-a-real-key' /* keeps config's startup warning quiet; no call can be made */, GEMINI_API_KEY1: '', GEMINI_API_KEY2: '', GROQ_API_KEY: 'test-placeholder-not-a-real-key',
-  GOOGLE_TTS_API_KEY: '', SARVAM_API_KEY: '', MURF_API_KEY: '', HUGGINGFACE_API_KEY: '', OPENAI_API_KEY: '',
-  EMAIL_ENABLED: 'false', GMAIL_EMAIL: '', GMAIL_APP_PASSWORD: '', ENABLE_EMERGENCY_ALERTS: 'false'
+  GOOGLE_TTS_API_KEY: '', SARVAM_API_KEY: '', MURF_API_KEY: '', HUGGINGFACE_API_KEY: '',
+  ENABLE_EMERGENCY_ALERTS: 'false'
 });
 
 const hasDb = !!process.env.DATABASE_URL;

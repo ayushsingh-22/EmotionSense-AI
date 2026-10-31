@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * TTS (Text-to-Speech) Routes
  * Handles text-to-speech conversion requests
@@ -57,10 +58,10 @@ router.post('/', validate({ body: ttsBody }), async (req, res) => {
 
       // Send audio buffer
       res.send(audioBuffer);
-      console.log(`✅ TTS audio generated successfully (${audioBuffer.length} bytes)`);
+      safeLog.log(`✅ TTS audio generated successfully (${audioBuffer.length} bytes)`);
 
     } catch (ttsError) {
-      console.warn(`⚠️ TTS generation failed: ${ttsError.message}`);
+      safeLog.warn(`⚠️ TTS generation failed: ${ttsError.message}`);
       
       // Return a helpful error response instead of crashing
       return res.status(503).json({
@@ -71,7 +72,7 @@ router.post('/', validate({ body: ttsBody }), async (req, res) => {
     }
 
   } catch (error) {
-    console.error('❌ TTS Route Error:', error.message);
+    safeLog.error('❌ TTS Route Error:', error.message);
     
     // Return JSON error response
     res.status(500).json({
@@ -106,7 +107,7 @@ router.post('/generate', validate({ body: ttsBody }), async (req, res) => {
       });
     }
 
-    console.log(`🔊 TTS generate request: language=${language || 'default'}, voice=${voice || 'default'}`);
+    safeLog.log(`🔊 TTS generate request: language=${language || 'default'}, voice=${voice || 'default'}`);
 
     try {
       // Generate speech
@@ -130,10 +131,10 @@ router.post('/generate', validate({ body: ttsBody }), async (req, res) => {
         size: audioBuffer.length
       });
 
-      console.log(`✅ TTS audio generated successfully (${audioBuffer.length} bytes)`);
+      safeLog.log(`✅ TTS audio generated successfully (${audioBuffer.length} bytes)`);
 
     } catch (ttsError) {
-      console.warn(`⚠️ TTS generation failed: ${ttsError.message}`);
+      safeLog.warn(`⚠️ TTS generation failed: ${ttsError.message}`);
       
       // Return a helpful error response
       return res.status(503).json({
@@ -144,7 +145,7 @@ router.post('/generate', validate({ body: ttsBody }), async (req, res) => {
     }
 
   } catch (error) {
-    console.error('❌ TTS Generate Route Error:', error.message);
+    safeLog.error('❌ TTS Generate Route Error:', error.message);
     
     res.status(500).json({
       success: false,
@@ -188,7 +189,7 @@ router.post('/sarvam', validate({ body: ttsBody }), async (req, res) => {
     }
 
     const langCode = language_code || 'en-IN';
-    console.log(`🔊 Sarvam AI TTS request: language=${langCode}`);
+    safeLog.log(`🔊 Sarvam AI TTS request: language=${langCode}`);
 
     try {
       // Generate speech using Sarvam AI
@@ -213,10 +214,10 @@ router.post('/sarvam', validate({ body: ttsBody }), async (req, res) => {
         language: speechResult.language
       });
 
-      console.log(`✅ Sarvam AI TTS completed (${audioBuffer.length} bytes)`);
+      safeLog.log(`✅ Sarvam AI TTS completed (${audioBuffer.length} bytes)`);
 
     } catch (sarvamError) {
-      console.error(`❌ Sarvam AI TTS failed: ${sarvamError.message}`);
+      safeLog.error(`❌ Sarvam AI TTS failed: ${sarvamError.message}`);
       
       return res.status(503).json({
         success: false,
@@ -226,7 +227,7 @@ router.post('/sarvam', validate({ body: ttsBody }), async (req, res) => {
     }
 
   } catch (error) {
-    console.error('❌ Sarvam TTS Route Error:', error.message);
+    safeLog.error('❌ Sarvam TTS Route Error:', error.message);
     
     res.status(500).json({
       success: false,

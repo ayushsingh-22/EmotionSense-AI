@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Error Handling Middleware
  * Centralized error handling for the application.
@@ -67,7 +68,7 @@ export const errorHandler = (err, req, res, next) => {
   }
 
   // Full diagnostics stay server-side (console output is redacted).
-  console.error('❌ Error:', {
+  safeLog.error('❌ Error:', {
     requestId: req.id,
     status: statusCode,
     method: req.method,

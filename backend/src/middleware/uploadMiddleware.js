@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * File Upload Middleware
  * Handles audio file uploads with validation
@@ -73,9 +74,9 @@ export const cleanupFile = (filePath) => {
   try {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      console.log(`🗑️  Cleaned up temporary file: ${filePath}`);
+      safeLog.log(`🗑️  Cleaned up temporary file: ${filePath}`);
     }
   } catch (error) {
-    console.error('Error cleaning up file:', error);
+    safeLog.error('Error cleaning up file:', error);
   }
 };

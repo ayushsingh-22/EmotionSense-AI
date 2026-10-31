@@ -103,7 +103,7 @@ api.interceptors.response.use(
     }
     const requestId = `${error.config?.method?.toUpperCase()}-${error.config?.url}`;
     PerformanceMonitor.end(requestId);
-    console.error('[API Response Error]', error.response?.data || error.message);
+    console.error('[API Response Error]', error.response?.status ?? 'network failure');
     return Promise.reject(error);
   }
 );

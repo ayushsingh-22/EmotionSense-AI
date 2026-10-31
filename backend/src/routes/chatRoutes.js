@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Chat Routes
  * Handles chat-specific requests combining emotion analysis and response generation
@@ -121,11 +122,11 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
     });
   }
 
-  console.log(`💬 Processing chat message for user: ${userId}`);
+  safeLog.log(`💬 Processing chat message for user: ${userId}`);
 
   try {
     // Step 1: Language Detection & Translation to English
-    console.log(`🌐 Detecting language and translating if needed...`);
+    safeLog.log(`🌐 Detecting language and translating if needed...`);
     const translationResult = await translateToEnglishIfNeeded(message);
     
     const {
@@ -140,18 +141,18 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
     const detectedLanguage = normalizeIndianLanguageCode(detectedLanguageRaw);
     const isIndianLang = isIndianLanguageSupported(detectedLanguage);
 
-    console.log(`✅ Language detection: ${detectedLanguageRaw} → ${detectedLanguage}`);
-    console.log(`🇮🇳 Indian Language: ${getIndianLanguageName(detectedLanguage)} ${isIndianLang ? '✓' : '(defaulted to English)'}`);
+    safeLog.log(`✅ Language detection: ${detectedLanguageRaw} → ${detectedLanguage}`);
+    safeLog.log(`🇮🇳 Indian Language: ${getIndianLanguageName(detectedLanguage)} ${isIndianLang ? '✓' : '(defaulted to English)'}`);
     
     if (needsTranslation) {
     }
 
     if (usedTranslationFallback) {
-      console.log(`⚠️ Used Gemini fallback for translation`);
+      safeLog.log(`⚠️ Used Gemini fallback for translation`);
     }
 
     if (translationFailed) {
-      console.log(`⚠️ Translation failed, proceeding with original text`);
+      safeLog.log(`⚠️ Translation failed, proceeding with original text`);
     }
 
     // Step 2: Get or create session ONLY when user sends actual message
@@ -159,7 +160,7 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
     let isNewSession = false;
     
     if (!currentSessionId) {
-      console.log(`🆕 Creating new chat session with user message...`);
+      safeLog.log(`🆕 Creating new chat session with user message...`);
       
       // Create meaningful title from the original user message (not translated)
       // Use first 40 characters for better readability in different languages
@@ -175,19 +176,19 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
 
     // Step 3: Get recent messages for context (empty for new sessions)
     const memoryLength = parseInt(process.env.CHAT_MEMORY_LENGTH || 10);
-    console.log(`🧠 Fetching last ${memoryLength} messages for context...`);
+    safeLog.log(`🧠 Fetching last ${memoryLength} messages for context...`);
     const conversationHistory = await getRecentChatMessages(userId, currentSessionId, memoryLength);
 
     // Step 4: Analyze emotion from the English text
-    console.log(`🔤 Analyzing emotion from processed text...`);
+    safeLog.log(`🔤 Analyzing emotion from processed text...`);
     const emotionResult = await analyzeTextEmotion(englishText);
     
-    console.log(`✅ Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
+    safeLog.log(`✅ Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
 
     // Step 4.5: Check for high-risk messages and trigger emergency alert if needed
-    console.log(`🚨 Checking for high-risk indicators...`);
+    safeLog.log(`🚨 Checking for high-risk indicators...`);
     const riskAnalysis = detectRiskLevel(englishText);
-    console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
+    safeLog.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
     
     if (riskAnalysis.matchedKeywords.length > 0) {
     }
@@ -199,10 +200,10 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
         let alertSent = false;
         
         if (emergencyContact && emergencyContact.notify_enabled) {
-          console.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
+          safeLog.log(`🚨 Emergency contact found for user, checking if alert should be sent...`);
           
           if (shouldTriggerEmergencyAlert(emotionResult.emotion, riskAnalysis.riskLevel)) {
-            console.log(`📧 Attempting to send emergency alert via email...`);
+            safeLog.log(`📧 Attempting to send emergency alert via email...`);
             
             // Fetch user profile from Supabase to get accurate user information
             const userProfile = await getUserProfile(userId);
@@ -237,13 +238,13 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
         );
         
       } catch (alertError) {
-        console.error('Emergency alert processing failed');
+        safeLog.error('Emergency alert processing failed');
         // Don't fail the chat request if alert handling fails
       }
     }
 
     // Step 5: Save user message to database (save original message, not translated)
-    console.log(`💾 Saving user message...`);
+    safeLog.log(`💾 Saving user message...`);
     const userMessage = await saveChatMessage(
       userId, 
       currentSessionId, 
@@ -260,7 +261,7 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
     );
 
     // Step 6: Generate empathetic AI response based on emotion and context (using English text)
-    console.log(`🤖 Generating AI response with conversation context...`);
+    safeLog.log(`🤖 Generating AI response with conversation context...`);
     const llmResponse = await generateResponse({
       emotion: emotionResult.emotion,
       confidence: emotionResult.confidence,
@@ -286,21 +287,21 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
     let responseTranslationFailed = false;
 
     if (needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown') {
-      console.log(`🔄 Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
+      safeLog.log(`🔄 Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
       
       try {
         finalResponse = await translateBackToUserLanguage(llmResponse.text, detectedLanguage);
         responseTranslated = true;
-        console.log(`✅ Response translated back to user's language`);
+        safeLog.log(`✅ Response translated back to user's language`);
       } catch (error) {
-        console.error(`❌ Failed to translate response back to user language:`, error.message);
+        safeLog.error(`❌ Failed to translate response back to user language:`, error.message);
         finalResponse = llmResponse.text; // Keep English response
         responseTranslationFailed = true;
       }
     }
 
     // Step 8: Save AI response to database (save in user's language)
-    console.log(`💾 Saving AI response...`);
+    safeLog.log(`💾 Saving AI response...`);
     const assistantMessage = await saveChatMessage(
       userId, 
       currentSessionId, 
@@ -317,7 +318,7 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
     // Step 8.5: Update session title with better title for new sessions
     if (isNewSession) {
       try {
-        console.log(`🏷️ Generating better session title for new session...`);
+        safeLog.log(`🏷️ Generating better session title for new session...`);
         
         // Create a more meaningful title based on the conversation context
         const titleText = message.length > 60 ? message.substring(0, 60).trim() + '...' : message.trim();
@@ -333,10 +334,10 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
         }
         
         await updateChatSessionTitle(userId, currentSessionId, betterTitle);
-        console.log(`✅ Updated session title to: "${betterTitle}"`);
+        safeLog.log(`✅ Updated session title to: "${betterTitle}"`);
         
       } catch (error) {
-        console.warn(`⚠️ Failed to update session title:`, error.message);
+        safeLog.warn(`⚠️ Failed to update session title:`, error.message);
         // Don't fail the request if title update fails
       }
     }
@@ -344,12 +345,12 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
     // Step 9: Generate audio response if requested (using translated text in user's language)
     let audioResponse = null;
     if (includeAudio && finalResponse) {
-      console.log(`🔊 Generating audio response...`);
+      safeLog.log(`🔊 Generating audio response...`);
       try {
         audioResponse = await generateSpeech(finalResponse);
-        console.log(`✅ Audio response generated`);
+        safeLog.log(`✅ Audio response generated`);
       } catch (audioError) {
-        console.warn(`⚠️ Audio generation failed:`, audioError.message);
+        safeLog.warn(`⚠️ Audio generation failed:`, audioError.message);
         // Continue without audio - don't fail the entire request
       }
     }
@@ -416,11 +417,11 @@ router.post('/message', validate({ body: chatMessageBody }), requireOwnedSession
       };
     }
 
-    console.log(`🎉 Chat processing completed successfully`);
+    safeLog.log(`🎉 Chat processing completed successfully`);
     res.json(response);
 
   } catch (error) {
-    console.error('❌ Error processing chat message:', error);
+    safeLog.error('❌ Error processing chat message:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to process chat message',
@@ -468,7 +469,7 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
     return res.status(400).json({ success: false, error: 'Message cannot be empty' });
   }
 
-  console.log(`💬 [stream] Processing chat message for user: ${userId}`);
+  safeLog.log(`💬 [stream] Processing chat message for user: ${userId}`);
 
   // Set up SSE headers up front so we can stream errors too, not just success.
   res.writeHead(200, {
@@ -501,7 +502,7 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
 
   try {
     // Step 1: Language Detection & Translation to English
-    console.log(`🌐 [stream] Detecting language and translating if needed...`);
+    safeLog.log(`🌐 [stream] Detecting language and translating if needed...`);
     const translationResult = await translateToEnglishIfNeeded(message);
 
     const {
@@ -515,15 +516,15 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
     const detectedLanguage = normalizeIndianLanguageCode(detectedLanguageRaw);
     const isIndianLang = isIndianLanguageSupported(detectedLanguage);
 
-    console.log(`✅ [stream] Language detection: ${detectedLanguageRaw} → ${detectedLanguage}`);
-    console.log(`🇮🇳 [stream] Indian Language: ${getIndianLanguageName(detectedLanguage)} ${isIndianLang ? '✓' : '(defaulted to English)'}`);
+    safeLog.log(`✅ [stream] Language detection: ${detectedLanguageRaw} → ${detectedLanguage}`);
+    safeLog.log(`🇮🇳 [stream] Indian Language: ${getIndianLanguageName(detectedLanguage)} ${isIndianLang ? '✓' : '(defaulted to English)'}`);
 
     // Step 2: Get or create session
     let currentSessionId = sessionId;
     let isNewSession = false;
 
     if (!currentSessionId) {
-      console.log(`🆕 [stream] Creating new chat session with user message...`);
+      safeLog.log(`🆕 [stream] Creating new chat session with user message...`);
       const sessionTitle = message.length > 40 ? message.substring(0, 40).trim() + '...' : message.trim();
       const newSession = await createChatSession(userId, sessionTitle);
       currentSessionId = newSession.id;
@@ -532,18 +533,18 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
 
     // Step 3: Get recent messages for context
     const memoryLength = parseInt(process.env.CHAT_MEMORY_LENGTH || 10);
-    console.log(`🧠 [stream] Fetching last ${memoryLength} messages for context...`);
+    safeLog.log(`🧠 [stream] Fetching last ${memoryLength} messages for context...`);
     const conversationHistory = await getRecentChatMessages(userId, currentSessionId, memoryLength);
 
     // Step 4: Analyze emotion from the English text
-    console.log(`🔤 [stream] Analyzing emotion from processed text...`);
+    safeLog.log(`🔤 [stream] Analyzing emotion from processed text...`);
     const emotionResult = await analyzeTextEmotion(englishText);
-    console.log(`✅ [stream] Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
+    safeLog.log(`✅ [stream] Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
 
     // Step 4.5: Check for high-risk messages and trigger emergency alert if needed
-    console.log(`🚨 [stream] Checking for high-risk indicators...`);
+    safeLog.log(`🚨 [stream] Checking for high-risk indicators...`);
     const riskAnalysis = detectRiskLevel(englishText);
-    console.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
+    safeLog.log(`Risk level: ${riskAnalysis.riskLevel || 'none'}`);
 
     if (riskAnalysis.riskLevel) {
       try {
@@ -577,12 +578,12 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
           alertSent
         );
       } catch (alertError) {
-        console.error('Emergency alert processing failed');
+        safeLog.error('Emergency alert processing failed');
       }
     }
 
     // Step 5: Save user message to database
-    console.log(`💾 [stream] Saving user message...`);
+    safeLog.log(`💾 [stream] Saving user message...`);
     const userMessage = await saveChatMessage(
       userId,
       currentSessionId,
@@ -599,7 +600,7 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
     );
 
     // Step 6: Stream the AI response token-by-token
-    console.log(`🤖 [stream] Generating AI response with conversation context...`);
+    safeLog.log(`🤖 [stream] Generating AI response with conversation context...`);
     const llmResponse = await generateResponseStream({
       emotion: emotionResult.emotion,
       confidence: emotionResult.confidence,
@@ -628,19 +629,19 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
     let responseTranslationFailed = false;
 
     if (needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown') {
-      console.log(`🔄 [stream] Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
+      safeLog.log(`🔄 [stream] Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
       try {
         finalResponse = await translateBackToUserLanguage(llmResponse.text, detectedLanguage);
         responseTranslated = true;
       } catch (error) {
-        console.error(`❌ [stream] Failed to translate response back to user language:`, error.message);
+        safeLog.error(`❌ [stream] Failed to translate response back to user language:`, error.message);
         finalResponse = llmResponse.text;
         responseTranslationFailed = true;
       }
     }
 
     // Step 8: Save AI response to database
-    console.log(`💾 [stream] Saving AI response...`);
+    safeLog.log(`💾 [stream] Saving AI response...`);
     const assistantMessage = await saveChatMessage(
       userId,
       currentSessionId,
@@ -667,21 +668,21 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
         }
 
         await updateChatSessionTitle(userId, currentSessionId, betterTitle);
-        console.log(`✅ [stream] Updated session title to: "${betterTitle}"`);
+        safeLog.log(`✅ [stream] Updated session title to: "${betterTitle}"`);
       } catch (error) {
-        console.warn(`⚠️ [stream] Failed to update session title:`, error.message);
+        safeLog.warn(`⚠️ [stream] Failed to update session title:`, error.message);
       }
     }
 
     // Step 9: Generate audio response if requested
     let audioResponse = null;
     if (includeAudio && finalResponse) {
-      console.log(`🔊 [stream] Generating audio response...`);
+      safeLog.log(`🔊 [stream] Generating audio response...`);
       try {
         audioResponse = await generateSpeech(finalResponse);
-        console.log(`✅ [stream] Audio response generated`);
+        safeLog.log(`✅ [stream] Audio response generated`);
       } catch (audioError) {
-        console.warn(`⚠️ [stream] Audio generation failed:`, audioError.message);
+        safeLog.warn(`⚠️ [stream] Audio generation failed:`, audioError.message);
       }
     }
 
@@ -741,14 +742,14 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
       };
     }
 
-    console.log(`🎉 [stream] Chat processing completed successfully`);
+    safeLog.log(`🎉 [stream] Chat processing completed successfully`);
     if (!clientClosed) {
       sendEvent('done', donePayload);
     }
     res.end();
 
   } catch (error) {
-    console.error('❌ [stream] Error processing chat message:', error);
+    safeLog.error('❌ [stream] Error processing chat message:', error);
     if (!clientClosed) {
       sendEvent('error', {
         error: 'Failed to process chat message',
@@ -785,7 +786,7 @@ router.get('/sessions', asyncHandler(async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error fetching unified chat sessions:', error);
+    safeLog.error('❌ Error fetching unified chat sessions:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch chat sessions',
@@ -823,7 +824,7 @@ router.get('/sessions/:sessionId/messages', validate({ params: sessionIdParams }
     });
 
   } catch (error) {
-    console.error('❌ Error fetching chat messages:', error);
+    safeLog.error('❌ Error fetching chat messages:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch chat messages',
@@ -855,7 +856,7 @@ router.post('/sessions', validate({ body: sessionCreateBody }), asyncHandler(asy
     });
 
   } catch (error) {
-    console.error('❌ Error creating chat session:', error);
+    safeLog.error('❌ Error creating chat session:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to create chat session',
@@ -888,7 +889,7 @@ router.put('/sessions/:sessionId/title', validate({ params: sessionIdParams, bod
     });
 
   } catch (error) {
-    console.error('❌ Error updating session title:', error);
+    safeLog.error('❌ Error updating session title:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to update session title',
@@ -921,7 +922,7 @@ router.delete('/sessions/:sessionId', validate({ params: sessionIdParams }), asy
     });
 
   } catch (error) {
-    console.error('❌ Error deleting chat session:', error);
+    safeLog.error('❌ Error deleting chat session:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to delete chat session',
@@ -959,11 +960,11 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     });
   }
 
-  console.log(`🎙️ Processing multilingual voice message for user: ${userId}`);
+  safeLog.log(`🎙️ Processing multilingual voice message for user: ${userId}`);
 
   try {
     // Step 1: Transcribe audio using Groq Whisper with automatic language detection
-    console.log(`� Transcribing audio with Groq Whisper (auto-detect language)...`);
+    safeLog.log(`� Transcribing audio with Groq Whisper (auto-detect language)...`);
     
     // Import voice service for transcription
     const { speechToTextGroq } = await import('../voice-service/index.js');
@@ -984,7 +985,7 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     fs.writeFileSync(tempFilePath, req.file.buffer);
     
     const tempFileStats = fs.statSync(tempFilePath);
-    console.log(`✅ Temp file written: ${tempFilePath} (${tempFileStats.size} bytes)`);
+    safeLog.log(`✅ Temp file written: ${tempFilePath} (${tempFileStats.size} bytes)`);
     
     // Transcribe with Groq Whisper (detects language automatically)
     const transcriptionResult = await speechToTextGroq(tempFilePath);
@@ -992,9 +993,9 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     // Clean up temp file and any converted WAV files
     try {
       fs.unlinkSync(tempFilePath);
-      console.log(`🧹 Cleaned up temp file: ${tempFilePath}`);
+      safeLog.log(`🧹 Cleaned up temp file: ${tempFilePath}`);
     } catch (cleanupError) {
-      console.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
+      safeLog.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
     }
     
     const transcript = transcriptionResult.transcript;
@@ -1002,7 +1003,7 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     
     // If transcription error occurred
     if (transcriptionResult.error) {
-      console.error(`❌ Transcription error: ${transcriptionResult.error}`);
+      safeLog.error(`❌ Transcription error: ${transcriptionResult.error}`);
       return res.status(400).json({
         success: false,
         error: 'Speech transcription failed',
@@ -1015,9 +1016,9 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     }
     
     if (!transcript || transcript.trim().length === 0) {
-      console.warn(`⚠️ Empty transcript received from Groq`);
-      console.warn(`   Confidence: ${transcriptionResult.confidence}`);
-      console.warn(`   File size: ${req.file.size} bytes`);
+      safeLog.warn(`⚠️ Empty transcript received from Groq`);
+      safeLog.warn(`   Confidence: ${transcriptionResult.confidence}`);
+      safeLog.warn(`   File size: ${req.file.size} bytes`);
       
       return res.status(400).json({
         success: false,
@@ -1032,20 +1033,20 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
       });
     }
 
-    console.log(`🌐 Detected language from Whisper: ${whisperLanguage}`);
+    safeLog.log(`🌐 Detected language from Whisper: ${whisperLanguage}`);
     
     // Step 1.5: Validate if detected language is an Indian language
     const normalizedLanguage = normalizeIndianLanguageCode(whisperLanguage);
     const isIndianLang = isIndianLanguageSupported(normalizedLanguage);
     
     if (!isIndianLang) {
-      console.warn(`⚠️  Non-Indian language detected: ${whisperLanguage}. Defaulting to Indian English.`);
+      safeLog.warn(`⚠️  Non-Indian language detected: ${whisperLanguage}. Defaulting to Indian English.`);
     }
     
-    console.log(`🇮🇳 Indian Language: ${getIndianLanguageName(normalizedLanguage)}`);
+    safeLog.log(`🇮🇳 Indian Language: ${getIndianLanguageName(normalizedLanguage)}`);
 
     // Step 2: Translate to English if needed (for internal chat reasoning)
-    console.log(`🔄 Translating to English if needed...`);
+    safeLog.log(`🔄 Translating to English if needed...`);
     const translationResult = await translateToEnglishIfNeeded(transcript);
     
     const {
@@ -1059,7 +1060,7 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     // Use normalized Indian language code
     const detectedLanguage = normalizedLanguage;
 
-    console.log(`✅ Final Indian language: ${detectedLanguage} (${getIndianLanguageName(detectedLanguage)})`);
+    safeLog.log(`✅ Final Indian language: ${detectedLanguage} (${getIndianLanguageName(detectedLanguage)})`);
     
     if (needsTranslation) {
     }
@@ -1069,7 +1070,7 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     let isNewSession = false;
     
     if (!currentSessionId) {
-      console.log(`🆕 Creating new voice chat session...`);
+      safeLog.log(`🆕 Creating new voice chat session...`);
       
       const sessionTitle = transcript.length > 40 
         ? transcript.substring(0, 40).trim() + '...' 
@@ -1079,22 +1080,22 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
       currentSessionId = newSession.id;
       isNewSession = true;
       
-      console.log(`✅ Created new session for voice message`);
+      safeLog.log(`✅ Created new session for voice message`);
     }
 
     // Step 4: Get recent messages for context
     const memoryLength = parseInt(process.env.CHAT_MEMORY_LENGTH || 10);
-    console.log(`🧠 Fetching last ${memoryLength} messages for context...`);
+    safeLog.log(`🧠 Fetching last ${memoryLength} messages for context...`);
     const conversationHistory = await getRecentChatMessages(userId, currentSessionId, memoryLength);
 
     // Step 5: Analyze emotion from the English text
-    console.log(`🔤 Analyzing emotion from transcript...`);
+    safeLog.log(`🔤 Analyzing emotion from transcript...`);
     const emotionResult = await analyzeTextEmotion(englishText);
     
-    console.log(`✅ Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
+    safeLog.log(`✅ Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
 
     // Step 6: Save user message (voice transcript)
-    console.log(`💾 Saving voice message...`);
+    safeLog.log(`💾 Saving voice message...`);
     const userMessage = await saveChatMessage(
       userId, 
       currentSessionId, 
@@ -1113,7 +1114,7 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
     );
 
     // Step 7: Generate empathetic AI response based on emotion and context
-    console.log(`🤖 Generating AI response with conversation context...`);
+    safeLog.log(`🤖 Generating AI response with conversation context...`);
     const llmResponse = await generateResponse({
       emotion: emotionResult.emotion,
       confidence: emotionResult.confidence,
@@ -1127,36 +1128,36 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
       conversationHistory: conversationHistory
     });
 
-    console.log(`✅ AI response generated`);
+    safeLog.log(`✅ AI response generated`);
 
     // Step 8: Translate AI response back to user's language
     let finalResponse = llmResponse.text;
     let responseTranslated = false;
     let responseTranslationFailed = false;
 
-    console.log(`📊 Translation Check:`);
-    console.log(`   - Detected Language: ${detectedLanguage}`);
-    console.log(`   - Needs Translation: ${needsTranslation}`);
+    safeLog.log(`📊 Translation Check:`);
+    safeLog.log(`   - Detected Language: ${detectedLanguage}`);
+    safeLog.log(`   - Needs Translation: ${needsTranslation}`);
 
     if (needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown') {
-      console.log(`🔄 Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
+      safeLog.log(`🔄 Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
       
       try {
         finalResponse = await translateBackToUserLanguage(llmResponse.text, detectedLanguage);
         responseTranslated = true;
-        console.log(`✅ Response translated back to user's language`);
-        console.log(`   - Translated Response: "${finalResponse.substring(0, 100)}..."`);
+        safeLog.log(`✅ Response translated back to user's language`);
+    // Sensitive provider or user content is intentionally not logged.
       } catch (error) {
-        console.error(`❌ Failed to translate response:`, error.message);
+        safeLog.error(`❌ Failed to translate response:`, error.message);
         finalResponse = llmResponse.text;
         responseTranslationFailed = true;
       }
     } else {
-      console.log(`ℹ️  No translation needed - using English response`);
+      safeLog.log(`ℹ️  No translation needed - using English response`);
     }
 
     // Step 9: Save AI response to database
-    console.log(`💾 Saving AI response...`);
+    safeLog.log(`💾 Saving AI response...`);
     const assistantMessage = await saveChatMessage(
       userId, 
       currentSessionId, 
@@ -1184,34 +1185,34 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
         }
         
         await updateChatSessionTitle(userId, currentSessionId, betterTitle);
-        console.log(`✅ Updated session title to: "${betterTitle}"`);
+        safeLog.log(`✅ Updated session title to: "${betterTitle}"`);
       } catch (error) {
-        console.warn(`⚠️ Failed to update session title:`, error.message);
+        safeLog.warn(`⚠️ Failed to update session title:`, error.message);
       }
     }
 
     // Step 11: Generate audio response using TTS (Indian language voices)
     let audioResponse = null;
     if (finalResponse) {
-      console.log(`🔊 Generating audio response with Indian TTS...`);
+      safeLog.log(`🔊 Generating audio response with Indian TTS...`);
       try {
         // Use the Indian language TTS code
         const ttsLanguage = getIndianLanguageTTSCode(detectedLanguage);
-        console.log(`🇮🇳 Using Indian TTS voice: ${ttsLanguage} for ${getIndianLanguageName(detectedLanguage)}`);
+        safeLog.log(`🇮🇳 Using Indian TTS voice: ${ttsLanguage} for ${getIndianLanguageName(detectedLanguage)}`);
         audioResponse = await textToSpeech(finalResponse, ttsLanguage);
-        console.log(`✅ Audio response generated in ${getIndianLanguageName(detectedLanguage)}`);
+        safeLog.log(`✅ Audio response generated in ${getIndianLanguageName(detectedLanguage)}`);
       } catch (audioError) {
-        console.warn(`⚠️ Audio generation failed:`, audioError.message);
+        safeLog.warn(`⚠️ Audio generation failed:`, audioError.message);
         // Continue without audio - don't fail the entire request
       }
     }
 
     // Step 12: Return comprehensive multilingual response
-    console.log(`📤 Preparing multilingual response to frontend:`);
+    safeLog.log(`📤 Preparing multilingual response to frontend:`);
     if (needsTranslation) {
     }
     if (responseTranslated) {
-      console.log(`   🤖 AI Response (${detectedLanguage}): "${finalResponse.substring(0, 80)}"`);
+    // Sensitive provider or user content is intentionally not logged.
     }
     
     const response = {
@@ -1294,11 +1295,11 @@ router.post('/voice', upload.single('audio'), bindUserId, validate({ body: voice
       }
     };
 
-    console.log(`🎉 Voice message processing completed successfully`);
+    safeLog.log(`🎉 Voice message processing completed successfully`);
     res.json(response);
 
   } catch (error) {
-    console.error('❌ Error processing voice message:', error);
+    safeLog.error('❌ Error processing voice message:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to process voice message',
@@ -1332,7 +1333,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
     return res.status(400).json({ success: false, error: 'Audio file is required' });
   }
 
-  console.log(`🎙️ [stream] Processing voice message for user: ${userId}`);
+  safeLog.log(`🎙️ [stream] Processing voice message for user: ${userId}`);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -1353,7 +1354,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
 
   try {
     // Step 1: Transcribe audio using Groq Whisper with automatic language detection
-    console.log(`🌐 [stream] Transcribing audio with Groq Whisper (auto-detect language)...`);
+    safeLog.log(`🌐 [stream] Transcribing audio with Groq Whisper (auto-detect language)...`);
     const { speechToTextGroq } = await import('../voice-service/index.js');
     const fs = await import('fs');
     const tempDir = path.join(__dirname, '../../temp/audio');
@@ -1370,16 +1371,16 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
 
     try {
       fs.unlinkSync(tempFilePath);
-      console.log(`🧹 [stream] Cleaned up temp file: ${tempFilePath}`);
+      safeLog.log(`🧹 [stream] Cleaned up temp file: ${tempFilePath}`);
     } catch (cleanupError) {
-      console.warn('⚠️ [stream] Failed to cleanup temp file:', cleanupError.message);
+      safeLog.warn('⚠️ [stream] Failed to cleanup temp file:', cleanupError.message);
     }
 
     const transcript = transcriptionResult.transcript;
     const whisperLanguage = transcriptionResult.language || 'en';
 
     if (transcriptionResult.error) {
-      console.error(`❌ [stream] Transcription error: ${transcriptionResult.error}`);
+      safeLog.error(`❌ [stream] Transcription error: ${transcriptionResult.error}`);
       if (!clientClosed) {
         sendEvent('error', {
           error: 'Speech transcription failed',
@@ -1390,7 +1391,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
     }
 
     if (!transcript || transcript.trim().length === 0) {
-      console.warn(`⚠️ [stream] Empty transcript received from Groq`);
+      safeLog.warn(`⚠️ [stream] Empty transcript received from Groq`);
       if (!clientClosed) {
         sendEvent('error', {
           error: 'Speech transcription failed or no speech detected',
@@ -1409,7 +1410,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
     const normalizedLanguage = normalizeIndianLanguageCode(whisperLanguage);
 
     // Step 2: Translate to English if needed (for internal chat reasoning)
-    console.log(`🔄 [stream] Translating to English if needed...`);
+    safeLog.log(`🔄 [stream] Translating to English if needed...`);
     const translationResult = await translateToEnglishIfNeeded(transcript);
 
     const {
@@ -1427,7 +1428,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
     let isNewSession = false;
 
     if (!currentSessionId) {
-      console.log(`🆕 [stream] Creating new voice chat session...`);
+      safeLog.log(`🆕 [stream] Creating new voice chat session...`);
       const sessionTitle = transcript.length > 40 ? transcript.substring(0, 40).trim() + '...' : transcript.trim();
       const newSession = await createChatSession(userId, sessionTitle);
       currentSessionId = newSession.id;
@@ -1440,7 +1441,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
 
     // Step 5: Analyze emotion from the English text
     const emotionResult = await analyzeTextEmotion(englishText);
-    console.log(`✅ [stream] Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
+    safeLog.log(`✅ [stream] Emotion detected: ${emotionResult.emotion} (confidence: ${emotionResult.confidence})`);
 
     // Step 5.5: Check for high-risk messages and trigger emergency alert if needed
     const riskAnalysis = detectRiskLevel(englishText);
@@ -1476,7 +1477,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
           alertSent
         );
       } catch (alertError) {
-        console.error('Emergency alert processing failed');
+        safeLog.error('Emergency alert processing failed');
       }
     }
 
@@ -1508,7 +1509,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
     // Chunk tasks are chained sequentially (not fired in parallel) so audio
     // arrives in the same order it was spoken, while each chunk's
     // translate+TTS work still overlaps with later tokens still streaming.
-    console.log(`🤖 [stream] Generating AI response with conversation context...`);
+    safeLog.log(`🤖 [stream] Generating AI response with conversation context...`);
 
     const ttsLanguage = getIndianLanguageTTSCode(detectedLanguage);
     const shouldTranslateChunks = needsTranslation && detectedLanguage !== 'en' && detectedLanguage !== 'unknown';
@@ -1531,7 +1532,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
             try {
               chunkText = await translateBackToUserLanguage(trimmed, detectedLanguage);
             } catch (translateError) {
-              console.warn(`⚠️ [stream] Chunk translation failed, using English:`, translateError.message);
+              safeLog.warn(`⚠️ [stream] Chunk translation failed, using English:`, translateError.message);
             }
           }
 
@@ -1547,7 +1548,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
             });
           }
         } catch (chunkError) {
-          console.warn(`⚠️ [stream] Chunk TTS failed for chunk ${index}:`, chunkError.message);
+          safeLog.warn(`⚠️ [stream] Chunk TTS failed for chunk ${index}:`, chunkError.message);
         }
       });
     };
@@ -1586,7 +1587,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
       sentenceBuffer = '';
     }
 
-    console.log(`✅ [stream] AI response generated`);
+    safeLog.log(`✅ [stream] AI response generated`);
 
     if (!llmResponse.text || llmResponse.text.trim().length === 0) {
       throw new Error('AI response is empty. This may be due to safety filters or API issues.');
@@ -1600,12 +1601,12 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
     let responseTranslationFailed = false;
 
     if (shouldTranslateChunks) {
-      console.log(`🔄 [stream] Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
+      safeLog.log(`🔄 [stream] Translating AI response back to ${getLanguageName(detectedLanguage)}...`);
       try {
         finalResponse = await translateBackToUserLanguage(llmResponse.text, detectedLanguage);
         responseTranslated = true;
       } catch (error) {
-        console.error(`❌ [stream] Failed to translate response:`, error.message);
+        safeLog.error(`❌ [stream] Failed to translate response:`, error.message);
         finalResponse = llmResponse.text;
         responseTranslationFailed = true;
       }
@@ -1644,7 +1645,7 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
 
         await updateChatSessionTitle(userId, currentSessionId, betterTitle);
       } catch (error) {
-        console.warn(`⚠️ [stream] Failed to update session title:`, error.message);
+        safeLog.warn(`⚠️ [stream] Failed to update session title:`, error.message);
       }
     }
 
@@ -1655,12 +1656,12 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
     // produced nothing (e.g. every chunk's TTS call failed).
     let audioResponse = null;
     if (audioChunks.length === 0 && finalResponse) {
-      console.log(`🔊 [stream] No audio chunks produced, falling back to single-call TTS...`);
+      safeLog.log(`🔊 [stream] No audio chunks produced, falling back to single-call TTS...`);
       try {
         audioResponse = await textToSpeech(finalResponse, ttsLanguage);
-        console.log(`✅ [stream] Audio response generated in ${getIndianLanguageName(detectedLanguage)}`);
+        safeLog.log(`✅ [stream] Audio response generated in ${getIndianLanguageName(detectedLanguage)}`);
       } catch (audioError) {
-        console.warn(`⚠️ [stream] Audio generation failed:`, audioError.message);
+        safeLog.warn(`⚠️ [stream] Audio generation failed:`, audioError.message);
       }
     }
 
@@ -1739,14 +1740,14 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
       }
     };
 
-    console.log(`🎉 [stream] Voice message processing completed successfully`);
+    safeLog.log(`🎉 [stream] Voice message processing completed successfully`);
     if (!clientClosed) {
       sendEvent('done', donePayload);
     }
     res.end();
 
   } catch (error) {
-    console.error('❌ [stream] Error processing voice message:', error);
+    safeLog.error('❌ [stream] Error processing voice message:', error);
     if (!clientClosed) {
       sendEvent('error', {
         error: 'Failed to process voice message',
@@ -1804,7 +1805,7 @@ function getLanguageCodeForTTS(language) {
  * Response: { success: true, data: { text: string, confidence: number, language: string } }
  */
 router.post('/transcribe', upload.single('audio'), bindUserId, asyncHandler(async (req, res) => {
-  console.log('🎙️ Transcribe endpoint called');
+  safeLog.log('🎙️ Transcribe endpoint called');
 
   // Validate audio file
   if (!req.file) {
@@ -1834,7 +1835,7 @@ router.post('/transcribe', upload.single('audio'), bindUserId, asyncHandler(asyn
     
     // Write buffer to file
     fs.writeFileSync(tempFilePath, req.file.buffer);
-    console.log(`💾 Saved to temp file: ${tempFilePath}`);
+    safeLog.log(`💾 Saved to temp file: ${tempFilePath}`);
 
     // Transcribe using Groq Whisper
     const transcriptionResult = await speechToTextGroq(tempFilePath);
@@ -1842,9 +1843,9 @@ router.post('/transcribe', upload.single('audio'), bindUserId, asyncHandler(asyn
     // Clean up temp file
     try {
       fs.unlinkSync(tempFilePath);
-      console.log(`🗑️ Cleaned up temp file`);
+      safeLog.log(`🗑️ Cleaned up temp file`);
     } catch (cleanupError) {
-      console.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
+      safeLog.warn('⚠️ Failed to cleanup temp file:', cleanupError.message);
     }
 
     // Return transcription result
@@ -1861,7 +1862,7 @@ router.post('/transcribe', upload.single('audio'), bindUserId, asyncHandler(asyn
 
 
   } catch (error) {
-    console.error('❌ Transcription failed:', error);
+    safeLog.error('❌ Transcription failed:', error);
     
     // Return error response
     res.status(500).json({

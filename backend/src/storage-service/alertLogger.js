@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Alert Logger Utility
  * Handles logging of emergency alerts to the alert_logs table (Neon/Prisma)
@@ -46,7 +47,7 @@ export const logAlertEvent = async (
       ? messageText.slice(0, 1000) + (messageText.length > 1000 ? '...' : '')
       : null;
 
-    console.log(`📝 Logging alert event to alert_logs table...`);
+    safeLog.log(`📝 Logging alert event to alert_logs table...`);
 
     const created = await prisma.alertLog.create({
       data: {
@@ -58,10 +59,10 @@ export const logAlertEvent = async (
       }
     });
 
-    console.log(`✅ Alert logged successfully with ID: ${created.id}`);
+    safeLog.log(`✅ Alert logged successfully with ID: ${created.id}`);
     return normalizeAlertRow(created);
   } catch (error) {
-    console.error('❌ Unexpected error logging alert:', error.message);
+    safeLog.error('❌ Unexpected error logging alert:', error.message);
     return null;
   }
 };
@@ -84,7 +85,7 @@ export const getAlertHistoryForUser = async (userId, limit = 50, offset = 0) => 
 
     return rows.map(normalizeAlertRow);
   } catch (error) {
-    console.error('❌ Unexpected error fetching alert history:', error.message);
+    safeLog.error('❌ Unexpected error fetching alert history:', error.message);
     return null;
   }
 };
@@ -119,7 +120,7 @@ export const getAlertStatistics = async (userId) => {
       lastAlertTime: null // Will be fetched if needed
     };
   } catch (error) {
-    console.error('❌ Unexpected error getting alert statistics:', error.message);
+    safeLog.error('❌ Unexpected error getting alert statistics:', error.message);
     return null;
   }
 };
@@ -133,16 +134,16 @@ export const deleteOldAlerts = async (daysOld = 90) => {
   try {
     const cutoffDate = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000);
 
-    console.log(`🗑️ Deleting alerts older than ${daysOld} days (before ${cutoffDate.toISOString()})`);
+    safeLog.log(`🗑️ Deleting alerts older than ${daysOld} days (before ${cutoffDate.toISOString()})`);
 
     const result = await prisma.alertLog.deleteMany({
       where: { createdAt: { lt: cutoffDate } }
     });
 
-    console.log(`✅ Deleted ${result.count} old alert records`);
+    safeLog.log(`✅ Deleted ${result.count} old alert records`);
     return result.count;
   } catch (error) {
-    console.error('❌ Unexpected error deleting old alerts:', error.message);
+    safeLog.error('❌ Unexpected error deleting old alerts:', error.message);
     return null;
   }
 };

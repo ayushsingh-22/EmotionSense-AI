@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Response Generation Routes
  * Handles empathetic response generation using LLM
@@ -38,7 +39,7 @@ router.post('/generate', validate({ body: responseGenerateBody }), asyncHandler(
     });
   }
 
-  console.log(`🤖 Generating empathetic response for emotion: ${emotion} (confidence: ${confidence})`);
+  safeLog.log(`🤖 Generating empathetic response for emotion: ${emotion} (confidence: ${confidence})`);
 
   // Generate text response using LLM
   const llmResponse = await generateResponse({
@@ -51,7 +52,7 @@ router.post('/generate', validate({ body: responseGenerateBody }), asyncHandler(
   // Generate audio response if requested and TTS is enabled
   let audioResponse = null;
   if (includeAudio && config.tts.enabled) {
-    console.log(`🔊 Generating audio response...`);
+    safeLog.log(`🔊 Generating audio response...`);
     audioResponse = await generateSpeech(llmResponse.text);
   }
 
@@ -91,7 +92,7 @@ router.post('/chat', validate({ body: responseChatBody }), asyncHandler(async (r
     });
   }
 
-  console.log(`💬 Generating conversational response...`);
+  safeLog.log(`💬 Generating conversational response...`);
 
   // Generate response
   const llmResponse = await generateResponse({

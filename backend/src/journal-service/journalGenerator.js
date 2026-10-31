@@ -25,8 +25,10 @@ import { getGeminiModelList, getGroqChatModel } from '../utils/modelCatalog.js';
 // journal-entry-shaped object so callers (journalRoutes.js etc.) don't
 // need to change. Flag this mapping for review by whoever owns the schema.
 
-class JournalGenerator {
-  constructor() {
+export class JournalGenerator {
+  constructor({ db = prisma, storage = storageService } = {}) {
+    this.db = db;
+    this.storage = storage;
     // Gemini: store the key and construct the model lazily (see getGeminiModel())
     // since the best available model id is resolved daily and async.
     this.geminiApiKey = config.gemini?.apiKeys?.[0] || config.gemini?.apiKey;
@@ -69,7 +71,7 @@ class JournalGenerator {
    * @param {Object} options - Options like force regeneration
    */
   async generateDailyJournal(userId, date, options = {}) {
-    const { force = false, forceRegenerate = false, manual = false } = options;
+    const { force = false, forceRegenerate = false, manual = false, ensureLock = () => {} } = options;
     logger.info(`📔 Generating journal for user ${userId} on ${date}`);
     
     try {
@@ -77,7 +79,7 @@ class JournalGenerator {
       const { startTime, endTime } = this.getDateRangeIST(date);
       
       // Step 2: Query messages for this user on this date
-      const messageRows = await prisma.message.findMany({
+      const messageRows = await this.db.message.findMany({
         where: {
           userId,
           role: 'user', // Only user messages for journal source
@@ -112,8 +114,11 @@ class JournalGenerator {
       }
       
       // Step 4: Check if journal already exists (stored as a DailyEmotionSummary)
-      const existingSummary = await storageService.getDailyEmotionSummary(userId, date);
+      const existingSummary = await this.storage.getDailyEmotionSummary(userId, date);
       const existingJournal = existingSummary ? this._toJournalShape(userId, date, existingSummary) : null;
+      if (!manual && !force && !forceRegenerate && existingSummary?.eJournalEntry != null) {
+        return { success: true, skipped: true, reason: 'already_generated', messageCount: messages.length };
+      }
 
       // Step 5: Aggregate emotion data
       const emotionSummary = this.aggregateEmotions(messages);
@@ -148,8 +153,10 @@ class JournalGenerator {
         source: manual ? 'manual' : 'auto'
       };
 
+      // Abort a nightly write if its advisory-lock connection has been lost.
+      ensureLock();
       // Force regenerate (used by refresh endpoint) just overwrites via upsert
-      const savedSummary = await storageService.upsertDailyEmotionSummary({
+      const savedSummary = await this.storage.upsertDailyEmotionSummary({
         userId,
         date,
         dominantEmotion: emotionSummary.primaryEmotion,
@@ -161,7 +168,9 @@ class JournalGenerator {
         segmentSummary: segmentSummaryBag,
         summaryText: journalContent,
         eJournalEntry: journalContent
-      });
+      }, { preserveExistingJournal: !manual && !force && !forceRegenerate });
+
+      if (!savedSummary) return { success: true, skipped: true, reason: 'already_generated', messageCount: messages.length };
 
       const savedJournal = this._toJournalShape(userId, date, savedSummary);
 

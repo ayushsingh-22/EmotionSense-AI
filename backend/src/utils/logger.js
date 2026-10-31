@@ -1,78 +1,27 @@
-/**
- * Logger Utility
- * Centralized logging with different levels
- */
-
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import { isProduction } from '../config/environment.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const LOG_LEVELS = {
-  ERROR: 0,
-  WARN: 1,
-  INFO: 2,
-  DEBUG: 3
-};
-
-class Logger {
-  constructor() {
-    this.level = LOG_LEVELS[process.env.LOG_LEVEL?.toUpperCase()] || LOG_LEVELS.INFO;
-    this.logDir = path.join(__dirname, '..', '..', 'logs');
-    this.ensureLogDir();
+const allowedNames = new Set(['Error', 'TypeError', 'RangeError', 'SyntaxError', 'PrismaClientKnownRequestError', 'PrismaClientInitializationError', 'AbortError']);
+const allowedProviders = new Set(['gemini', 'groq', 'google', 'sarvam', 'murf', 'resend', 'huggingface']);
+const allowedRoutes = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/register', '/api/auth/logout', '/api/internal/journal/run', '/api/health']);
+const allowedCodes = new Set(['UNAUTHENTICATED', 'RATE_LIMITED', 'VALIDATION_FAILED', 'P1001', 'P1008', 'P2002', 'P2024', 'P2028']);
+function fields(args) {
+  const out = {};
+  for (const value of args) {
+    if (!value || typeof value !== 'object') continue;
+    if (allowedNames.has(value.name)) out.errorName = value.name;
+    const status = value.status ?? value.statusCode ?? value.response?.status;
+    if (Number.isInteger(status) && status >= 100 && status <= 599) out.status = status;
+    if (allowedProviders.has(value.provider)) out.provider = value.provider;
+    if (['gmail refresh token invalid','email configuration incomplete'].includes(value.event)) out.event = value.event;
+    if (allowedCodes.has(value.code)) out.code = value.code;
+    if (allowedRoutes.has(value.route)) out.route = value.route;
+    if (typeof value.requestId === 'string' && /^[0-9a-f-]{36}$/i.test(value.requestId)) out.requestId = value.requestId;
   }
-
-  ensureLogDir() {
-    if (!fs.existsSync(this.logDir)) {
-      fs.mkdirSync(this.logDir, { recursive: true });
-    }
-  }
-
-  formatMessage(level, message, meta) {
-    const timestamp = new Date().toISOString();
-    const metaStr = meta ? ` ${JSON.stringify(meta)}` : '';
-    return `[${timestamp}] [${level}] ${message}${metaStr}`;
-  }
-
-  writeToFile(level, message, meta) {
-    if (isProduction()) {
-      const logFile = path.join(this.logDir, `${level.toLowerCase()}.log`);
-      const formattedMessage = this.formatMessage(level, message, meta);
-      fs.appendFileSync(logFile, formattedMessage + '\n');
-    }
-  }
-
-  error(message, meta) {
-    if (this.level >= LOG_LEVELS.ERROR) {
-      console.error(`❌ ${message}`, meta || '');
-      this.writeToFile('ERROR', message, meta);
-    }
-  }
-
-  warn(message, meta) {
-    if (this.level >= LOG_LEVELS.WARN) {
-      console.warn(`⚠️  ${message}`, meta || '');
-      this.writeToFile('WARN', message, meta);
-    }
-  }
-
-  info(message, meta) {
-    if (this.level >= LOG_LEVELS.INFO) {
-      console.log(`ℹ️  ${message}`, meta || '');
-      this.writeToFile('INFO', message, meta);
-    }
-  }
-
-  debug(message, meta) {
-    if (this.level >= LOG_LEVELS.DEBUG) {
-      console.log(`🐛 ${message}`, meta || '');
-      this.writeToFile('DEBUG', message, meta);
-    }
-  }
+  return out;
 }
-
-export default new Logger();
+const emit = (level, args) => console[level === 'error' ? 'error' : 'log'](JSON.stringify({ level, ...fields(args) }));
+export const safeError = (...args) => emit('error', args);
+const logger = {
+  log: (...args) => emit('info', args), info: (...args) => emit('info', args),
+  warn: (...args) => emit('warn', args), error: (...args) => safeError(...args),
+  debug: (...args) => emit('debug', args), writeToFile: () => {}
+};
+export default logger;

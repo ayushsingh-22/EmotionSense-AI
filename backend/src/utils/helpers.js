@@ -1,3 +1,4 @@
+import safeLog from './logger.js';
 /**
  * Utility Functions
  * Common utility functions used across the application
@@ -40,7 +41,7 @@ export const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => 
       if (i === maxRetries - 1) throw error;
       
       const delay = baseDelay * Math.pow(2, i);
-      console.log(`⚠️  Retry ${i + 1}/${maxRetries} after ${delay}ms...`);
+      safeLog.log(`⚠️  Retry ${i + 1}/${maxRetries} after ${delay}ms...`);
       await sleep(delay);
     }
   }
@@ -81,7 +82,7 @@ export const deleteFileSafe = (filePath) => {
     }
     return false;
   } catch (error) {
-    console.error(`Error deleting file ${filePath}:`, error);
+    safeLog.error(`Error deleting file ${filePath}:`, error);
     return false;
   }
 };

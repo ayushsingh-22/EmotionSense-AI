@@ -35,7 +35,7 @@ This module handles voice-based emotion detection through speech-to-text convers
 import { analyzeVoiceEmotion } from './voice-service/index.js';
 
 const result = await analyzeVoiceEmotion('/path/to/audio.wav');
-console.log(result);
+  // Process the result without logging user content.
 // Output:
 // {
 //   transcript: "I'm feeling really happy",

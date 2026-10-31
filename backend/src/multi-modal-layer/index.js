@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Multi-Modal Emotion Layer Module
  * Combines text and voice emotion detection results
@@ -200,11 +201,11 @@ export const fusionEnsemble = (textResult, voiceResult) => {
  * This is the primary export used by routes
  */
 export const fuseEmotions = (textResult, voiceResult) => {
-  console.log(`🎭 Fusing emotions from text and voice...`);
+  safeLog.log(`🎭 Fusing emotions from text and voice...`);
   
   // Handle case where only one modality is available
   if (!textResult && !voiceResult) {
-    console.warn('⚠️  No emotion results provided for fusion');
+    safeLog.warn('⚠️  No emotion results provided for fusion');
     return {
       emotion: 'neutral',
       confidence: 0,
@@ -215,7 +216,7 @@ export const fuseEmotions = (textResult, voiceResult) => {
   }
   
   if (!textResult) {
-    console.log('ℹ️  Using voice-only emotion (no text result)');
+    safeLog.log('ℹ️  Using voice-only emotion (no text result)');
     return {
       ...voiceResult,
       strategy: 'voice_only'
@@ -223,7 +224,7 @@ export const fuseEmotions = (textResult, voiceResult) => {
   }
   
   if (!voiceResult) {
-    console.log('ℹ️  Using text-only emotion (no voice result)');
+    safeLog.log('ℹ️  Using text-only emotion (no voice result)');
     return {
       ...textResult,
       strategy: 'text_only'
@@ -248,7 +249,7 @@ export const fuseEmotions = (textResult, voiceResult) => {
       fusedResult = fusionWeighted(textResult, voiceResult);
   }
   
-  console.log(`✅ Fused emotion: ${fusedResult.emotion} (confidence: ${fusedResult.confidence.toFixed(2)}, strategy: ${fusedResult.strategy})`);
+  safeLog.log(`✅ Fused emotion: ${fusedResult.emotion} (confidence: ${fusedResult.confidence.toFixed(2)}, strategy: ${fusedResult.strategy})`);
   
   return {
     ...fusedResult,

@@ -1,3 +1,4 @@
+import safeLog from './logger.js';
 /**
  * Translation Helper Module
  * Handles language detection and translation using Google Translate API with Gemini fallback
@@ -43,7 +44,7 @@ export async function translateToEnglishIfNeeded(text) {
     // First check if text is Hinglish (romanized Hindi)
     const isHinglish = detectHinglish(text);
     if (isHinglish) {
-      console.log(`✅ Hinglish detected! Using Gemini for translation...`);
+      safeLog.log(`✅ Hinglish detected! Using Gemini for translation...`);
       const hinglishResult = await geminiTranslateHinglish(text);
       return {
         translatedText: hinglishResult.translatedText,
@@ -58,14 +59,14 @@ export async function translateToEnglishIfNeeded(text) {
     const sourceLang = result.raw?.src || 'unknown';
     const translatedText = result.text;
     
-    console.log(`✅ Language detected: ${sourceLang}`);
+    safeLog.log(`✅ Language detected: ${sourceLang}`);
     
     // Check if translation is needed (source language is not English)
     const needsTranslation = sourceLang !== 'en';
     
     if (needsTranslation) {
     } else {
-      console.log(`✅ Text is already in English, no translation needed`);
+      safeLog.log(`✅ Text is already in English, no translation needed`);
     }
     
     return {
@@ -75,7 +76,7 @@ export async function translateToEnglishIfNeeded(text) {
     };
     
   } catch (error) {
-    console.error('❌ Primary translation failed, using Gemini fallback:', error.message);
+    safeLog.error('❌ Primary translation failed, using Gemini fallback:', error.message);
     
     // Fallback to Gemini for translation
     try {
@@ -87,10 +88,10 @@ export async function translateToEnglishIfNeeded(text) {
         usedFallback: true
       };
     } catch (fallbackError) {
-      console.error('❌ Gemini fallback translation also failed:', fallbackError.message);
+      safeLog.error('❌ Gemini fallback translation also failed:', fallbackError.message);
       
       // If both methods fail, return original text with warning
-      console.warn('⚠️ All translation methods failed, proceeding with original text');
+      safeLog.warn('⚠️ All translation methods failed, proceeding with original text');
       return {
         translatedText: text,
         sourceLang: 'unknown',
@@ -113,18 +114,18 @@ export async function translateBackToUserLanguage(text, targetLang) {
   }
   
   if (!targetLang || targetLang === 'en' || targetLang === 'unknown') {
-    console.log(`✅ No translation needed, target language is ${targetLang || 'unknown'}`);
+    safeLog.log(`✅ No translation needed, target language is ${targetLang || 'unknown'}`);
     return text;
   }
 
   // Handle Hinglish (romanized Hindi)
   if (targetLang === 'hi-Latn') {
-    console.log(`🔄 Translating response back to Hinglish using Gemini...`);
+    safeLog.log(`🔄 Translating response back to Hinglish using Gemini...`);
     try {
       return await geminiTranslateToHinglish(text);
     } catch (error) {
-      console.error('❌ Hinglish translation failed:', error.message);
-      console.warn('⚠️ Returning English response instead of Hinglish');
+      safeLog.error('❌ Hinglish translation failed:', error.message);
+      safeLog.warn('⚠️ Returning English response instead of Hinglish');
       return text;
     }
   }
@@ -136,18 +137,18 @@ export async function translateBackToUserLanguage(text, targetLang) {
       to: targetLang 
     });
     
-    console.log(`✅ Response translated back to ${targetLang}`);
+    safeLog.log(`✅ Response translated back to ${targetLang}`);
     return result.text;
     
   } catch (error) {
-    console.error('❌ Primary back-translation failed, using Gemini fallback:', error.message);
+    safeLog.error('❌ Primary back-translation failed, using Gemini fallback:', error.message);
     
     try {
       const fallbackResult = await geminiTranslateBack(text, targetLang);
       return fallbackResult;
     } catch (fallbackError) {
-      console.error('❌ Gemini fallback back-translation also failed:', fallbackError.message);
-      console.warn('⚠️ All back-translation methods failed, returning English response');
+      safeLog.error('❌ Gemini fallback back-translation also failed:', fallbackError.message);
+      safeLog.warn('⚠️ All back-translation methods failed, returning English response');
       return text;
     }
   }
@@ -191,7 +192,7 @@ Text to analyze: "${text}"`;
       
       const parsed = JSON.parse(jsonMatch[0]);
       
-      console.log(`🤖 Gemini fallback translation successful - Language: ${parsed.detectedLanguage}, English: ${parsed.isEnglish}`);
+      safeLog.log(`🤖 Gemini fallback translation successful - Language: ${parsed.detectedLanguage}, English: ${parsed.isEnglish}`);
       
       return {
         translatedText: parsed.translatedText,
@@ -199,7 +200,7 @@ Text to analyze: "${text}"`;
       };
       
     } catch (parseError) {
-      console.error('❌ Failed to parse Gemini response JSON:', parseError.message);
+      safeLog.error('❌ Failed to parse Gemini response JSON:', parseError.message);
       
       // Fallback: Try to extract translation directly
       const simplePrompt = `Translate the following text to English if it's not already in English. If it's already in English, return it unchanged: "${text}"`;
@@ -213,7 +214,7 @@ Text to analyze: "${text}"`;
     }
     
   } catch (error) {
-    console.error('❌ Gemini translation fallback failed:', error.message);
+    safeLog.error('❌ Gemini translation fallback failed:', error.message);
     throw error;
   }
 }
@@ -238,11 +239,11 @@ Respond with ONLY the translated text, no additional comments or formatting.`;
     const response = result.response;
     const translatedText = response.text().trim();
     
-    console.log(`🤖 Gemini back-translation successful to ${targetLang}`);
+    safeLog.log(`🤖 Gemini back-translation successful to ${targetLang}`);
     return translatedText;
     
   } catch (error) {
-    console.error('❌ Gemini back-translation failed:', error.message);
+    safeLog.error('❌ Gemini back-translation failed:', error.message);
     throw error;
   }
 }
@@ -271,7 +272,7 @@ Respond with ONLY the English translation, no additional comments.`;
     return { translatedText };
     
   } catch (error) {
-    console.error('❌ Gemini Hinglish translation failed:', error.message);
+    safeLog.error('❌ Gemini Hinglish translation failed:', error.message);
     throw error;
   }
 }
@@ -304,7 +305,7 @@ Respond with ONLY the Hinglish translation in Roman script, no additional commen
     return hinglishText;
     
   } catch (error) {
-    console.error('❌ Gemini Hinglish translation failed:', error.message);
+    safeLog.error('❌ Gemini Hinglish translation failed:', error.message);
     throw error;
   }
 }

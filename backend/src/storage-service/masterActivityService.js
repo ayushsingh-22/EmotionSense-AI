@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 import prisma from '../lib/prisma.js';
 
 const normalizeActivityRow = (row) => {
@@ -96,11 +97,11 @@ class MasterActivityService {
         }
       });
 
-      console.log(`✅ Inserted ${activity_type} activity for user ${user_id}`);
+      safeLog.log(`✅ Inserted ${activity_type} activity for user ${user_id}`);
       return normalizeActivityRow(created);
 
     } catch (error) {
-      console.error('MasterActivityService.insertActivity error:', error);
+      safeLog.error('MasterActivityService.insertActivity error:', error);
       throw error;
     }
   }
@@ -156,7 +157,7 @@ class MasterActivityService {
       return { data: rows.map(normalizeActivityRow), count };
 
     } catch (error) {
-      console.error('MasterActivityService.getActivities error:', error);
+      safeLog.error('MasterActivityService.getActivities error:', error);
       throw error;
     }
   }
@@ -182,7 +183,7 @@ class MasterActivityService {
       return rows.map(normalizeActivityRow);
 
     } catch (error) {
-      console.error('MasterActivityService.getSessionActivities error:', error);
+      safeLog.error('MasterActivityService.getSessionActivities error:', error);
       throw error;
     }
   }
@@ -208,7 +209,7 @@ class MasterActivityService {
       return rows.map(normalizeActivityRow);
 
     } catch (error) {
-      console.error('MasterActivityService.getLatestActivitiesForUser error:', error);
+      safeLog.error('MasterActivityService.getLatestActivitiesForUser error:', error);
       throw error;
     }
   }
@@ -287,7 +288,7 @@ class MasterActivityService {
       return formattedMessages;
 
     } catch (error) {
-      console.error('MasterActivityService.getSessionChatMessages error:', error);
+      safeLog.error('MasterActivityService.getSessionChatMessages error:', error);
       throw error;
     }
   }
@@ -362,7 +363,7 @@ class MasterActivityService {
       return insights;
 
     } catch (error) {
-      console.error('MasterActivityService.getEmotionInsights error:', error);
+      safeLog.error('MasterActivityService.getEmotionInsights error:', error);
       throw error;
     }
   }
@@ -435,7 +436,7 @@ class MasterActivityService {
       return stats;
 
     } catch (error) {
-      console.error('MasterActivityService.getActivityStats error:', error);
+      safeLog.error('MasterActivityService.getActivityStats error:', error);
       throw error;
     }
   }
@@ -488,7 +489,7 @@ export async function saveActivity({
 
     return result;
   } catch (error) {
-    console.error('saveActivity wrapper error:', error);
+    safeLog.error('saveActivity wrapper error:', error);
     throw error;
   }
 }

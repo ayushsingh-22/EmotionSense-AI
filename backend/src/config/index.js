@@ -1,3 +1,4 @@
+import safeLog from '../utils/logger.js';
 /**
  * Configuration Module
  * Centralizes all environment variables and configuration settings
@@ -94,12 +95,7 @@ const config = {
       model: process.env.MURF_MODEL || 'FALCON',
       locale: process.env.MURF_LOCALE || 'en-US'
     },
-    openai: {
-      apiKey: process.env.OPENAI_API_KEY, // OpenAI API key (if needed as fallback)
-      model: process.env.TTS_MODEL || 'tts-1', // tts-1 (faster) or tts-1-hd (higher quality)
-      voice: process.env.TTS_VOICE || 'alloy', // alloy, echo, fable, onyx, nova, shimmer
-      speed: parseFloat(process.env.TTS_SPEED) || 1.0 // 0.25 to 4.0
-    }
+
   },
 
   // HuggingFace API Configuration
@@ -123,14 +119,12 @@ const config = {
 
   // Database Configuration (Neon Postgres via Prisma)
   database: {
-    type: process.env.DATABASE_TYPE || 'neon',
+    type: 'neon',
     url: process.env.DATABASE_URL
   },
 
   // Auth Configuration
-  // API_JWT_SECRET must equal the frontend's API_JWT_SECRET: the Next.js server
-  // signs short-lived bearer tokens with it and this backend verifies them
-  // (middleware/auth.js). It is NOT the NextAuth secret.
+  // Access JWTs are signed and verified by the backend only.
   auth: {
     apiJwtSecret: process.env.API_JWT_SECRET
   },
@@ -154,7 +148,7 @@ const config = {
   logging: {
     level: process.env.LOG_LEVEL || 'info',
     enableConsole: true,
-    enableFile: isProduction()
+    enableFile: !isProduction()
   },
 
   // Safety and Emergency Contact Settings
@@ -162,33 +156,6 @@ const config = {
     enableEmergencyAlerts: process.env.ENABLE_EMERGENCY_ALERTS !== 'false', // Enabled by default
     highRiskKeywords: (process.env.HIGH_RISK_KEYWORDS || 'suicide,self-harm,harm myself,kill myself,end my life,hurt myself,suicidal').split(','),
     mediumRiskKeywords: (process.env.MEDIUM_RISK_KEYWORDS || 'worthless,burden,give up,no point,hopeless').split(',')
-  },
-
-  // Email Configuration (Nodemailer)
-  email: {
-    nodemailer: {
-      enabled: process.env.EMAIL_ENABLED === 'true',
-      provider: process.env.EMAIL_PROVIDER || null, // gmail, outlook, smtp, sendgrid
-      gmail: {
-        email: process.env.GMAIL_EMAIL,
-        appPassword: process.env.GMAIL_APP_PASSWORD // Use App Password, not regular password
-      },
-      outlook: {
-        email: process.env.OUTLOOK_EMAIL,
-        password: process.env.OUTLOOK_PASSWORD
-      },
-      smtp: {
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
-        email: process.env.SMTP_EMAIL,
-        password: process.env.SMTP_PASSWORD
-      },
-      sendgrid: {
-        apiKey: process.env.SENDGRID_API_KEY,
-        fromEmail: process.env.SENDGRID_FROM_EMAIL
-      }
-    }
   },
 
   // Dashboard and analytics configuration
@@ -219,11 +186,11 @@ export const validateConfig = () => {
   const missing = requiredFields.filter(field => !field.value);
 
   if (missing.length > 0) {
-    console.warn('⚠️  Warning: Missing configuration values:');
+    safeLog.warn('⚠️  Warning: Missing configuration values:');
     missing.forEach(field => {
-      console.warn(`   - ${field.name}`);
+      safeLog.warn(`   - ${field.name}`);
     });
-    console.warn('   Some features may not work correctly.');
+    safeLog.warn('   Some features may not work correctly.');
   }
 };
 
