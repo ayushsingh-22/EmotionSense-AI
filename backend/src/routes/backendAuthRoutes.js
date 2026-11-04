@@ -59,7 +59,7 @@ export function createBackendAuthRouter({ prisma, services }) {
   router.post('/register',fail(async(req,res)=>{
     const started=Date.now();
     const address=normalize(req.body?.email), password=req.body?.password;
-    if(!goodEmail(address)) return res.status(400).json({error:'Invalid request'});
+    if(req.body?.isAdult !== true || !goodEmail(address)) return res.status(400).json({error:'Invalid request'});
     try { passwords.validate(password); } catch { return res.status(400).json({error:'Invalid request'}); }
     const passwordHash=await passwords.hash(password);
     let user;

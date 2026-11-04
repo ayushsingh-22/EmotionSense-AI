@@ -15,6 +15,9 @@ for(const [name,change] of [
   ['mixed-case production environment',e=>e.NODE_ENV=' Production '],
   ['missing URL',e=>delete e.DATABASE_URL],
   ['malformed URL',e=>e.DATABASE_URL='invalid'],
+  ['production host',e=>e.DATABASE_URL='postgresql://placeholder@ep-cold-hill-b3lffx1r.c-4.ap-southeast-1.aws.neon.tech/test'],
+  ['production branch pin',e=>e.EXPECTED_NEON_BRANCH_ID='br-ancient-snow-b3si0kwz'],
+  ['production direct host',e=>e.DIRECT_URL='postgresql://placeholder@ep-cold-hill-b3lffx1r.c-4.ap-southeast-1.aws.neon.tech/test'],
   ['unapproved host',e=>e.DATABASE_URL='postgresql://placeholder@unapproved.invalid/test'],
   ['forged endpoint suffix',e=>e.DATABASE_URL=`postgresql://placeholder@${DEV.endpoint}-other.c-4.ap-southeast-1.aws.neon.tech/test`],
   ['unapproved host domain',e=>e.DATABASE_URL=`postgresql://placeholder@${DEV.endpoint}.invalid/test`]

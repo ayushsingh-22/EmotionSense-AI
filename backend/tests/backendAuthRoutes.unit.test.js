@@ -19,7 +19,7 @@ function fixture() {
   const auth=createBackendAuthRouter({prisma,services}); app.use('/api/auth',auth.router); app.get('/protected',auth.auth,(_q,r)=>r.sendStatus(204));
   return {app,state};
 }
-const input={email:'unit@invalid.test',password:'not-a-real-password',newPassword:'not-a-real-password',currentPassword:'not-a-real-password',otp:'000000',refreshToken:'opaque'};
+const input={isAdult:true,email:'unit@invalid.test',password:'not-a-real-password',newPassword:'not-a-real-password',currentPassword:'not-a-real-password',otp:'000000',refreshToken:'opaque'};
 const cases=[['post','register',202],['post','verify-email',200],['post','resend-verification',202],['post','login',200],['post','refresh',200],['post','logout',200],['post','logout-all',200],['post','forgot-password',202],['post','reset-password',200],['post','change-password',200],['get','me',200],['delete','account',200]];
 for (const [method,path,status] of cases) {
   test(`${path} succeeds with fake dependencies`,async()=>{const {app}=fixture();const res=await request(app)[method](`/api/auth/${path}`).set('Authorization','Bearer opaque').send(input);assert.equal(res.status,status);assert.equal(res.headers['cache-control'],'no-store')});
@@ -38,3 +38,5 @@ test('unverified status requires correct password',async()=>{const f=fixture();f
 test('unknown and known accounts receive generic acknowledgement',async()=>{const f=fixture();const known=await request(f.app).post('/api/auth/forgot-password').send(input);f.state.missing=true;const unknown=await request(f.app).post('/api/auth/forgot-password').send(input);assert.equal(known.status,unknown.status);assert.deepEqual(known.body,unknown.body)});
 test('login per-IP limit returns no-store 429',async()=>{const {app}=fixture();for(let i=0;i<10;i++)await request(app).post('/api/auth/login').send(input);const r=await request(app).post('/api/auth/login').send(input);assert.equal(r.status,429);assert.equal(r.headers['cache-control'],'no-store')});
 test('auth JSON is limited to 8 KB',async()=>{const {app}=fixture();const r=await request(app).post('/api/auth/login').send({data:'x'.repeat(9000)});assert.equal(r.status,413);assert.equal(r.headers['cache-control'],'no-store')});
+
+test('register requires explicit adult confirmation',async()=>{const {app}=fixture();for(const value of [undefined,false,'true',1]){const response=await request(app).post('/api/auth/register').send({...input,isAdult:value});assert.equal(response.status,400);assert.deepEqual(response.body,{error:'Invalid request'})}});

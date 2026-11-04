@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 import { setTestEnv, bearer } from './helpers.js';
+import { assertSafeTestDatabase as assertDevelopmentDatabase } from './devDbGuard.js';
 
 const originalNodeEnv = process.env.NODE_ENV;
 if (String(originalNodeEnv || '').trim().toLowerCase() === 'production') throw new Error('Refusing to run integration tests with NODE_ENV=production');
@@ -53,22 +54,11 @@ const mintToken = async userId => {
  * Tests never run migrations, reset schemas or truncate: they only INSERT/DELETE
  * rows whose email is  phase2a-test-*@example.invalid.
  */
-const DEV = { branch: 'br-ancient-snow-b3si0kwz', endpoint: 'ep-cold-hill-b3lffx1r', project: 'fancy-union-28873755' };
 let dbApproved = false;
 const assertSafeTestDatabase = async () => {
-  const url = new URL(process.env.DATABASE_URL);
-  const schema = url.searchParams.get('schema') || 'public';
-  if (url.hostname.split('.')[0].replace(/-pooler$/, '') !== DEV.endpoint || !url.hostname.endsWith('.aws.neon.tech')) throw new Error('Refusing unapproved database endpoint');
-  const [id] = await prisma.$queryRawUnsafe(
-    "select current_setting('neon.branch_id', true) as branch, current_setting('neon.endpoint_id', true) as endpoint, current_setting('neon.project_id', true) as project");
-  const expected = process.env.EXPECTED_NEON_BRANCH_ID;
-  if (!expected) throw new Error('Refusing to run: EXPECTED_NEON_BRANCH_ID must be set');
-  if (id.branch !== DEV.branch || id.endpoint !== DEV.endpoint || id.project !== DEV.project) {
-    throw new Error(`Refusing to run: database reports ${id.branch}/${id.endpoint}/${id.project}, expected the development branch`);
-  }
-  if (expected !== DEV.branch) throw new Error(`Refusing to run: EXPECTED_NEON_BRANCH_ID=${expected} is not the development branch`);
+  const id = await assertDevelopmentDatabase(prisma);
   dbApproved = true;
-  console.log(`# test database verified: branch=${id.branch} endpoint=${id.endpoint} project=${id.project} schema=${schema}`);
+  console.log(`# test database verified: branch=${id.branch} endpoint=${id.endpoint} project=${id.project}`);
 };
 
 const seed = async () => {
