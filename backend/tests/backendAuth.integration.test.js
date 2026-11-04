@@ -34,7 +34,7 @@ afterEach(clean);
 after(async()=>{try{await clean();const [users,sessions,challenges]=await Promise.all([prisma.user.count(),prisma.authSession.count(),prisma.authChallenge.count()]);console.log(`FINAL_COUNTS users=${users} sessions=${sessions} challenges=${challenges}`);assert.equal(users+sessions+challenges,0)}finally{await prisma.$disconnect()}});
 const ensure=(r,status)=>assert.equal(r.status,status,`Unexpected HTTP status in integration test`);
 async function code(){for(let i=0;i<100;i++){if(services.email.messages.length){const m=services.email.messages.pop();return /\b\d{6}\b/.exec(m.text)?.[0]}await new Promise(r=>setTimeout(r,25))}throw Error('Fake email not delivered')}
-async function register(){currentEmail=`${prefix}${randomUUID()}${suffix}`;ensure(await call('post','register',{email:currentEmail,password}),202);const otp=await code();ensure(await call('post','verify-email',{email:currentEmail,otp}),200);return currentEmail}
+async function register(){currentEmail=`${prefix}${randomUUID()}${suffix}`;ensure(await call('post','register',{email:currentEmail,password,isAdult:true}),202);const otp=await code();ensure(await call('post','verify-email',{email:currentEmail,otp}),200);return currentEmail}
 async function login(){const r=await call('post','login',{email:currentEmail,password});ensure(r,200);return r.body}
 async function ready(){await register();return login()}
 async function family(access){const {sid}=await services.tokens.verify(access);return (await prisma.authSession.findUnique({where:{id:sid}})).familyId}

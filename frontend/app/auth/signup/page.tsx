@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function SignUpPage() {
   const [fullName, setFullName] = useState('');
+  const [isAdult, setIsAdult] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -55,7 +56,7 @@ export default function SignUpPage() {
     try {
       setIsLoading(true);
       
-      const result = await signUp(email, password, fullName);
+      const result = await signUp(email, password, fullName, isAdult);
       
       if (!result.error) {
         toast({ title: 'Check your email', description: 'If eligible, a verification code will be sent.' });
@@ -155,10 +156,11 @@ export default function SignUpPage() {
               </div>
             </div>
 
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" required checked={isAdult} onChange={(e) => setIsAdult(e.target.checked)} disabled={isLoading} /> I am 18 or older</label>
             <Button 
               type="submit" 
               className="w-full h-12 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105" 
-              disabled={isLoading || !fullName || !email || !password}
+              disabled={isLoading || !fullName || !email || !password || !isAdult}
             >
               {isLoading ? (
                 <div className="flex items-center">

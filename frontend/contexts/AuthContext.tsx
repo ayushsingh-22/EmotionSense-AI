@@ -18,7 +18,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error?: string }>;
+  signUp: (email: string, password: string, fullName: string, isAdult: boolean) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   deleteAccount: (password: string) => Promise<{ error?: string }>;
@@ -91,9 +91,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Registration always returns a neutral acknowledgement; verification follows.
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, isAdult: boolean) => {
     try {
-      const response=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,fullName}),cache:'no-store'});
+      const response=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,fullName,isAdult}),cache:'no-store'});
       if(!response.ok) return {error: response.status>=500 ? 'Service unavailable. Please try again.' : 'Unable to process the request.'};
       sessionStorage.setItem('mindhaven-verification-email',email);
       return {};
