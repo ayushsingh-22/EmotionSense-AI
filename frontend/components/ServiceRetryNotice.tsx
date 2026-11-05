@@ -1,0 +1,3 @@
+'use client';
+import { useEffect,useState } from 'react';
+export function ServiceRetryNotice(){const [visible,setVisible]=useState(false);useEffect(()=>{let timer:ReturnType<typeof setTimeout>;const show=()=>{setVisible(true);clearTimeout(timer);timer=setTimeout(()=>setVisible(false),2000)};window.addEventListener('mindhaven:service-retrying',show);return()=>{window.removeEventListener('mindhaven:service-retrying',show);clearTimeout(timer)}},[]);return visible?<div role="status" className="fixed bottom-4 right-4 z-50 rounded-lg border bg-background p-4 shadow-lg">Service waking up, retrying…</div>:null}

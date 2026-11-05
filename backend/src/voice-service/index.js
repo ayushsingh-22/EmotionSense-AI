@@ -15,7 +15,7 @@ import fs from 'fs';
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Groq from 'groq-sdk';
+import { transcribeWithGroq } from './groqTranscription.js';
 import config from '../config/index.js';
 import { getGroqSttModel } from '../utils/modelCatalog.js';
 import ffmpeg from 'fluent-ffmpeg';
@@ -27,10 +27,6 @@ const __dirname = path.dirname(__filename);
 // Set ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
-// Initialize Groq client
-const groq = new Groq({
-  apiKey: config.stt.groq.apiKey
-});
 
 /**
  * Convert audio file to WAV format for better compatibility with Groq
@@ -70,6 +66,7 @@ export const speechToTextGroq = async (audioPath) => {
   
   let wavPath = audioPath;
   let tempWavFile = null;
+  let stage = 'input';
   
   try {
     // Check if API key is configured
@@ -93,7 +90,8 @@ export const speechToTextGroq = async (audioPath) => {
         audioPath.toLowerCase().endsWith('.mp3') ||
         audioPath.toLowerCase().endsWith('.ogg')) {
       safeLog.log(`🔄 Converting audio format to WAV for Groq compatibility...`);
-      tempWavFile = audioPath.replace(/\.[^.]+$/, '_converted.wav');
+      stage = 'audio_conversion';
+      tempWavFile = audioPath.replace(/\.[^.]+$/, '.wav');
       wavPath = await convertToWav(audioPath);
       
       // Verify conversion result
@@ -110,20 +108,8 @@ export const speechToTextGroq = async (audioPath) => {
     safeLog.log(`🌐 Language detection: ${config.stt.groq.language ? config.stt.groq.language : 'AUTO-DETECT (All languages)'}`);
 
     // Build transcription options - only include language if explicitly set
-    const transcriptionOptions = {
-      file: fs.createReadStream(wavPath),
-      model: sttModel,
-      temperature: config.stt.groq.temperature,
-      response_format: config.stt.groq.responseFormat,
-      timestamp_granularities: ["word", "segment"]
-    };
-    
-    // Only add language parameter if explicitly configured (otherwise Whisper auto-detects)
-    if (config.stt.groq.language) {
-      transcriptionOptions.language = config.stt.groq.language;
-    }
-    
-const transcription = await groq.audio.transcriptions.create(transcriptionOptions);
+    stage = 'provider';
+    const transcription = await transcribeWithGroq({audioPath:wavPath,apiKey:config.stt.groq.apiKey,model:sttModel,temperature:config.stt.groq.temperature,responseFormat:config.stt.groq.responseFormat,language:config.stt.groq.language});
 
     // Extract transcript text
     const transcript = transcription.text || '';
@@ -156,15 +142,15 @@ const transcription = await groq.audio.transcriptions.create(transcriptionOption
     };
 
   } catch (error) {
-    safeLog.error('❌ Groq STT Error:', error.message);
-    safeLog.error('   Stack:', error.stack);
+    safeLog.error({provider:'groq'});
     
     // Return empty transcript on error
     return {
       transcript: "",
       confidence: 0,
       provider: 'groq',
-      error: error.message
+      error: 'Speech transcription unavailable',
+      diagnostic: error.diagnostic || {stage,provider:'groq'}
     };
   } finally {
     // Clean up temporary WAV file if it was created

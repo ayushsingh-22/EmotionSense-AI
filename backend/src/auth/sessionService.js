@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
+import { retryRead, transactionBeforeStart } from './transientRetry.js';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fresh = () => randomBytes(32).toString('base64url');
@@ -41,7 +42,7 @@ export function createSessionService({ prisma, tokens, replayKey, clock = () => 
       if (typeof userId !== 'string' || !userId || (deviceLabel !== null && (typeof deviceLabel !== 'string' || deviceLabel.length > 100))) throw new Error('Invalid session input');
       const now = clock(), expiry = new Date(now.getTime() + familyMs), id = randomUUID(), familyId = randomUUID(), refreshToken = fresh();
       const pair = await issuePair(userId, id, refreshToken, expiry);
-      const created = await prisma.$transaction(async tx => {
+      const created = await transactionBeforeStart(prisma, async tx => {
         await lockUser(tx, userId);
         if (expectedPasswordHash !== undefined) {
           const user = await tx.user.findUnique({ where: { id: userId }, select: { passwordHash: true, emailVerifiedAt: true } });
@@ -54,9 +55,9 @@ export function createSessionService({ prisma, tokens, replayKey, clock = () => 
     },
     async rotate(refreshToken) {
       if (typeof refreshToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(refreshToken)) return null;
-      const hash = digest(refreshToken), hint = await prisma.authSession.findUnique({ where: { tokenHash: hash } });
+      const hash = digest(refreshToken), hint = await retryRead(()=>prisma.authSession.findUnique({ where: { tokenHash: hash } }));
       if (!hint) return null;
-      const outcome = await prisma.$transaction(async tx => {
+      const outcome = await transactionBeforeStart(prisma, async tx => {
         await lockUser(tx, hint.userId); await lockFamily(tx, hint.familyId); await lockRow(tx, hint.id);
         const row = await tx.authSession.findUnique({ where: { tokenHash: hash } });
         const now = clock();
@@ -83,9 +84,9 @@ export function createSessionService({ prisma, tokens, replayKey, clock = () => 
       return outcome;
     },
     async markUsed({ userId, sessionId }) {
-      const hint = await prisma.authSession.findUnique({ where: { id: sessionId } });
+      const hint = await retryRead(()=>prisma.authSession.findUnique({ where: { id: sessionId } }));
       if (!hint || hint.userId !== userId) return false;
-      return prisma.$transaction(async tx => {
+      return transactionBeforeStart(prisma, async tx => {
         await lockUser(tx, hint.userId); await lockFamily(tx, hint.familyId); await lockRow(tx, sessionId); const row = await tx.authSession.findUnique({ where: { id: sessionId } }); const now = clock();
         if (!row || row.userId !== userId || row.revokedAt || row.consumedAt || row.expiresAt <= now) return false;
         await tx.authSession.update({ where: { id: sessionId }, data: { firstUsedAt: row.firstUsedAt ?? now, lastUsedAt: now } });

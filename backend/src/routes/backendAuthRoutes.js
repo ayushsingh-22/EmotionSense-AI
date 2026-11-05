@@ -1,6 +1,8 @@
+import { lockConsent } from '../wellbeing/consents.js';
 import safeLog from '../utils/logger.js';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import { retryRead } from '../auth/transientRetry.js';
 
 // Dependencies are injected so automated tests can substitute a fake email adapter.
 export function createBackendAuthRouter({ prisma, services }) {
@@ -30,7 +32,7 @@ export function createBackendAuthRouter({ prisma, services }) {
   };
   const invalid = res => res.status(401).json({ success: false, error: 'Invalid credentials or session', code: 'UNAUTHENTICATED' });
   const logDependencyError = error => { const code = typeof error?.code === 'string' && /^P\d{4}$/.test(error.code) ? error.code : 'unclassified'; safeLog.error({ code }); };
-  const unavailable = (res,error) => { logDependencyError(error); if (['P2028','P2024','P1001','P1008'].includes(error?.code)) res.set('Retry-After','3'); return res.status(503).json({error:'Service temporarily unavailable'}); };
+  const unavailable = (res,error) => { logDependencyError(error); if (['P2028','P2024','P1001','P1008','P1017','ECONNRESET','ECONNREFUSED','ETIMEDOUT'].includes(error?.code)) res.set('Retry-After','3'); return res.status(503).json({error:'Service temporarily unavailable'}); };
   const fail = fn => async(req,res) => { try { await fn(req,res); } catch (error) { if (!res.headersSent) unavailable(res,error); } };
   async function challenge(user,purpose) {
     const result=await challenges.issue({userId:user.id,purpose});
@@ -75,7 +77,7 @@ export function createBackendAuthRouter({ prisma, services }) {
     return ok?res.json({success:true}):res.status(400).json({error:'Invalid or expired code'});
   }));
   router.post('/login',fail(async(req,res)=>{
-    const user=await userFor(req), password=req.body?.password;
+    const user=await retryRead(()=>userFor(req)), password=req.body?.password;
     const checked=await passwords.verify(password,user?.passwordHash);
     if(!user || !checked.valid) return invalid(res);
     if(!user.emailVerifiedAt) return res.status(403).json({error:'Email verification required'});
@@ -110,7 +112,7 @@ export function createBackendAuthRouter({ prisma, services }) {
   router.delete('/account',auth,fail(async(req,res)=>{
     const user=await prisma.user.findUnique({where:{id:req.userId}});
     if(!(await passwords.verify(req.body?.password,user?.passwordHash)).valid) return invalid(res);
-    const deleted=await prisma.$transaction(async tx=>{await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`auth-user:${req.userId}`}, 0))::text AS locked`;return tx.user.deleteMany({where:{id:req.userId,passwordHash:user.passwordHash}})},transactionOptions);
+    const deleted=await prisma.$transaction(async tx=>{await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`auth-user:${req.userId}`}, 0))::text AS locked`;await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`emergency-contact:${req.userId}`}, 0))::text`;await lockConsent(tx,req.userId,'emergency_alert_sharing');return tx.user.deleteMany({where:{id:req.userId,passwordHash:user.passwordHash}})},transactionOptions);
     return deleted.count?res.json({success:true}):invalid(res);
   }));
   return {router,auth};

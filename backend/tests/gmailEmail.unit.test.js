@@ -50,3 +50,6 @@ test('send request timeout is bounded and retried',async()=>{
   let count=0;const email=createGmailEmail({...config,timeoutMs:5,attempts:2,fetchImpl:async()=>{count++;return count===1?tokenResponse:new Promise(()=>{})}});
   await assert.rejects(email.send(message),{message:'Email provider request failed'});assert.equal(count,3);
 });
+
+test('Gmail checks permission after token refresh before handing off',async()=>{let checks=0,sends=0;const email=createGmailEmail({...config,fetchImpl:async url=>{if(url.includes('oauth2'))return tokenResponse;sends++;return {ok:true,status:200}}});const result=await email.send(message,{beforeAttempt:async()=>++checks===1});assert.equal(result.accepted,false);assert.equal(sends,0)});
+test('Gmail does not retry after permission withdrawal',async()=>{let granted=true,sends=0;const email=createGmailEmail({...config,fetchImpl:async url=>{if(url.includes('oauth2'))return tokenResponse;sends++;granted=false;return {ok:false,status:503}}});const result=await email.send(message,{beforeAttempt:async()=>granted});assert.equal(result.accepted,false);assert.equal(sends,1)});

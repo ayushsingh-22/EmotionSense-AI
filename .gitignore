@@ -29,6 +29,8 @@ frontend/dist/logs/
 frontend/build/*.log
 
 # Temporary files
+__pycache__/
+*.pyc
 temp/
 *.tmp
 

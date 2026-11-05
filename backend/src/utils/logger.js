@@ -2,6 +2,7 @@ const allowedNames = new Set(['Error', 'TypeError', 'RangeError', 'SyntaxError',
 const allowedProviders = new Set(['gemini', 'groq', 'google', 'sarvam', 'murf', 'resend', 'huggingface']);
 const allowedRoutes = new Set(['/api/auth/login', '/api/auth/refresh', '/api/auth/register', '/api/auth/logout', '/api/internal/journal/run', '/api/health']);
 const allowedCodes = new Set(['UNAUTHENTICATED', 'RATE_LIMITED', 'VALIDATION_FAILED', 'P1001', 'P1008', 'P2002', 'P2024', 'P2028']);
+const allowedProviderCodes = new Set(['tls_certificate_error','provider_network_error','rate_limit_exceeded','invalid_api_key','invalid_request_error','model_decommissioned','model_not_found','insufficient_quota','authentication_error','permission_error','server_error','rate_limit_error']);
 function fields(args) {
   const out = {};
   for (const value of args) {
@@ -10,6 +11,7 @@ function fields(args) {
     const status = value.status ?? value.statusCode ?? value.response?.status;
     if (Number.isInteger(status) && status >= 100 && status <= 599) out.status = status;
     if (allowedProviders.has(value.provider)) out.provider = value.provider;
+    for (const key of ['providerErrorCode','providerErrorType']) if (allowedProviderCodes.has(value[key])) out[key] = value[key];
     if (['gmail refresh token invalid','email configuration incomplete'].includes(value.event)) out.event = value.event;
     if (allowedCodes.has(value.code)) out.code = value.code;
     if (allowedRoutes.has(value.route)) out.route = value.route;

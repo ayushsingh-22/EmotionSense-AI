@@ -200,6 +200,22 @@ describe('ownership / IDOR (user A attacking user B)', { skip: !hasDb && 'DATABA
   before(seed);
   after(finish);
 
+  test('wellbeing routes work through the full authenticated app and remain user scoped', async () => {
+    const prefs={language:'en',timezone:'UTC',activityTypes:['audio'],supportModes:['self_guided'],accessibility:{reduceMotion:true}};
+    let result=await request(app).put('/api/me/preferences').set(bearer(tokA)).send(prefs);assert.equal(result.status,200);
+    result=await request(app).get('/api/me/preferences').set(bearer(tokB));assert.deepEqual(result.body.data.activityTypes,[]);
+    result=await request(app).post('/api/me/consents').set(bearer(tokA)).send({purpose:'voice_processing',granted:true,noticeVersion:'voice-processing-v1'});assert.equal(result.status,201);
+    result=await request(app).get('/api/me/consents').set(bearer(tokB));assert.equal(result.body.data.find(x=>x.purpose==='voice_processing').granted,false);
+  });
+
+  test('all authenticated voice upload paths require consent before parsing audio', async () => {
+    for (const path of ['/api/analyze/voice','/api/analyze/multimodal','/api/chat/voice','/api/chat/voice/stream','/api/chat/transcribe']) {
+      const token=await mintToken(randomUUID());
+      const response=await request(app).post(path).set(bearer(token)).attach('audio',Buffer.from('test'),'voice.webm');
+      assert.equal(response.status,403);assert.equal(response.body.error.code,'CONSENT_REQUIRED');
+    }
+  });
+
   test('profile and emotion history are scoped to the authenticated user', async () => {
     const profile = await request(app).get('/api/profile').set(bearer(tokA));
     assert.equal(profile.status, 200); assert.equal(profile.body.id, A.id);

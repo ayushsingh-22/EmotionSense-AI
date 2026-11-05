@@ -108,7 +108,7 @@ export const triggerEmergencyNotification = async (
         const emailSent = await sendEmergencyAlert(
           contact.contact_email,
           userName,
-          userEmail,
+          userId,
           detectedEmotion,
           messageText,
           riskLevel

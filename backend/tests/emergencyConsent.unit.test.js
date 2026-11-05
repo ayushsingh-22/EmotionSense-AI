@@ -10,23 +10,23 @@ test('contact defaults, replacement and opt-in record consent; opt-out and delet
   const originalTransaction=prisma.$transaction, originalContact=prisma.emergencyContact;
   let row=null;const consents=[];
   const contact={findUnique:async()=>row,upsert:async({create,update})=>{row=row?{...row,...update}:{id:'contact',notifyEnabled:true,...create};return row},update:async({data})=>(row={...row,...data}),deleteMany:async()=>{row=null;return {count:1}}};
-  const tx={$queryRaw:async()=>[],emergencyContact:contact,userConsent:{create:async({data})=>consents.push(data)}};
+  const tx={emergencyContact:contact,userConsent:{findFirst:async()=>consents.at(-1)||null},$queryRaw:async(strings,...values)=>{if(!strings[0].includes('INSERT'))return [];const row={purpose:values[1],noticeVersion:values[2],granted:values[3],recordedAt:new Date()};consents.push(row);return [row]}};
   prisma.$transaction=async fn=>fn(tx);Object.defineProperty(prisma,'emergencyContact',{configurable:true,value:contact});
   try {
     let result=await createOrUpdateEmergencyContact('unit-user','Test','one.invalid',null);assert.equal(result.notify_enabled,true);assert.equal(consents.length,1);assert.equal(consents[0].purpose,'emergency_alert_sharing');assert.equal(consents[0].noticeVersion,'emergency-alert-v1');
     result=await setEmergencyContactNotifications('unit-user',false);assert.equal(result.notify_enabled,false);
     result=await getEmergencyContact('unit-user');assert.equal(result.notify_enabled,false);
-    result=await setEmergencyContactNotifications('unit-user',true);assert.equal(result.notify_enabled,true);assert.equal(consents.length,2);
+    result=await setEmergencyContactNotifications('unit-user',true);assert.equal(result.notify_enabled,true);assert.equal(consents.length,3);
     await setEmergencyContactNotifications('unit-user',false);
-    result=await createOrUpdateEmergencyContact('unit-user','Test','two.invalid',null);assert.equal(result.notify_enabled,true);assert.equal(consents.length,3);
-    await deleteEmergencyContact('unit-user');assert.equal(await getEmergencyContact('unit-user'),null);
+    result=await createOrUpdateEmergencyContact('unit-user','Test','two.invalid',null);assert.equal(result.notify_enabled,true);assert.equal(consents.length,5);
+    await deleteEmergencyContact('unit-user');assert.equal(await getEmergencyContact('unit-user'),null);assert.equal(consents.at(-1).granted,false);
   } finally {prisma.$transaction=originalTransaction;Object.defineProperty(prisma,'emergencyContact',{configurable:true,value:originalContact});}
 });
 
 test('notification endpoint updates the authenticated contact and rejects non-boolean input',async()=>{
   const original=prisma.$transaction;
   let row={id:'contact',userId:'unit-user',notifyEnabled:true};
-  const tx={$queryRaw:async()=>[],emergencyContact:{findUnique:async()=>row,update:async({data})=>(row={...row,...data})},userConsent:{create:async()=>{}}};
+  const tx={emergencyContact:{findUnique:async()=>row,update:async({data})=>(row={...row,...data})},userConsent:{findFirst:async()=>null},$queryRaw:async(strings,...values)=>strings[0].includes('INSERT')?[{purpose:values[1],noticeVersion:values[2],granted:values[3],recordedAt:new Date()}]:[]};
   prisma.$transaction=async fn=>fn(tx);
   const app=express();app.use(express.json());app.use((req,_res,next)=>{req.userId='unit-user';next()});app.use('/api/emergency',emergencyRoutes);
   try {

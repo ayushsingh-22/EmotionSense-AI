@@ -1,0 +1,12 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { productionCatalogIssues, assertProductionCatalog } from '../src/wellbeing/catalogProductionGuard.js';
+import { validateCatalog } from '../src/wellbeing/catalog.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+const item=()=>({id:'item-1',title:'Fixture',audio:{sourceUrl:'https://real-source.com/audio',license:'CC0'},image:{sourceUrl:'https://real-source.com/image',license:'CC0'}});
+test('production rejects and lists test domains, including subdomains',()=>{for(const host of ['example.invalid','child.example.com','example.net','foo.example.org','dev.test','foo.localhost','foo.example']){const x=item();x.audio.sourceUrl=`https://${host}/file`;assert.equal(productionCatalogIssues({items:[x]}).length,1);assert.throws(()=>assertProductionCatalog({items:[x]}),/Fixture \(item-1\)/)}});
+test('production rejects testing-only licences independently of source',()=>{const x=item();x.image.license='testing ONLY - replace';assert.throws(()=>assertProductionCatalog({items:[x]}),/testing-only/);x.image.license='CC0';assert.doesNotThrow(()=>assertProductionCatalog({items:[x]}))});
+test('development validator allows test licences and reserved sources with valid files',()=>{const asset=(id,p,m)=>({id,path:p,mimeType:m,sourceUrl:'https://example.invalid/test',license:'TESTING ONLY',attribution:''});const x={id:'00000000-0000-4000-8000-000000000001',title:'Fixture',description:null,type:'audio',language:'en',durationSeconds:1,needTags:[],suitabilityTags:[],status:'published',reviewVersion:'dev',audio:asset('00000000-0000-4000-8000-000000000002','/media/audio/tone.wav','audio/wav'),image:asset('00000000-0000-4000-8000-000000000003','/media/images/pixel.png','image/png')};const root=path.join(path.dirname(fileURLToPath(import.meta.url)),'fixtures/catalog');assert.doesNotThrow(()=>validateCatalog({version:1,items:[x]},root));assert.throws(()=>assertProductionCatalog({items:[x]}))});
+test('production catalogue is checked independently of development fixtures',()=>{const root=path.resolve('..','content');const prod=JSON.parse(fs.readFileSync(path.join(root,'catalog.json'),'utf8'));const dev=JSON.parse(fs.readFileSync(path.join(root,'catalog.development.json'),'utf8').replace(/^\uFEFF/,''));assert.doesNotThrow(()=>assertProductionCatalog(prod));assert.ok(Array.isArray(dev.items))});

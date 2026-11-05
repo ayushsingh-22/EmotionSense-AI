@@ -35,6 +35,8 @@ import {
 
 // Import routes
 import profileRoutes from './routes/profileRoutes.js';
+import { createCatalogRouter } from './routes/catalogRoutes.js';
+import { createWellbeingRouter, requireVoiceConsent } from './routes/wellbeingRoutes.js';
 import textRoutes from './routes/textRoutes.js';
 import voiceRoutes from './routes/voiceRoutes.js';
 import multiModalRoutes from './routes/multiModalRoutes.js';
@@ -108,9 +110,11 @@ const configureMiddleware = () => {
   app.use(globalLimiter());
 
   app.use('/api/auth', noStore, rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false }), express.json({ limit: '8kb' }), express.urlencoded({ extended: true, limit: '8kb' }));
+  app.use('/api/me', noStore, express.json({ limit: '8kb' }), express.urlencoded({ extended: true, limit: '8kb' }));
+  app.use('/api/content', noStore, express.json({ limit: '8kb' }), express.urlencoded({ extended: true, limit: '8kb' }));
   // Authentication bodies are parsed above; other routes retain the global limit.
   const skipForAuth = (parser) => (req, res, next) =>
-    (req.path.startsWith('/api/auth/') ? next() : parser(req, res, next));
+    ((req.path.startsWith('/api/auth/') || req.path.startsWith('/api/me/') || req.path === '/api/content' || req.path.startsWith('/api/content/')) ? next() : parser(req, res, next));
   app.use(skipForAuth(express.json({ limit: '1mb' })));
   app.use(skipForAuth(express.urlencoded({ extended: true, limit: '1mb' })));
   // Server-generated request id (never trusted from the client): echoed in the
@@ -156,6 +160,8 @@ const configureRoutes = (authServices) => {
   // Paid LLM / STT / TTS / emotion-model endpoints: authenticated + per-user limits.
   app.use(['/api/profile', '/api/messages/emotion-history'], ...authed);
   app.use('/api', profileRoutes);
+  app.use('/api/me', authFailureLimiter(), backendAuth.auth, noStore, createWellbeingRouter(prisma));
+  app.use('/api/content', authFailureLimiter(), backendAuth.auth, noStore, createCatalogRouter(prisma));
   app.use('/api/analyze', ...authed, ...paidAi);
   app.use('/api/response', ...authed, ...paidAi);
   app.use('/api/tts', ...authed, ...paidAi);
@@ -166,6 +172,7 @@ const configureRoutes = (authServices) => {
   app.use('/api/activity', ...authed);
   app.use('/api/journal', ...authed);
 
+  app.use(['/api/analyze/voice', '/api/analyze/multimodal', '/api/chat/voice', '/api/chat/transcribe'], requireVoiceConsent(prisma));
   app.use('/api/analyze/text', textRoutes);
   app.use('/api/analyze/voice', voiceRoutes);
   app.use('/api/analyze/multimodal', multiModalRoutes);

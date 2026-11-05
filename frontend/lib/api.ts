@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { requestVoiceConsent } from './voiceConsent';
+import { safeVoiceDiagnostic } from './voiceDiagnostics';
 import { withCache, PerformanceMonitor } from './performance';
 import type {
   TextAnalysisResult,
@@ -90,7 +92,11 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
-    const original = error.config as (typeof error.config & { _retried?: boolean }) | undefined;
+    const original = error.config as (typeof error.config & { _retried?: boolean; _voiceConsentRetried?: boolean }) | undefined;
+    if (error.response?.status===403 && error.response?.data?.error?.code==='CONSENT_REQUIRED' && original && !original._voiceConsentRetried) {
+      original._voiceConsentRetried=true;
+      if(await requestVoiceConsent()) return api.request(original);
+    }
     if (error.response?.status === 401 && original && !original._retried) {
       original._retried = true;
       clearBackendToken();
@@ -277,6 +283,7 @@ export const sendChatMessageStream = async (
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let completed = false;
 
   const handleFrame = (rawFrame: string) => {
     // A frame looks like:
@@ -306,6 +313,7 @@ export const sendChatMessageStream = async (
       const text = (parsed as { text?: string })?.text;
       if (typeof text === 'string') callbacks.onToken(text);
     } else if (eventName === 'done') {
+      completed = true;
       callbacks.onDone(parsed as ChatMessageResult);
     } else if (eventName === 'error') {
       const err = parsed as { error?: string; details?: string };
@@ -330,6 +338,7 @@ export const sendChatMessageStream = async (
       }
     }
   }
+  if(!completed) throw new Error('Chat stream ended before completion');
 };
 
 /**
@@ -378,13 +387,18 @@ export const sendVoiceMessageStream = async (
   formData.append('audio', audioBlob, 'voice-message.webm');
   formData.append('type', 'voice');
 
-  const response = await fetch(`${baseURL}/api/chat/voice/stream`, {
+  const send = async () => fetch(`${baseURL}/api/chat/voice/stream`, {
     method: 'POST',
     headers: await authHeaders(),
     body: formData,
   });
 
+  let response:Response;
+  try{response=await send()}catch{console.error('[Voice diagnostic]',{stage:'transport'});throw new Error('Voice connection failed')}
+  if(response.status===403){const body=await response.clone().json().catch(()=>null);if(body?.error?.code==='CONSENT_REQUIRED' && await requestVoiceConsent()){try{response=await send()}catch{console.error('[Voice diagnostic]',{stage:'transport'});throw new Error('Voice connection failed')}}}
+
   if (!response.ok || !response.body) {
+    console.error('[Voice diagnostic]',{stage:'request',status:response.status});
     callbacks.onError(`Request failed with status ${response.status}`);
     return;
   }
@@ -426,7 +440,8 @@ export const sendVoiceMessageStream = async (
     } else if (eventName === 'done') {
       callbacks.onDone(parsed as VoiceMessageResult);
     } else if (eventName === 'error') {
-      const err = parsed as { error?: string; details?: string };
+      const err = parsed as { error?: string; details?: string; diagnostic?:unknown };
+      const diagnostic=safeVoiceDiagnostic(err.diagnostic);if(diagnostic)console.error('[Voice diagnostic]',diagnostic);
       callbacks.onError(err.details || err.error || 'Unknown streaming error');
     }
   };
@@ -452,10 +467,8 @@ export const sendVoiceMessageStream = async (
 /**
  * Get chat sessions for a user
  */
-export const getChatSessions = async (userId: string) => {
-  const response = await api.get(`/api/chat/sessions`, {
-    params: { userId }
-  });
+export const getChatSessions = async () => {
+  const response = await api.get(`/api/chat/sessions`);
   return response.data.data;
 };
 
@@ -685,6 +698,8 @@ export interface TimeSegment {
 
 export interface JournalEntry {
   id?: string;
+  kind?: 'written' | 'generated';
+  origin?: string;
   user_id?: string;
   date: string;
   content: string; // Main formatted journal text (full Daily Emotion Journal)
@@ -706,6 +721,7 @@ export interface JournalEntry {
   created_at: string;
   updated_at: string;
 }
+const generatedJournal=(journal:JournalEntry):JournalEntry=>({...journal,id:journal.id||journal.date,kind:'generated'});
 
 /**
  * Get today's journal entry
@@ -716,7 +732,7 @@ export const getJournalToday = async (userId: string): Promise<JournalEntry | nu
       '/api/journal/today',
       { params: { userId } }
     );
-    return response.data.data;
+    return response.data.data ? generatedJournal(response.data.data) : null;
   } catch (error) {
     console.error('Error fetching today\'s journal:', error);
     throw error;
@@ -735,7 +751,7 @@ export const getJournalList = async (
       '/api/journal/list',
       { params: { userId, limit } }
     );
-    return response.data.data.journals;
+    return response.data.data.journals.map(generatedJournal);
   } catch (error) {
     console.error('Error fetching journal list:', error);
     throw error;
@@ -754,7 +770,7 @@ export const getJournalByDate = async (
       `/api/journal/${date}`,
       { params: { userId } }
     );
-    return response.data.data;
+    return response.data.data ? generatedJournal(response.data.data) : null;
   } catch (error) {
     console.error('Error fetching journal by date:', error);
     throw error;
@@ -786,7 +802,7 @@ export const generateJournal = async (
       return null;
     }
     
-    return response.data.data || null;
+    return response.data.data ? generatedJournal(response.data.data) : null;
   } catch (error) {
     console.error('Error generating journal:', error);
     throw error;
@@ -807,7 +823,7 @@ export const refreshTodayJournal = async (userId: string): Promise<JournalEntry>
       throw new Error(response.data.error || 'Failed to refresh journal');
     }
     
-    return response.data.data;
+    return generatedJournal(response.data.data);
   } catch (error) {
     console.error('Error refreshing journal:', error);
     throw error;
