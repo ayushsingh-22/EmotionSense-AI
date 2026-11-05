@@ -20,7 +20,7 @@ test('the original migrations retain their order and later migrations follow',()
   const dirs=fs.readdirSync(migrations).filter(x=>/^\d{14}_/.test(x)).sort();assert.deepEqual(dirs.slice(0,4),Object.keys(original));
 });
 test('migration SQL files use LF line endings',()=>{
-  for(const name of fs.readdirSync(migrations).filter(x=>/^\d{14}_/.test(x)))assert.ok(!fs.readFileSync(path.join(migrations,name,'migration.sql')).includes(13));
+  for(const name of fs.readdirSync(migrations).filter(x=>/^\d{14}_/.test(x))){const bytes=fs.readFileSync(path.join(migrations,name,'migration.sql'));assert.ok(!bytes.includes(13));assert.ok(!bytes.subarray(0,3).equals(Buffer.from([0xef,0xbb,0xbf])))}
 });
 test('git attributes pin migration files to LF',()=>{
   const attributes=fs.readFileSync(path.join(root,'.gitattributes'),'utf8').split(/\r?\n/).map(s=>s.trim());assert.ok(attributes.includes('prisma/migrations/**/migration.sql text eol=lf'));assert.ok(attributes.includes('prisma/migrations/migration_lock.toml text eol=lf'));

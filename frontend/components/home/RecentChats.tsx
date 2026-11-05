@@ -35,7 +35,7 @@ export function RecentChats({ userId }: RecentChatsProps) {
         setIsLoading(true);
 
         // Fetch chat sessions (most recently updated first), then take the top 3
-        const sessionsResponse = await getChatSessions(userId);
+        const sessionsResponse = await getChatSessions();
         const sessionsData = (sessionsResponse || [])
           .slice()
           .sort((a: { updated_at: string }, b: { updated_at: string }) =>

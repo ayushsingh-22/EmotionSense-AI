@@ -335,15 +335,15 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
       playNextQueuedChunk();
     };
 
-    audio.onerror = (e) => {
-      console.error('Audio chunk playback error:', e);
+    audio.onerror = () => {
+      console.error('[Voice diagnostic]', {stage:'audio_playback'});
       audioRef.current = null;
       nextChunkIndexRef.current = nextIndex + 1;
       playNextQueuedChunk();
     };
 
-    audio.play().catch((error) => {
-      console.error('Failed to play audio chunk:', error);
+    audio.play().catch(() => {
+      console.error('[Voice diagnostic]', {stage:'audio_playback'});
       audioRef.current = null;
       nextChunkIndexRef.current = nextIndex + 1;
       playNextQueuedChunk();
@@ -593,7 +593,7 @@ const VoiceChatComponent = React.memo<VoiceChatProps>(({
         },
       });
     } catch (err) {
-      console.error('Error submitting voice message:', err);
+      console.error('[Voice diagnostic]', {stage:'voice_request_failed'});
       const errorMessage = err instanceof Error ? err.message : 'Failed to submit voice message';
 
       setError(errorMessage);

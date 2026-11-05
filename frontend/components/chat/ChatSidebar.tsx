@@ -115,7 +115,7 @@ export function AdvancedChatSidebar({
     if (!user?.id) return;
     setLoading(true);
     try {
-      const data = await getChatSessions(user.id);
+      const data = await getChatSessions();
       const items: ChatSession[] = data.sessions || [];
       setSessions(items);
     } catch (err) {

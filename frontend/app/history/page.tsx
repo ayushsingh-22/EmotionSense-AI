@@ -42,7 +42,7 @@ export default function HistoryPage() {
     
     try {
       setIsLoading(true);
-      const data = await getChatSessions(user.id);
+      const data = await getChatSessions();
       
       const enhancedSessions = await Promise.all(
         data.sessions.map(async (session: ChatSession) => {

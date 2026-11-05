@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "5a0ee8f3-e7c2-4ca4-a771-e917f0f20001",
+      "title": "Development tone: mindful pause",
+      "description": "Synthetic test audio for the development environment.",
+      "type": "audio",
+      "language": "en",
+      "durationSeconds": 20,
+      "needTags": [
+        "relax"
+      ],
+      "suitabilityTags": [],
+      "status": "published",
+      "reviewVersion": "development-fixture-v1",
+      "audio": {
+        "id": "5a0ee8f3-e7c2-4ca4-a771-e917f0f20010",
+        "path": "/media/audio/development-tone.wav",
+        "mimeType": "audio/wav",
+        "sourceUrl": "https://example.invalid/generated-test-tone",
+        "license": "CC0-1.0",
+        "attribution": "Synthetic development fixture"
+      },
+      "image": {
+        "id": "5a0ee8f3-e7c2-4ca4-a771-e917f0f20011",
+        "path": "/media/images/development-pixel.png",
+        "mimeType": "image/png",
+        "sourceUrl": "https://example.invalid/generated-test-image",
+        "license": "CC0-1.0",
+        "attribution": "Synthetic development fixture"
+      }
+    },
+    {
+      "id": "5a0ee8f3-e7c2-4ca4-a771-e917f0f20002",
+      "title": "Development tone: focus break",
+      "description": "Synthetic test audio for filtering and playback checks.",
+      "type": "meditation",
+      "language": "en",
+      "durationSeconds": 20,
+      "needTags": [
+        "focus"
+      ],
+      "suitabilityTags": [],
+      "status": "published",
+      "reviewVersion": "development-fixture-v1",
+      "audio": {
+        "id": "5a0ee8f3-e7c2-4ca4-a771-e917f0f20010",
+        "path": "/media/audio/development-tone.wav",
+        "mimeType": "audio/wav",
+        "sourceUrl": "https://example.invalid/generated-test-tone",
+        "license": "CC0-1.0",
+        "attribution": "Synthetic development fixture"
+      },
+      "image": {
+        "id": "5a0ee8f3-e7c2-4ca4-a771-e917f0f20011",
+        "path": "/media/images/development-pixel.png",
+        "mimeType": "image/png",
+        "sourceUrl": "https://example.invalid/generated-test-image",
+        "license": "CC0-1.0",
+        "attribution": "Synthetic development fixture"
+      }
+    }
+  ]
+}
