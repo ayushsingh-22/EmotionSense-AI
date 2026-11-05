@@ -28,3 +28,11 @@ The development branch was created schema-only and its six existing migrations w
 Apply and verify **new migrations on development first, then production**, using `prisma migrate deploy` only after the appropriate review and approval. Never use production for integration tests. No production migration or production database write is authorized by this guide.
 
 GitHub Actions runs the database-free unit and build checks on pull requests and pushes to `main`; integration tests remain local. Both repositories' workflows use read-only repository permissions.
+
+## Content catalogues
+
+`content/catalog.development.json` contains development-only fixtures. To review and seed them, run `node scripts/seed-catalog.mjs --target=development` from `backend` for a dry run, then add `--apply` after reviewing the diff. The development branch identity guard remains mandatory; missing items are never deleted.
+
+`content/catalog.json` is the production catalogue and is currently empty. The main-branch pull request check rejects test-only sources and licences in that file. Add items only after their source, licence and attribution are verified. Production seeding remains disabled pending separate approval.
+
+The development media files are tracked under `frontend/public/media/` and may be served by a website deployment even when the production catalogue is empty. Do not deploy those test-only files publicly until their rights are verified or the files are excluded from deployment.

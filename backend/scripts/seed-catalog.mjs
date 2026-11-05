@@ -3,7 +3,9 @@ import { validateCatalog } from '../src/wellbeing/catalog.js';import { syncCatal
 import { assertProductionCatalog } from '../src/wellbeing/catalogProductionGuard.js';
 process.on('uncaughtException',()=>{console.error('Catalog operation failed; check input and target configuration.');process.exit(1)});
 process.on('unhandledRejection',()=>{console.error('Catalog operation failed; check input and target configuration.');process.exit(1)});
-const args=process.argv.slice(2),root=path.resolve('..'),catalog=JSON.parse(fs.readFileSync(path.join(root,'content/catalog.json'),'utf8').replace(/^\uFEFF/,''));
+const args=process.argv.slice(2),root=path.resolve('..');
+const catalogFile=args.includes('--target=production')?'catalog.json':'catalog.development.json';
+const catalog=JSON.parse(fs.readFileSync(path.join(root,'content',catalogFile),'utf8').replace(/^\uFEFF/,''));
 if(args.includes('--target=production')){try{assertProductionCatalog(catalog)}catch(error){console.error(error.message);process.exit(1)}console.error('Production seeding is disabled; separate approval and implementation are required.');process.exit(1)}
 const e=dotenv.parse(fs.readFileSync('.env.test'));assertDevelopmentTarget(args,e);validateCatalog(catalog,path.join(root,'frontend/public/media'));
 const client=new pg.Client({connectionString:e.DIRECT_URL});try{await client.connect();const i=(await client.query("select current_setting('neon.branch_id',true) branch,current_setting('neon.endpoint_id',true) endpoint,current_setting('neon.project_id',true) project")).rows[0];if(i.branch!=='br-flat-scene-b3f7jcb4'||i.endpoint!=='ep-shiny-fire-b3nfje3k'||i.project!=='fancy-union-28873755')throw Error('Unapproved database identity')}finally{await client.end()}
