@@ -33,6 +33,7 @@ const { buildApp } = await import('../src/server.js');
 const prisma = hasDb ? (await import('../src/lib/prisma.js')).default : null;
 const app = buildApp();
 const { createAuthServices } = await import('../src/auth/index.js');
+const { cleanAndAssertNoLeftovers } = await import('./syntheticCleanup.js');
 const services = hasDb ? createAuthServices({prisma}) : null;
 
 const PREFIX = 'phase2a-test-';
@@ -94,7 +95,7 @@ const finish = async () => { await cleanup(); await prisma?.$disconnect(); };
 after(async()=>{
   try {
     await cleanup();
-    if(dbApproved){const [users,sessions,challenges]=await Promise.all([prisma.user.count(),prisma.authSession.count(),prisma.authChallenge.count()]);console.log(`FINAL_COUNTS users=${users} sessions=${sessions} challenges=${challenges}`);assert.equal(users+sessions+challenges,0)}
+    if(dbApproved)await cleanAndAssertNoLeftovers(prisma,[PREFIX],'API');
   } finally {await prisma?.$disconnect()}
 });
 

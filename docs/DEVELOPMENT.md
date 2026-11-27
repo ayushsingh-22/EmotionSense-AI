@@ -31,8 +31,8 @@ GitHub Actions runs the database-free unit and build checks on pull requests and
 
 ## Content catalogues
 
-`content/catalog.development.json` contains development-only fixtures. To review and seed them, run `node scripts/seed-catalog.mjs --target=development` from `backend` for a dry run, then add `--apply` after reviewing the diff. The development branch identity guard remains mandatory; missing items are never deleted.
+`content/catalog.json` is the single catalogue for development and production; see [CONTENT.md](CONTENT.md) for adding, editing, archiving and replacing media. It holds the six original generated starter items (published) and the four TESTING ONLY items as drafts. Production runs exclude those drafts entirely.
 
-`content/catalog.json` is the production catalogue and is currently empty. The main-branch pull request check rejects test-only sources and licences in that file. Add items only after their source, licence and attribution are verified. Production seeding remains disabled pending separate approval.
+Seed development from `backend`: `node scripts/seed-catalog.mjs --target=development` (dry run), then add `--apply`, then run the dry run again and expect only `UNCHANGED`. The development identity guard remains mandatory, and missing items are never deleted. Production seeding exists in code behind `--target=production --approve-production --env-file=PATH`. It is dry-run by default, and it checks the production guard, the database identity and that every file is live at `PUBLIC_MEDIA_BASE_URL`. Run it only with separate approval.
 
-The development media files are tracked under `frontend/public/media/` and may be served by a website deployment even when the production catalogue is empty. Do not deploy those test-only files publicly until their rights are verified or the files are excluded from deployment.
+`content/catalog.development.json` and `content/catalog.draft.json` are superseded and no longer read by the seed script. The TESTING ONLY media files (bell, meditation, rain, wind) must not be committed or deployed: they are listed in `.gitignore` but are still tracked from an earlier commit, so untrack them with `git rm --cached`.

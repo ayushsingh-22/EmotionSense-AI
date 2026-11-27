@@ -6,6 +6,10 @@ ROOT = Path(__file__).resolve().parents[2]
 MEDIA = ROOT / 'frontend' / 'public' / 'media'
 DRAFT = ROOT / 'content' / 'catalog.draft.json'
 NAMESPACE = uuid.UUID('bb9de5f2-a478-5f3e-8930-488ee5ed53b8')
+# Optional sources.csv column 'audio_profile'. Noise/ambient/tone tracks default to
+# mono 96 kbps (same as generate-starter-media.mjs); use 'music' for stereo content.
+PROFILES = {'ambient': ['-ac', '1', '-b:a', '96k'], 'music': ['-ac', '2', '-b:a', '128k']}
+DEFAULT_PROFILE = 'ambient'
 
 def main():
     ap = argparse.ArgumentParser(description='Prepare reviewed-catalog draft media')
@@ -26,6 +30,9 @@ def main():
         if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*',slug) or slug in seen: raise ValueError('Invalid or duplicate slug')
         seen.add(slug)
         if not row['title'].strip(): raise ValueError('Title is required')
+        profile = (row.get('audio_profile') or DEFAULT_PROFILE).strip()
+        if profile not in PROFILES: raise ValueError('audio_profile must be ambient or music')
+        row['audio_profile'] = profile
         for kind in ['audio','image']:
             if not row[kind+'_license'].strip(): raise ValueError('Both licences are required')
             u=urlparse(row[kind+'_source_url'].strip())
@@ -41,7 +48,7 @@ def main():
     items=[]
     for row,slug,files,outaudio,outimage in plans:
         outaudio.parent.mkdir(parents=True,exist_ok=True);outimage.parent.mkdir(parents=True,exist_ok=True)
-        subprocess.run([ffmpeg,'-v','error','-nostdin','-n','-i',str(files[0]),'-vn','-map_metadata','-1','-af','loudnorm=I=-16:TP=-1.5:LRA=11','-codec:a','libmp3lame','-b:a','128k',str(outaudio)],check=True)
+        subprocess.run([ffmpeg,'-v','error','-nostdin','-n','-i',str(files[0]),'-vn','-map_metadata','-1','-af','loudnorm=I=-16:TP=-1.5:LRA=11','-ar','48000','-codec:a','libmp3lame',*PROFILES[row['audio_profile']],str(outaudio)],check=True)
         subprocess.run([ffmpeg,'-v','error','-nostdin','-n','-i',str(files[1]),'-map_metadata','-1','-vf','scale=1200:1200:force_original_aspect_ratio=decrease','-c:v','libwebp','-q:v','75','-frames:v','1',str(outimage)],check=True)
         result=subprocess.run([ffprobe,'-v','error','-show_entries','format=duration','-of','default=noprint_wrappers=1:nokey=1',str(outaudio)],check=True,capture_output=True,text=True)
         duration=round(float(result.stdout.strip()))
@@ -49,7 +56,7 @@ def main():
             label='image' if kind=='images' else 'audio'
             return {'id':str(uuid.uuid5(NAMESPACE,slug+':'+kind)),'path':'/media/'+kind+'/'+output.name,'mimeType':mime,'sourceUrl':row[label+'_source_url'].strip(),'license':row[label+'_license'].strip(),'attribution':row[label+'_attribution'].strip()}
         items.append({'id':str(uuid.uuid5(NAMESPACE,slug+':content')),'title':row['title'].strip(),'description':None,'type':'audio','language':'en','durationSeconds':duration,'needTags':[],'suitabilityTags':[],'status':'draft','reviewVersion':'review-required','audio':asset('audio',outaudio,'audio/mpeg'),'image':asset('images',outimage,'image/webp')})
-        print(f'{slug}: audio {outaudio.stat().st_size} bytes, {duration}s; image {outimage.stat().st_size} bytes')
+        print(f'{slug}: audio {outaudio.stat().st_size} bytes, {duration}s ({row["audio_profile"]}); image {outimage.stat().st_size} bytes')
     DRAFT.parent.mkdir(parents=True,exist_ok=True);DRAFT.write_text(json.dumps({'version':1,'items':items},indent=2)+'\n',encoding='utf-8')
     print('Draft created at content/catalog.draft.json; review and copy to catalog.json before seeding.')
 if __name__ == '__main__':

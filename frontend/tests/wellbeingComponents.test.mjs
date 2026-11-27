@@ -7,11 +7,12 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRequire } from 'node:module';
 const require=createRequire(import.meta.url);
+const loopPlayback=(()=>{const js=ts.transpileModule(fs.readFileSync(new URL('../lib/loopPlayback.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;const exports={};vm.runInNewContext(js,{exports,Number});return exports})();
 function component(path){
  const source=fs.readFileSync(new URL(path,import.meta.url),'utf8');
  const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;
  const exports={};const api={moodLabels:['calm','happy','sad'],bytes:s=>new TextEncoder().encode(s).length,dateRange:()=>({from:'2026-01-01',to:'2026-01-31'}),wellbeing:{},userMessage:()=>''};
- const mockRequire=name=>name==='@/lib/wellbeing'?api:name==='@/components/auth/AuthGuard'?{AuthGuard:({children})=>children}:name==='@/components/ui/button'?{Button:({children,...props})=>React.createElement('button',props,children)}:name==='@/lib/api'?{getBackendAuthToken:async()=>''}:require(name);
+ const mockRequire=name=>name==='@/lib/wellbeing'?api:name==='@/components/auth/AuthGuard'?{AuthGuard:({children})=>children}:name==='@/components/ui/button'?{Button:({children,...props})=>React.createElement('button',props,children)}:name==='@/lib/api'?{getBackendAuthToken:async()=>''}:name==='@/lib/loopPlayback'?loopPlayback:require(name);
  vm.runInNewContext(js,{exports,require:mockRequire,TextEncoder,process,console});return exports.default||exports.WrittenJournals;
 }
 test('mood form renders its labels, note limit, and history',()=>{const Page=component('../app/mood/page.tsx');const html=renderToStaticMarkup(React.createElement(Page));assert.match(html,/Mood check-in/);assert.match(html,/calm/);assert.match(html,/2000 bytes/);assert.match(html,/Your history/)});

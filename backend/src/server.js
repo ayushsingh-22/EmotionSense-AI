@@ -1,4 +1,5 @@
 import safeLog from './utils/logger.js';
+import { assertMediaBaseUrl } from './wellbeing/mediaBaseUrl.js';
 /**
  * Main Server Entry Point
  * Initializes Express server and connects all modules
@@ -37,6 +38,7 @@ import {
 import profileRoutes from './routes/profileRoutes.js';
 import { createCatalogRouter } from './routes/catalogRoutes.js';
 import { createWellbeingRouter, requireVoiceConsent } from './routes/wellbeingRoutes.js';
+import { createExportRouter } from './routes/exportRoutes.js';
 import textRoutes from './routes/textRoutes.js';
 import voiceRoutes from './routes/voiceRoutes.js';
 import multiModalRoutes from './routes/multiModalRoutes.js';
@@ -54,6 +56,7 @@ import { journalService } from './journal-service/index.js';
 
 // Load environment variables
 dotenv.config();
+assertMediaBaseUrl();
 
 // Every console line (including third-party error dumps) is redacted of secrets.
 installLogRedaction();
@@ -160,6 +163,8 @@ const configureRoutes = (authServices) => {
   // Paid LLM / STT / TTS / emotion-model endpoints: authenticated + per-user limits.
   app.use(['/api/profile', '/api/messages/emotion-history'], ...authed);
   app.use('/api', profileRoutes);
+  // Phase 2C-6: re-authenticated data export, mounted before the general /api/me router.
+  app.use('/api/me/export', authFailureLimiter(), backendAuth.auth, noStore, createExportRouter({ db: prisma, passwords: authServices.passwords }));
   app.use('/api/me', authFailureLimiter(), backendAuth.auth, noStore, createWellbeingRouter(prisma));
   app.use('/api/content', authFailureLimiter(), backendAuth.auth, noStore, createCatalogRouter(prisma));
   app.use('/api/analyze', ...authed, ...paidAi);

@@ -6,6 +6,7 @@ import { DateTime } from 'luxon';
 import request from 'supertest';
 import prisma from '../src/lib/prisma.js';
 import { assertSafeTestDatabase } from './devDbGuard.js';
+import { cleanAndAssertNoLeftovers } from './syntheticCleanup.js';
 import { createAuthServices } from '../src/auth/index.js';
 import { createFakeEmail } from '../src/auth/emailService.js';
 import { createBackendAuthRouter } from '../src/routes/backendAuthRoutes.js';
@@ -16,7 +17,7 @@ const prefix='wellbeing-test-', suffix='@example.invalid';let ready=false;let a,
 const services=createAuthServices({prisma});services.email=createFakeEmail();const auth=createBackendAuthRouter({prisma,services});const app=express();app.use(express.json());app.use('/api/auth',auth.router);app.use('/api/me',auth.auth,createWellbeingRouter(prisma));app.post('/voice',auth.auth,requireVoiceConsent(prisma),(_req,_res,next)=>{uploadCalls++;next()},(_req,res)=>res.sendStatus(200));
 const call=(method,path,token)=>request(app)[method](path).set('Authorization',`Bearer ${token}`);
 before(async()=>{await assertSafeTestDatabase(prisma);ready=true;await prisma.user.deleteMany({where:{email:{startsWith:prefix,endsWith:suffix}}});a=await prisma.user.create({data:{email:prefix+randomUUID()+suffix,passwordHash:'!'}});b=await prisma.user.create({data:{email:prefix+randomUUID()+suffix,passwordHash:'!'}});tokenA=(await services.sessions.create({userId:a.id})).accessToken;tokenB=(await services.sessions.create({userId:b.id})).accessToken});
-after(async()=>{try{if(ready){await prisma.user.deleteMany({where:{email:{startsWith:prefix,endsWith:suffix}}});const [u,s,c]=await Promise.all([prisma.user.count(),prisma.authSession.count(),prisma.authChallenge.count()]);console.log(`# WELLBEING_FINAL_COUNTS users=${u} sessions=${s} challenges=${c}`);assert.deepEqual([u,s,c],[0,0,0])}}finally{await prisma.$disconnect()}});
+after(async()=>{try{if(ready)await cleanAndAssertNoLeftovers(prisma,[prefix],'WELLBEING')}finally{await prisma.$disconnect()}});
 test('preferences defaults and ownership',async()=>{const prefs={language:'en',timezone:'Asia/Kolkata',activityTypes:['audio'],supportModes:['self_guided'],accessibility:{reduceMotion:true}};let r=await call('get','/api/me/preferences',tokenA);assert.equal(r.body.data.timezone,'UTC');r=await call('put','/api/me/preferences',tokenA).send(prefs);assert.equal(r.status,200);r=await call('get','/api/me/preferences',tokenB);assert.equal(r.body.data.timezone,'UTC')});
 test('activity ownership, transitions, feedback races and cascade',async()=>{
  const activityApp=express();activityApp.use(express.json());activityApp.use('/api/me',auth.auth,createWellbeingRouter(prisma));
@@ -61,3 +62,23 @@ test('mood range handles DST and cursor ties; cross-user delete denied',async()=
  const all=[];let cursor;do{const q={from:'2026-03-08',to:'2026-03-08',limit:1};if(cursor)q.cursor=cursor;const r=await call('get','/api/me/mood-checkins',tokenA).query(q);assert.equal(r.status,200);all.push(...r.body.data.map(x=>x.id));cursor=r.body.nextCursor}while(cursor);assert.equal(all.length,5);assert.equal(new Set(all).size,5);const other=await call('get','/api/me/mood-checkins',tokenB).query({from:'2026-03-08',to:'2026-03-08'});assert.equal(other.status,200);assert.equal(other.body.data.length,0);assert.equal((await call('delete','/api/me/mood-checkins/'+ids[0],tokenB)).status,404);assert.equal((await call('delete','/api/me/mood-checkins/'+ids[0],tokenA)).status,204);
 });
 test('user journal CRUD is scoped and validates limits',async()=>{let r=await call('post','/api/me/journals',tokenA).send({title:'Title',body:'Entry'});assert.equal(r.status,201);const id=r.body.data.id;const day=DateTime.fromISO(r.body.data.createdAt,{zone:'utc'}).setZone('America/New_York').toISODate();let listed=await call('get','/api/me/journals',tokenA).query({from:day,to:day});assert.equal(listed.status,200);assert.ok(listed.body.data.some(x=>x.id===id));assert.equal(r.body.data.origin,'user');assert.equal((await call('get','/api/me/journals/'+id,tokenB)).status,404);assert.equal((await call('delete','/api/me/journals/'+id,tokenB)).status,404);assert.equal((await call('patch','/api/me/journals/'+id,tokenB).send({body:'Change'})).status,404);assert.equal((await call('patch','/api/me/journals/'+id,tokenA).send({body:'Changed'})).status,200);r=await call('get','/api/me/journals',tokenA).query({from:'2020-01-01',to:'2020-12-31'});assert.equal(r.status,200);assert.equal((await call('post','/api/me/journals',tokenA).send({body:'x'.repeat(6001)})).status,400);assert.equal((await call('delete','/api/me/journals/'+id,tokenA)).status,204)});
+
+test('clock skew: completion and journal edit timestamps come from the DB, never before their start', async () => {
+ // Own router instance: the shared app's per-user write limit (30/min) is already used up by earlier tests.
+ const skewApp=express();skewApp.use(express.json());skewApp.use('/api/me',auth.auth,createWellbeingRouter(prisma));
+ const call=(method,path,token)=>request(skewApp)[method](path).set('Authorization',`Bearer ${token}`);
+ const published=randomUUID();
+ try{
+  await prisma.contentItem.create({data:{id:published,title:'Skew fixture',contentType:'audio',language:'en',status:'published'}});
+  let r=await call('post','/api/me/activity-sessions',tokenA).send({contentItemId:published});assert.equal(r.status,201);const sid=r.body.data.id;
+  // Simulate the app clock running behind the DB: started_at is 5 s ahead of any JS Date.
+  await prisma.$executeRaw`UPDATE activity_sessions SET started_at=clock_timestamp()+interval '5 seconds' WHERE id=${sid}`;
+  r=await call('patch','/api/me/activity-sessions/'+sid,tokenA).send({status:'completed'});assert.equal(r.status,200);
+  const [row]=await prisma.$queryRaw`SELECT completed_at>=started_at AS ok FROM activity_sessions WHERE id=${sid}`;assert.equal(row.ok,true);
+  r=await call('post','/api/me/journals',tokenA).send({body:'skew fixture'});assert.equal(r.status,201);const jid=r.body.data.id;
+  await prisma.$executeRaw`UPDATE journal_entries SET created_at=clock_timestamp()+interval '5 seconds' WHERE id=${jid}`;
+  r=await call('patch','/api/me/journals/'+jid,tokenA).send({title:null});assert.equal(r.status,200);assert.equal(r.body.data.body,'skew fixture');assert.equal(r.body.data.title,null);
+  const [j]=await prisma.$queryRaw`SELECT updated_at>=created_at AS ok FROM journal_entries WHERE id=${jid}`;assert.equal(j.ok,true);
+  await call('delete','/api/me/journals/'+jid,tokenA);
+ }finally{await prisma.activitySession.deleteMany({where:{contentItemId:published}});await prisma.contentItem.deleteMany({where:{id:published}})}
+});
