@@ -1,0 +1,66 @@
+{
+  "generator": "backend/scripts/generate-starter-media.mjs",
+  "ffmpeg": "ffmpeg version 8.1.2-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+  "items": [
+    {
+      "slug": "pink-noise",
+      "audio": "/media/audio/pink-noise-v1.mp3",
+      "image": "/media/images/pink-noise-v1.webp",
+      "durationSeconds": 600,
+      "audioBytes": 7200596,
+      "audioSha256": "c10381d21f425625a48e6addd4d4f4d7bc3eef5cc2ec922f02dfd3740271fa4b",
+      "imageBytes": 5066,
+      "imageSha256": "5d2f6b37627970b754e5afdd9a6e81b41566c503d4f4918f23a75e8b5d949253"
+    },
+    {
+      "slug": "brown-noise",
+      "audio": "/media/audio/brown-noise-v1.mp3",
+      "image": "/media/images/brown-noise-v1.webp",
+      "durationSeconds": 600,
+      "audioBytes": 7200596,
+      "audioSha256": "52a6d17c420d914578c13672d10d2bfe610e0d33960af287fcbe1297abacea24",
+      "imageBytes": 4570,
+      "imageSha256": "e0eefbcc9af35e357bdedba74958cb5c2343a54ad8eee8807aa4549aded55c0e"
+    },
+    {
+      "slug": "soft-rain",
+      "audio": "/media/audio/soft-rain-v1.mp3",
+      "image": "/media/images/soft-rain-v1.webp",
+      "durationSeconds": 600,
+      "audioBytes": 7200596,
+      "audioSha256": "a2d8b5eed7ee64ad1a7ab21625ab3d261baffb9839b9f48cccd973ea956e276b",
+      "imageBytes": 4616,
+      "imageSha256": "e5acd1f7a22996f734f310fc69fe872371c7f802e63234a5c923014679ced558"
+    },
+    {
+      "slug": "breathing-4-7-8",
+      "audio": "/media/audio/breathing-4-7-8-v1.mp3",
+      "image": "/media/images/breathing-4-7-8-v1.webp",
+      "durationSeconds": 304,
+      "audioBytes": 3648692,
+      "audioSha256": "6efd775aaeb419a11c4a8d064933816cde124ea5066775d95517bd4590f7e2c0",
+      "imageBytes": 4940,
+      "imageSha256": "db46230d4332b98f2151aaadb863dc27948cc4a0ab11dbe84182861077ba035d"
+    },
+    {
+      "slug": "box-breathing",
+      "audio": "/media/audio/box-breathing-v1.mp3",
+      "image": "/media/images/box-breathing-v1.webp",
+      "durationSeconds": 304,
+      "audioBytes": 3648692,
+      "audioSha256": "288c541f6caa9d88c8bb5a7fc91272b3f1a302a9259bc3486ad8bb137548d527",
+      "imageBytes": 4458,
+      "imageSha256": "270f4942097fcab84d50d22fa08418337066b9160600cd95e18139110cd8b037"
+    },
+    {
+      "slug": "gentle-chime",
+      "audio": "/media/audio/gentle-chime-v1.mp3",
+      "image": "/media/images/gentle-chime-v1.webp",
+      "durationSeconds": 15,
+      "audioBytes": 240788,
+      "audioSha256": "2f635769d6b49d7a78d798d402cd4eaebb36338db56c0e831814e347ceb9bbc3",
+      "imageBytes": 4788,
+      "imageSha256": "a953c268a6195f8f00250ab4d5b469dab63c1234dce0c345ee196f2de75e2065"
+    }
+  ]
+}

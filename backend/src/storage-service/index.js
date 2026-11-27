@@ -1,3 +1,4 @@
+import { lockConsent, appendConsentLocked } from '../wellbeing/consents.js';
 import safeLog from '../utils/logger.js';
 /**
  * Storage Service Module
@@ -531,7 +532,7 @@ export const createOrUpdateEmergencyContact = async (userId, contactName, contac
         contactPhone
       }
       });
-      if(replaced) await tx.userConsent.create({data:{userId,purpose:'emergency_alert_sharing',noticeVersion:'emergency-alert-v1',granted:true,source:'in_app'}});
+      if(replaced) { await lockConsent(tx,userId,'emergency_alert_sharing'); await appendConsentLocked(tx,userId,'emergency_alert_sharing',true); }
       return saved;
     });
 
@@ -548,7 +549,7 @@ export const setEmergencyContactNotifications = async (userId, enabled) => prism
   const current=await tx.emergencyContact.findUnique({where:{userId}});
   if(!current) return null;
   const updated=await tx.emergencyContact.update({where:{userId},data:{notifyEnabled:enabled}});
-  if(enabled && !current.notifyEnabled) await tx.userConsent.create({data:{userId,purpose:'emergency_alert_sharing',noticeVersion:'emergency-alert-v1',granted:true,source:'in_app'}});
+  if(enabled !== current.notifyEnabled) { await lockConsent(tx,userId,'emergency_alert_sharing'); await appendConsentLocked(tx,userId,'emergency_alert_sharing',enabled); }
   return normalizeEmergencyContactRow(updated);
 });
 
@@ -557,7 +558,12 @@ export const setEmergencyContactNotifications = async (userId, enabled) => prism
  */
 export const deleteEmergencyContact = async (userId) => {
   try {
-    await prisma.emergencyContact.deleteMany({ where: { userId } });
+    await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`emergency-contact:${userId}`}, 0))::text`;
+      const existing=await tx.emergencyContact.findUnique({where:{userId},select:{notifyEnabled:true}});
+      if(existing) { await lockConsent(tx,userId,'emergency_alert_sharing'); await appendConsentLocked(tx,userId,'emergency_alert_sharing',false); }
+      await tx.emergencyContact.deleteMany({where:{userId}});
+    });
 
     safeLog.log(`✅ Emergency contact deleted for user: ${userId}`);
     return true;

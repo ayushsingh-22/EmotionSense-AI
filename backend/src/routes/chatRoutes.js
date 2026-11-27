@@ -39,6 +39,7 @@ import { sendEmergencyAlert } from '../utils/nodemailerHelper.js';
 import { detectRiskLevel, shouldTriggerEmergencyAlert } from '../utils/safetyHelper.js';
 import config from '../config/index.js';
 import { bindUserId } from '../middleware/auth.js';
+import { createSseWriter } from '../utils/sseWriter.js';
 import { validate } from '../middleware/security.js';
 import { userOwnsChatSession } from '../storage-service/index.js';
 import {
@@ -484,10 +485,8 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
   req.socket?.setNoDelay?.(true);
   res.flushHeaders?.();
 
-  const sendEvent = (event, data) => {
-    res.write(`event: ${event}\n`);
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-  };
+  const stream = createSseWriter(res);
+  const sendEvent = (event, data) => stream.send(event, data);
 
   // IMPORTANT: listen on the *response*'s close event, not the request's.
   // req.on('close') fires as soon as the request body has been fully read
@@ -746,7 +745,7 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
     if (!clientClosed) {
       sendEvent('done', donePayload);
     }
-    res.end();
+    stream.end();
 
   } catch (error) {
     safeLog.error('❌ [stream] Error processing chat message:', error);
@@ -756,7 +755,7 @@ router.post('/message/stream', validate({ body: chatMessageBody }), requireOwned
         requestId: req.id
       });
     }
-    res.end();
+    stream.end();
   }
 }));
 
@@ -1384,7 +1383,8 @@ router.post('/voice/stream', upload.single('audio'), bindUserId, validate({ body
       if (!clientClosed) {
         sendEvent('error', {
           error: 'Speech transcription failed',
-          requestId: req.id
+          requestId: req.id,
+          diagnostic: transcriptionResult.diagnostic
         });
       }
       return res.end();

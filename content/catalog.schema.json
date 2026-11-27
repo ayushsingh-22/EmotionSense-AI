@@ -1,0 +1,86 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "items"],
+  "properties": {
+    "version": { "const": 1 },
+    "items": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "description",
+          "type",
+          "language",
+          "durationSeconds",
+          "needTags",
+          "suitabilityTags",
+          "status",
+          "reviewVersion",
+          "audio",
+          "image"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "description": { "type": ["string", "null"], "maxLength": 2000 },
+          "type": { "enum": ["audio", "breathing", "meditation", "sleep"] },
+          "language": { "type": "string", "minLength": 2, "maxLength": 35 },
+          "durationSeconds": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 86400
+          },
+          "needTags": { "$ref": "#/$defs/tags" },
+          "suitabilityTags": { "$ref": "#/$defs/tags" },
+          "status": { "enum": ["draft", "in_review", "published", "archived"] },
+          "reviewVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "audio": { "$ref": "#/$defs/asset" },
+          "image": { "$ref": "#/$defs/asset" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "tags": {
+      "type": "array",
+      "maxItems": 10,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["relax", "sleep", "focus", "anxiety", "stress", "mindfulness"]
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path",
+        "mimeType",
+        "sourceUrl",
+        "license",
+        "attribution"
+      ],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "path": {
+          "type": "string",
+          "pattern": "^/media/(audio|images)/[A-Za-z0-9._/-]+$"
+        },
+        "mimeType": { "type": "string", "minLength": 1 },
+        "sourceUrl": { "type": "string", "format": "uri" },
+        "license": { "type": "string", "minLength": 1 },
+        "attribution": { "type": "string" }
+      }
+    }
+  }
+}

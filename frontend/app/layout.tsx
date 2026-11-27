@@ -13,6 +13,8 @@ import { MainContent } from "@/components/MainContent";
 import { EmergencyContactChecker } from "@/components/EmergencyContactChecker";
 import { ClientNavbar } from "@/components/ClientNavbar";
 import { NavbarSkeleton } from "@/components/NavbarSkeleton";
+import { VoiceConsentPrompt } from "@/components/VoiceConsentPrompt";
+import { ServiceRetryNotice } from "@/components/ServiceRetryNotice";
 
 // Page loading skeleton
 function PageLoadingSkeleton() {
@@ -91,6 +93,8 @@ export default function RootLayout({
                 
                 {/* Toast Notifications */}
                 <Toaster />
+                <VoiceConsentPrompt />
+                <ServiceRetryNotice />
               </SidebarProvider>
             </ChatProvider>
           </AuthProvider>

@@ -59,12 +59,14 @@ export function createGmailEmail({clientId,clientSecret,refreshToken,sender,from
   return {
     handlesRetries:true,
     configured,
-    async send(message) {
+    async send(message, { beforeAttempt } = {}) {
       if(!configured()) throw new Error('Email provider not configured');
       const raw=Buffer.from(buildGmailMime({...message,sender,fromName}),'utf8').toString('base64url');
       for(let attempt=0;attempt<attempts;attempt++) {
+        if (beforeAttempt && !(await beforeAttempt())) return {accepted:false, stopped:true};
         try {
           const bearer=await token();
+          if (beforeAttempt && !(await beforeAttempt())) return {accepted:false, stopped:true};
           const {response}=await call(SEND_URL,{method:'POST',headers:{Authorization:`Bearer ${bearer}`,'Content-Type':'application/json'},body:JSON.stringify({raw})});
           if(response.ok) return {accepted:true};
           if(response.status===401 && attempt<attempts-1) { accessToken=null; expiresAt=0; await sleep(250*2**attempt); continue; }

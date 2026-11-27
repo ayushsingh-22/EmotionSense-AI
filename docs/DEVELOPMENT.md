@@ -28,3 +28,11 @@ The development branch was created schema-only and its six existing migrations w
 Apply and verify **new migrations on development first, then production**, using `prisma migrate deploy` only after the appropriate review and approval. Never use production for integration tests. No production migration or production database write is authorized by this guide.
 
 GitHub Actions runs the database-free unit and build checks on pull requests and pushes to `main`; integration tests remain local. Both repositories' workflows use read-only repository permissions.
+
+## Content catalogues
+
+`content/catalog.json` is the single catalogue for development and production; see [CONTENT.md](CONTENT.md) for adding, editing, archiving and replacing media. It holds the six original generated starter items (published) and the four TESTING ONLY items as drafts. Production runs exclude those drafts entirely.
+
+Seed development from `backend`: `node scripts/seed-catalog.mjs --target=development` (dry run), then add `--apply`, then run the dry run again and expect only `UNCHANGED`. The development identity guard remains mandatory, and missing items are never deleted. Production seeding exists in code behind `--target=production --approve-production --env-file=PATH`. It is dry-run by default, and it checks the production guard, the database identity and that every file is live at `PUBLIC_MEDIA_BASE_URL`. Run it only with separate approval.
+
+`content/catalog.development.json` and `content/catalog.draft.json` are superseded and no longer read by the seed script. The TESTING ONLY media files (bell, meditation, rain, wind) must not be committed or deployed: they are listed in `.gitignore` but are still tracked from an earlier commit, so untrack them with `git rm --cached`.

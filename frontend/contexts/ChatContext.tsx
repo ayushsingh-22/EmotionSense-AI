@@ -11,7 +11,7 @@ interface ChatContextType {
   currentSessionId: string | null;
   isLoading: boolean;
   isTyping: boolean;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string) => Promise<boolean>;
   regenerateLastResponse: () => Promise<void>;
   startNewSession: () => void;
   loadChatHistory: (sessionId?: string) => Promise<void>;
@@ -170,12 +170,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Send message (SIMPLIFIED - backend handles all data persistence)
   const sendMessage = useCallback(async (content: string) => {
-    if (!user || !content.trim()) return;
+    if (!user || !content.trim()) return false;
 
     // Create session if none exists — but never without an emergency contact on file
     const sessionId = await ensureSessionReady();
     if (!sessionId) {
-      return;
+      return false;
     }
 
     setIsLoading(true);
@@ -255,19 +255,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             finalAssistantMessage,
           ]);
         },
-        onError: (errorMessage) => {
-          console.error('❌ Streaming error:', errorMessage);
-          // Remove the temp user + in-progress assistant bubbles on failure
-          setMessages(prev => prev.filter(msg => msg.id !== userMessage.id && msg.id !== assistantMessageId));
-          toast({
-            title: 'Error',
-            description: 'Failed to send message. Please try again.',
-            variant: 'destructive',
-          });
-        },
+        onError: () => { throw new Error('Chat stream failed'); },
       });
 
       console.log('✅ Messages updated in frontend state');
+      return true;
 
     } catch (error) {
       console.error('❌ Error sending message:', error);
@@ -275,11 +267,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       // Remove the temporary user + assistant messages on error
       setMessages(prev => prev.filter(msg => msg.id !== userMessage.id && msg.id !== assistantMessageId));
 
-      toast({
-        title: 'Error',
-        description: 'Failed to send message. Please try again.',
-        variant: 'destructive',
-      });
+      throw error;
     } finally {
       console.log('🏁 Resetting loading states...');
       setIsLoading(false);

@@ -10,6 +10,8 @@ import { useTheme } from 'next-themes';
 import { Palette, Brain, Info, Settings as SettingsIcon } from 'lucide-react';
 import { GradientHeader } from '@/components/ui/GradientHeader';
 import { GlassPanel } from '@/components/ui/GlassPanel';
+import { WellbeingSettings } from '@/components/WellbeingSettings';
+import { DataExportSettings } from '@/components/DataExportSettings';
 
 
 export default function SettingsPage() {
@@ -24,6 +26,8 @@ export default function SettingsPage() {
         subtitle="Customize your MantrAI experience and preferences"
         icon={<SettingsIcon className="h-10 w-10 text-primary" />}
       />
+      <WellbeingSettings />
+      <DataExportSettings />
 
       {/* Appearance Settings */}
       <GlassPanel 

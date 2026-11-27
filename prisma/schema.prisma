@@ -299,7 +299,8 @@ model MediaAsset {
   legacyAssetId   String?  @map("legacy_asset_id")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  contentItems ContentItem[]
+  contentItems ContentItem[] @relation("ContentAudio")
+  imageContentItems ContentItem[] @relation("ContentImage")
 
   @@unique([storageProvider, objectKey])
   @@map("media_assets")
@@ -315,16 +316,19 @@ model ContentItem {
   needTags        String[] @default([]) @map("need_tags")
   suitabilityTags String[] @default([]) @map("suitability_tags")
   mediaAssetId    String?  @map("media_asset_id")
+  imageAssetId    String?  @map("image_asset_id")
   status          String   @default("draft")
   reviewVersion   String?  @map("review_version")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  mediaAsset          MediaAsset?          @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  mediaAsset          MediaAsset?          @relation("ContentAudio", fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  imageAsset          MediaAsset?          @relation("ContentImage", fields: [imageAssetId], references: [id], onDelete: SetNull)
   activitySessions    ActivitySession[]
   recommendationItems RecommendationItem[]
 
   @@index([contentType, status], map: "content_items_type_status_idx")
+  @@index([imageAssetId], map: "content_items_image_asset_id_idx")
   @@map("content_items")
 }
 

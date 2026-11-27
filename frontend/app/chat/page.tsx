@@ -54,6 +54,7 @@ export default function ChatPage() {
   const [localMessages, setLocalMessages] = useState<ExtendedChatMessage[]>([]);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [messageText, setMessageText] = useState('');
+  const [sendFailed, setSendFailed] = useState(false);
   const [chatMode, setChatMode] = useState<'text' | 'voice'>('text');
   const [editingState, setEditingState] = useState<EditingState | null>(null);
   
@@ -150,23 +151,21 @@ export default function ChatPage() {
     userAtBottomRef.current = true;
 
     const trimmed = input.trim();
-    setMessageText('');
     setEditingState(null);
+    setSendFailed(false);
 
     try {
       // Use ChatContext's sendMessage function which handles everything
-      await sendChatMessage(trimmed);
+      const sent = await sendChatMessage(trimmed);
+      if (!sent) { setSendFailed(true); return; }
+      setMessageText(current=>current.trim()===trimmed?'':current);
       
       // Refresh sidebar to show updated session
       setSidebarRefreshTrigger((prev) => prev + 1);
       
     } catch (error) {
-      console.error('Error sending message:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to send message. Please try again.',
-        variant: 'destructive',
-      });
+      console.error('Chat stream failed');
+      setSendFailed(true);
     }
   }, [isLoading, user?.id, sendChatMessage]);
 
@@ -390,6 +389,7 @@ export default function ChatPage() {
           setMessageText('');
         }}
       />
+      {sendFailed && <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-sm text-destructive"><span>Message not sent — Retry. It may already be saved; check your chat before retrying.</span><Button type="button" variant="outline" disabled={isLoading || !messageText.trim()} onClick={()=>void handleSendMessage(messageText)}>Retry</Button></div>}
     </Suspense>
   );
 

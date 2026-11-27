@@ -15,6 +15,9 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: backend/package-lock.json
+      - name: Block test-only catalog content on main PRs
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: node backend/scripts/check-catalog-production.mjs
       - run: npm ci
         working-directory: backend
       - run: npm run test:unit

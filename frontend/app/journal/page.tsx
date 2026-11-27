@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { BookOpen, Plus, RefreshCw, Sparkles, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { WrittenJournals } from '@/components/journal/WrittenJournals';
 
 export default function JournalPage() {
   const { user } = useAuth();
@@ -263,6 +264,7 @@ export default function JournalPage() {
   if (selectedJournal) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <p className="mb-2 text-sm text-muted-foreground">Generated summary</p>
         <JournalDetail
           journal={selectedJournal}
           onBack={handleBack}
@@ -342,6 +344,7 @@ export default function JournalPage() {
         </div>
       </div>
 
+      <WrittenJournals />
       {/* Today's Journal Card */}
       <Card className="p-6 mb-8 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20">
         <div className="flex items-center justify-between">
@@ -350,7 +353,7 @@ export default function JournalPage() {
               <Sparkles className="h-6 w-6 text-purple-500" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold">Today&apos;s Journal</h3>
+              <h3 className="text-lg font-semibold">Generated summary · Today</h3>
               <p className="text-sm text-muted-foreground">
                 {todayJournal
                   ? 'Your journal for today is ready'
@@ -387,7 +390,7 @@ export default function JournalPage() {
 
       {/* Journal List */}
       <div className="mb-4">
-        <h2 className="text-2xl font-semibold mb-4">Past Journals</h2>
+        <h2 className="text-2xl font-semibold mb-4">Generated summaries</h2>
       </div>
 
       <JournalList

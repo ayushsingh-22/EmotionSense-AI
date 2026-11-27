@@ -3,12 +3,15 @@
 const allowedNames = new Set(['Error', 'TypeError', 'RangeError', 'SyntaxError', 'PrismaClientKnownRequestError', 'PrismaClientInitializationError', 'AbortError']);
 const allowedProviders = new Set(['gemini', 'groq', 'google', 'sarvam', 'murf', 'resend', 'huggingface']);
 const allowedCodes = new Set([
-  'UNAUTHENTICATED', 'RATE_LIMITED', 'VALIDATION_FAILED', 'P1001', 'P1008', 'P2002', 'P2024', 'P2028',
+  'UNAUTHENTICATED', 'RATE_LIMITED', 'VALIDATION_FAILED', 'EXPORT_TOO_LARGE', 'P1001', 'P1008', 'P2002', 'P2024', 'P2028',
   // POST /api/auth/register validation codes (contracts/auth-register.json)
   'PASSWORD_TOO_SHORT', 'PASSWORD_TOO_LONG', 'NAME_TOO_LONG', 'ADULT_CONFIRMATION_REQUIRED', 'INVALID_EMAIL'
 ]);
+const allowedProviderCodes = new Set(['tls_certificate_error','provider_network_error','rate_limit_exceeded','invalid_api_key','invalid_request_error','model_decommissioned','model_not_found','insufficient_quota','authentication_error','permission_error','server_error','rate_limit_error']);
+// Non-PII events. Phase 2C-6 data export uses the 'data export ...' events.
 const allowedEvents = new Set([
   'gmail refresh token invalid', 'email configuration incomplete',
+  'data export completed', 'data export denied', 'data export too large', 'data export rate limited', 'data export failed',
   'http request', 'auth register rejected', 'auth password minimum mismatch'
 ]);
 const allowedMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']);
@@ -39,6 +42,7 @@ function fields(args) {
     if (typeof value.requestId === 'string' && /^[0-9a-f-]{36}$/i.test(value.requestId)) out.requestId = value.requestId;
     if (allowedNames.has(value.name)) out.errorName = value.name;
     if (allowedProviders.has(value.provider)) out.provider = value.provider;
+    for (const key of ['providerErrorCode', 'providerErrorType']) if (allowedProviderCodes.has(value[key])) out[key] = value[key];
   }
   return out;
 }
