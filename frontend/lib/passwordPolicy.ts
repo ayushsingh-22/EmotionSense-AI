@@ -9,21 +9,28 @@
  * Pure functions (no imports) so the same file runs on the server and in the browser.
  */
 
-export const PASSWORD_MIN_LENGTH = 10;
+// These limits MUST equal the backend's (AUTH_PASSWORD_MIN_LENGTH default, 72-byte bcrypt
+// limit, 100-character name). contracts/auth-register.json pins all three and is checked
+// by both the frontend and backend test suites.
+export const PASSWORD_MIN_LENGTH = 12;
 /** bcrypt only uses the first 72 BYTES; longer input would be silently truncated. */
 export const PASSWORD_MAX_BYTES = 72;
+/** Longer names are rejected by the backend, never silently truncated. */
+export const NAME_MAX_LENGTH = 100;
 
-// Small, high-value deny-list (the most common leaked passwords that also satisfy a 10+ length).
+// Small, high-value deny-list of very common leaked passwords (checked after normalising).
 const COMMON = new Set([
   'password', 'password1', 'password12', 'password123', 'password1234', 'password12345', 'passw0rd123',
   '1234567890', '12345678910', '123456789012', '0123456789', '1111111111', '0000000000', '1q2w3e4r5t',
   'qwertyuiop', 'qwerty1234', 'qwerty12345', 'qwertyuiop123', 'asdfghjkl1', 'asdfghjklqwerty', 'zxcvbnm123',
   'iloveyou123', 'iloveyou12', 'letmein1234', 'letmein123', 'welcome123', 'welcome1234', 'admin12345', 'administrator',
   'changeme123', 'trustno1234', 'abc1234567', 'abcdefghij', 'abcd123456', 'monkey1234', 'dragon1234', 'football123',
-  'baseball123', 'superman123', 'sunshine123', 'princess123', 'mantrai123', 'mantrai1234', 'emotionsense', 'emotionsense1'
+  'baseball123', 'superman123', 'sunshine123', 'princess123', 'mantrai123', 'mantrai1234', 'emotionsense', 'emotionsense1',
+  'passwordpassword', 'qwertyuiopasdf', '123456789abc', '1234567890ab', 'abcdefghijkl', 'iloveyou1234', 'welcome12345'
 ]);
 
 export type PasswordCheck = { ok: true } | { ok: false; reason: string };
+type Context = { email?: string; fullName?: string };
 
 const byteLength = (s: string) => {
   let bytes = 0;
@@ -34,31 +41,33 @@ const byteLength = (s: string) => {
   return bytes;
 };
 
-export function validateNewPassword(password: unknown, context: { email?: string; fullName?: string } = {}): PasswordCheck {
-  if (typeof password !== 'string' || password.length === 0) {
-    return { ok: false, reason: 'A password is required.' };
-  }
-  if ([...password].length < PASSWORD_MIN_LENGTH) {
-    return { ok: false, reason: `Password must be at least ${PASSWORD_MIN_LENGTH} characters long.` };
-  }
-  if (byteLength(password) > PASSWORD_MAX_BYTES) {
-    return { ok: false, reason: `Password is too long (maximum ${PASSWORD_MAX_BYTES} bytes, about ${PASSWORD_MAX_BYTES} basic characters).` };
-  }
-  const lowered = password.toLowerCase();
-  const alnum = lowered.replace(/[^a-z0-9]/g, '');
-  if (COMMON.has(lowered) || COMMON.has(alnum) || COMMON.has(alnum.replace(/\d+$/, ''))) {
-    return { ok: false, reason: 'That password is too common. Please choose something less guessable.' };
-  }
-  if (/^(.)\1+$/.test(password) || new Set(password).size < 4) {
-    return { ok: false, reason: 'Password is too repetitive. Please choose something less guessable.' };
-  }
-  const local = (context.email ?? '').split('@')[0].toLowerCase();
-  if (local.length >= 4 && lowered.includes(local)) {
-    return { ok: false, reason: 'Password must not contain your email name.' };
-  }
-  const name = (context.fullName ?? '').trim().toLowerCase();
-  if (name.length >= 4 && alnum.includes(name.replace(/[^a-z0-9]/g, ''))) {
-    return { ok: false, reason: 'Password must not contain your name.' };
-  }
-  return { ok: true };
+// One definition per rule, used by both validateNewPassword and passwordChecklist.
+type Rule = { id: 'length' | 'maxBytes' | 'common' | 'repetitive' | 'email' | 'name'; label: string; reason: string; ok: (p: string, c: Context) => boolean };
+const RULES: Rule[] = [
+  { id: 'length', label: `At least ${PASSWORD_MIN_LENGTH} characters`, reason: `Password must be at least ${PASSWORD_MIN_LENGTH} characters long.`,
+    ok: p => [...p].length >= PASSWORD_MIN_LENGTH },
+  { id: 'maxBytes', label: `No more than ${PASSWORD_MAX_BYTES} bytes (about ${PASSWORD_MAX_BYTES} basic characters)`, reason: `Password is too long (maximum ${PASSWORD_MAX_BYTES} bytes, about ${PASSWORD_MAX_BYTES} basic characters).`,
+    ok: p => byteLength(p) <= PASSWORD_MAX_BYTES },
+  { id: 'common', label: 'Not a commonly used password', reason: 'That password is too common. Please choose something less guessable.',
+    ok: p => { const lowered = p.toLowerCase(), alnum = lowered.replace(/[^a-z0-9]/g, ''); return !(COMMON.has(lowered) || COMMON.has(alnum) || COMMON.has(alnum.replace(/\d+$/, ''))); } },
+  { id: 'repetitive', label: 'Not repetitive (at least 4 different characters)', reason: 'Password is too repetitive. Please choose something less guessable.',
+    ok: p => !/^(.)\1+$/.test(p) && new Set(p).size >= 4 },
+  { id: 'email', label: 'Does not contain your email name', reason: 'Password must not contain your email name.',
+    ok: (p, c) => { const local = (c.email ?? '').split('@')[0].toLowerCase(); return !(local.length >= 4 && p.toLowerCase().includes(local)); } },
+  { id: 'name', label: 'Does not contain your name', reason: 'Password must not contain your name.',
+    ok: (p, c) => { const name = (c.fullName ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, ''); return !(name.length >= 4 && p.toLowerCase().replace(/[^a-z0-9]/g, '').includes(name)); } }
+];
+
+export function validateNewPassword(password: unknown, context: Context = {}): PasswordCheck {
+  if (typeof password !== 'string' || password.length === 0) return { ok: false, reason: 'A password is required.' };
+  const failed = RULES.find(rule => !rule.ok(password, context));
+  return failed ? { ok: false, reason: failed.reason } : { ok: true };
+}
+
+export type ChecklistItem = { id: Rule['id']; label: string; ok: boolean };
+
+/** Live checklist for the signup form: every rule above, each with its pass/fail state. */
+export function passwordChecklist(password: string, context: Context = {}): ChecklistItem[] {
+  const p = typeof password === 'string' ? password : '';
+  return RULES.map(rule => ({ id: rule.id, label: rule.label, ok: p.length > 0 && rule.ok(p, context) }));
 }

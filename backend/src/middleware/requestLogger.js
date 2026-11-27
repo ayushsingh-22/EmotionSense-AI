@@ -38,27 +38,28 @@ const writeLogToFile = (logMessage) => {
 /**
  * Request logger middleware
  */
+/**
+ * Route TEMPLATE for a request (e.g. /api/me/journals/:id), never the raw URL,
+ * so ids, emails or query strings cannot reach the logs. Mount paths in
+ * server.js are static strings, so baseUrl is safe; the logger re-validates.
+ */
+export const routeTemplate = (req) => {
+  const base = typeof req.baseUrl === 'string' ? req.baseUrl : '';
+  const path = typeof req.route?.path === 'string' ? req.route.path : '';
+  const template = (base + path) || null;
+  return template && template !== '/' ? template.replace(/\/$/, '') : '/unrouted';
+};
+
+/** One structured, PII-free line per finished request (method, route template, status, duration, request id). */
 export const requestLogger = (req, res, next) => {
   const startTime = Date.now();
-  
-  // Log request
-  const requestLog = `[${getTimestamp()}] ${req.id ?? '-'} ${req.method}`;
-  safeLog.log(`📥 ${requestLog}`);
-  writeLogToFile(requestLog);
-
-  // Log response when finished
   res.on('finish', () => {
-    const duration = Date.now() - startTime;
-    const responseLog = `[${getTimestamp()}] ${req.id ?? '-'} ${req.method} - ${res.statusCode} - ${duration}ms`;
-    
-    if (res.statusCode >= 400) {
-      safeLog.error(`📤❌ ${responseLog}`);
-    } else {
-      safeLog.log(`📤✅ ${responseLog}`);
-    }
-    
-    writeLogToFile(responseLog);
+    const durationMs = Date.now() - startTime;
+    const line = { event: 'http request', method: req.method, route: routeTemplate(req), status: res.statusCode, durationMs, requestId: req.id };
+    if (res.statusCode >= 500) safeLog.error(line);
+    else if (res.statusCode >= 400) safeLog.warn(line);
+    else safeLog.info(line);
+    writeLogToFile(`[${getTimestamp()}] ${req.id ?? '-'} ${req.method} ${line.route} - ${res.statusCode} - ${durationMs}ms`);
   });
-
   next();
 };

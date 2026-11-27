@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { validateNewPassword, PASSWORD_MIN_LENGTH } from '@/lib/passwordPolicy';
+import { validateNewPassword, passwordChecklist, PASSWORD_MIN_LENGTH, NAME_MAX_LENGTH } from '@/lib/passwordPolicy';
+import { REGISTER_ERROR_MESSAGES } from '@/lib/registerContract';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Activity } from 'lucide-react';
@@ -37,6 +38,16 @@ export default function SignUpPage() {
 
     if (!fullName || !email || !password) {
       setError('Please fill in all fields');
+      return;
+    }
+
+    if ([...fullName].length > NAME_MAX_LENGTH) {
+      setError(REGISTER_ERROR_MESSAGES.NAME_TOO_LONG);
+      return;
+    }
+
+    if (!isAdult) {
+      setError(REGISTER_ERROR_MESSAGES.ADULT_CONFIRMATION_REQUIRED);
       return;
     }
 
@@ -105,6 +116,7 @@ export default function SignUpPage() {
                 placeholder="Enter your full name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
+                maxLength={NAME_MAX_LENGTH}
                 required
                 disabled={isLoading}
                 className="h-12 rounded-xl border-2 focus:border-blue-500 transition-all duration-300"
@@ -137,6 +149,7 @@ export default function SignUpPage() {
                   required
                   disabled={isLoading}
                   minLength={PASSWORD_MIN_LENGTH}
+                  aria-describedby="password-rules"
                   className="h-12 rounded-xl border-2 focus:border-blue-500 transition-all duration-300 pr-12"
                 />
                 <Button
@@ -154,6 +167,14 @@ export default function SignUpPage() {
                   )}
                 </Button>
               </div>
+              <ul id="password-rules" aria-live="polite" className="space-y-1 text-sm">
+                {passwordChecklist(password, { email, fullName }).map((rule) => (
+                  <li key={rule.id} data-rule={rule.id} data-ok={rule.ok} className={rule.ok ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}>
+                    <span aria-hidden="true">{rule.ok ? '✓' : '○'}</span> {rule.label}
+                    <span className="sr-only">{rule.ok ? ' (met)' : ' (not met yet)'}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" required checked={isAdult} onChange={(e) => setIsAdult(e.target.checked)} disabled={isLoading} /> I am 18 or older</label>

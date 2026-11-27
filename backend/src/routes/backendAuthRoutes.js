@@ -4,6 +4,9 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { retryRead } from '../auth/transientRetry.js';
 
+/** Must equal the website's NAME_MAX_LENGTH (pinned in contracts/auth-register.json). */
+export const NAME_MAX_LENGTH = 100;
+
 // Dependencies are injected so automated tests can substitute a fake email adapter.
 export function createBackendAuthRouter({ prisma, services }) {
   const { passwords, tokens, sessions, challenges, email, transactionOptions = { maxWait: 10000, timeout: 15000 } } = services;
@@ -60,12 +63,21 @@ export function createBackendAuthRouter({ prisma, services }) {
   }
   router.post('/register',fail(async(req,res)=>{
     const started=Date.now();
-    const address=normalize(req.body?.email), password=req.body?.password;
-    if(req.body?.isAdult !== true || !goodEmail(address)) return res.status(400).json({error:'Invalid request'});
-    try { passwords.validate(password); } catch { return res.status(400).json({error:'Invalid request'}); }
+    const address=normalize(req.body?.email), password=req.body?.password, name=req.body?.name;
+    // Specific, account-independent validation codes (see contracts/auth-register.json).
+    // Unknown body fields are ignored, never rejected, so a newer website can't break an older API.
+    const rejection = req.body?.isAdult !== true ? 'ADULT_CONFIRMATION_REQUIRED'
+      : !goodEmail(address) ? 'INVALID_EMAIL'
+      : (typeof name === 'string' && [...name].length > NAME_MAX_LENGTH) ? 'NAME_TOO_LONG'
+      : passwords.check ? passwords.check(password)
+      : (() => { try { passwords.validate(password); return null; } catch { return 'PASSWORD_TOO_SHORT'; } })();
+    if(rejection){
+      safeLog.warn({event:'auth register rejected',route:'/api/auth/register',method:'POST',status:400,code:rejection,requestId:req.id});
+      return res.status(400).json({error:'Invalid request',code:rejection});
+    }
     const passwordHash=await passwords.hash(password);
     let user;
-    try { user=await prisma.user.create({data:{email:address,passwordHash,fullName:typeof req.body?.name==='string'?req.body.name.slice(0,100):null}}); }
+    try { user=await prisma.user.create({data:{email:address,passwordHash,fullName:typeof name==='string'&&name.trim()?name:null}}); }
     catch(e) { if(e.code!=='P2002') throw e; user=await prisma.user.findUnique({where:{email:address}}); }
     const delivery=user&&!user.emailVerifiedAt ? await challenge(user,'verify_email') : null;
     return ack(res,started,delivery);
