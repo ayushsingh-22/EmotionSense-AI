@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateNewPassword, PASSWORD_MIN_LENGTH, PASSWORD_MAX_BYTES } from '../lib/passwordPolicy.ts';
+import { validateNewPassword, passwordChecklist, PASSWORD_MIN_LENGTH, PASSWORD_MAX_BYTES, NAME_MAX_LENGTH } from '../lib/passwordPolicy.ts';
 
 const ok = (p, ctx) => assert.deepEqual(validateNewPassword(p, ctx), { ok: true }, `expected acceptable: ${p}`);
 const bad = (p, ctx, re) => {
@@ -11,10 +11,14 @@ const bad = (p, ctx, re) => {
 
 describe('new-password policy', () => {
   test('requires a string of at least the minimum length', () => {
-    assert.equal(PASSWORD_MIN_LENGTH, 10);
+    assert.equal(PASSWORD_MIN_LENGTH, 12);
+    assert.equal(NAME_MAX_LENGTH, 100);
     bad(undefined); bad(null); bad(12345678901234); bad('');
-    bad('Abc12345', {}, /at least 10/); // 8 chars: the old policy allowed 6
-    bad('abcde', {}, /at least 10/);
+    bad('Abc12345', {}, /at least 12/);
+    bad('abcde', {}, /at least 12/);
+    // Production bug 2026-11: 10-11 characters passed the form but the backend requires 12.
+    bad('Tr0ub4dor&3', {}, /at least 12/); bad('Tr0ub4dor&X', {}, /at least 12/); bad('Tr0ub4dor&', {}, /at least 12/);
+    ok('Tr0ub4dor&3x');
     ok('correct horse battery');
   });
   test('no composition rules: a long all-lowercase passphrase is fine', () => {
@@ -22,7 +26,7 @@ describe('new-password policy', () => {
     ok('thisisalongpassphrase');
   });
   test('rejects well-known passwords, including trivial variants', () => {
-    for (const p of ['password123', 'Password123', 'PASSWORD1234', 'qwertyuiop', 'iloveyou123', '1234567890', 'letmein1234', 'Welcome123!']) bad(p, {}, /too common/);
+    for (const p of ['password1234', 'Password12345', 'PASSWORD1234', 'passwordpassword', 'iloveyou1234', '123456789012', 'abcdefghijkl', 'Welcome12345!']) bad(p, {}, /too common/);
   });
   test('rejects repetitive input', () => {
     bad('aaaaaaaaaaaa', {}, /repetitive|common/);
@@ -42,5 +46,17 @@ describe('new-password policy', () => {
   });
   test('does not trim or normalise: leading/trailing spaces are part of the password', () => {
     ok('  spaces are allowed  ');
+  });
+  test('live checklist lists every rule and agrees with the validator', () => {
+    const empty = passwordChecklist('');
+    assert.deepEqual(empty.map(x => x.id), ['length', 'maxBytes', 'common', 'repetitive', 'email', 'name']);
+    assert.ok(empty.every(x => !x.ok), 'nothing is ticked before typing');
+    assert.match(empty[0].label, /At least 12 characters/);
+    const ctx = { email: 'jonathan@example.com', fullName: 'Priya Sharma' };
+    for (const p of ['short', 'Tr0ub4dor&3', 'Tr0ub4dor&3x', 'password1234', 'abababababab', 'jonathan-is-great-1', 'my-name-is-priya-sharma', 'x7Kp'.repeat(18) + 'q', 'correct horse battery']) {
+      const list = passwordChecklist(p, ctx);
+      assert.equal(list.every(x => x.ok), validateNewPassword(p, ctx).ok, p);
+    }
+    assert.deepEqual(passwordChecklist('Tr0ub4dor&3', ctx).filter(x => !x.ok).map(x => x.id), ['length']);
   });
 });

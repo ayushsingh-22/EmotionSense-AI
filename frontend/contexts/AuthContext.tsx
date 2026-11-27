@@ -5,6 +5,7 @@ import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from
 import type { UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { api, clearBackendToken } from '@/lib/api';
+import { registerErrorMessage } from '@/lib/registerContract';
 
 interface AuthUser {
   id: string;
@@ -94,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string, isAdult: boolean) => {
     try {
       const response=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,fullName,isAdult}),cache:'no-store'});
-      if(!response.ok) return {error: response.status>=500 ? 'Service unavailable. Please try again.' : 'Unable to process the request.'};
+      if(!response.ok){let code:unknown;try{code=(await response.json())?.code}catch{code=undefined}return {error: registerErrorMessage(response.status,code)};}
       sessionStorage.setItem('mindhaven-verification-email',email);
       return {};
     } catch { return {error:'Service unavailable. Please try again.'}; }

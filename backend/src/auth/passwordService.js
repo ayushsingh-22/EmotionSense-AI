@@ -4,11 +4,18 @@ export function createPasswordService({ cost = 12, minLength = 12 } = {}) {
   if (!Number.isInteger(cost) || cost < 4 || cost > 16) throw new Error('Invalid bcrypt cost');
   if (!Number.isInteger(minLength) || minLength < 8) throw new Error('Invalid password minimum');
   let dummy;
+  // Which length rule a new password breaks, as a safe client-facing code (null = acceptable).
+  const check = (password) => {
+    if (typeof password !== 'string' || [...password].length < minLength) return 'PASSWORD_TOO_SHORT';
+    if (Buffer.byteLength(password, 'utf8') > 72) return 'PASSWORD_TOO_LONG';
+    return null;
+  };
   const validate = (password) => {
-    if (typeof password !== 'string' || [...password].length < minLength || Buffer.byteLength(password, 'utf8') > 72)
-      throw new Error('Invalid password length');
+    if (check(password)) throw new Error('Invalid password length');
   };
   return {
+    minLength,
+    check,
     validate,
     async hash(password) { validate(password); return bcrypt.hash(password, cost); },
     async verify(password, storedHash) {

@@ -1,0 +1,13 @@
+{
+  "endpoint": "POST /api/auth/register",
+  "description": "Shared registration contract. Checked by frontend/tests/registerContract.test.mjs and backend/tests/registerContract.unit.test.js; both run in CI. Change both sides and this file together.",
+  "formToNextRoute": ["email", "password", "fullName", "isAdult"],
+  "nextRouteToBackend": { "email": "string", "password": "string", "name": "string", "isAdult": "boolean" },
+  "passwordMinLength": 12,
+  "passwordMaxBytes": 72,
+  "nameMaxLength": 100,
+  "successStatus": 202,
+  "validationStatus": 400,
+  "errorCodes": ["ADULT_CONFIRMATION_REQUIRED", "INVALID_EMAIL", "NAME_TOO_LONG", "PASSWORD_TOO_SHORT", "PASSWORD_TOO_LONG"],
+  "unknownFields": "ignored"
+}
