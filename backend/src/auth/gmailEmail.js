@@ -34,6 +34,8 @@ export function buildGmailMime({ sender, fromName, to, subject, text }) {
   ].join('\r\n');
 }
 
+// Every failure carries a safe reasonCode for the privacy logger (no addresses or tokens).
+const fail = (message, reasonCode, extra = {}) => Object.assign(new Error(message), { reasonCode }, extra);
 export function createGmailEmail({clientId,clientSecret,refreshToken,sender,fromName='MindHaven',fetchImpl=fetch,timeoutMs=10000,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),attempts=3}={}) {
   let accessToken=null, expiresAt=0, inflight=null;
   const configured=()=>{ if(!clientId || !clientSecret || !refreshToken || !sender || !fromName) return false; try { address(sender); header(fromName); return true } catch { return false } };
@@ -42,25 +44,35 @@ export function createGmailEmail({clientId,clientSecret,refreshToken,sender,from
     try { return await Promise.race([(async()=>{const response=await fetchImpl(url,{...options,signal:controller.signal});let parsed={};if(readJson){try{parsed=await response.json()}catch{}}return {response,parsed}})(),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('timeout'))},timeoutMs)})]); }
     finally { clearTimeout(timer); }
   }
-  async function token() {
-    if(accessToken && Date.now() < expiresAt-60000) return accessToken;
+  async function token({ fresh = false } = {}) {
+    if(!fresh && accessToken && Date.now() < expiresAt-60000) return accessToken;
     if(!inflight) inflight=(async()=>{
       const body=new URLSearchParams({client_id:clientId,client_secret:clientSecret,refresh_token:refreshToken,grant_type:'refresh_token'});
       const {response,parsed}=await call(TOKEN_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body},true);
       if(!response.ok) {
-        if(parsed.error==='invalid_grant') { logger.error({event:'gmail refresh token invalid',provider:'google'});const error=new Error('Gmail authorization invalid');error.permanent=true;throw error }
-        const error=new Error('Gmail authorization unavailable');error.retryable=response.status===429||response.status>=500;throw error;
+        if(parsed.error==='invalid_grant') { logger.error({event:'gmail refresh token invalid',provider:'google',code:'EMAIL_AUTH_INVALID'});throw fail('Gmail authorization invalid','EMAIL_AUTH_INVALID',{permanent:true}) }
+        throw fail('Gmail authorization unavailable','EMAIL_AUTH_UNAVAILABLE',{retryable:response.status===429||response.status>=500});
       }
-      if(typeof parsed.access_token!=='string'||!parsed.access_token) throw new Error('Gmail authorization unavailable');
+      if(typeof parsed.access_token!=='string'||!parsed.access_token) throw fail('Gmail authorization unavailable','EMAIL_AUTH_UNAVAILABLE');
       accessToken=parsed.access_token;expiresAt=Date.now()+(Number(parsed.expires_in)||3600)*1000;return accessToken;
     })().finally(()=>{inflight=null});
     return inflight;
   }
   return {
+    provider:'google',
     handlesRetries:true,
     configured,
+    /**
+     * Health check: performs ONLY an OAuth refresh-token exchange (no email is sent).
+     * Always exchanges afresh: a cached access token can outlive a revoked refresh token.
+     */
+    async checkAuth() {
+      if(!configured()) throw fail('Email provider not configured','EMAIL_NOT_CONFIGURED');
+      try { await token({ fresh: true }); return { ok: true }; }
+      catch(error) { throw fail('Email provider check failed', error.reasonCode || (error.message==='timeout'?'EMAIL_TIMEOUT':'EMAIL_NETWORK_ERROR')); }
+    },
     async send(message, { beforeAttempt } = {}) {
-      if(!configured()) throw new Error('Email provider not configured');
+      if(!configured()) throw fail('Email provider not configured','EMAIL_NOT_CONFIGURED');
       const raw=Buffer.from(buildGmailMime({...message,sender,fromName}),'utf8').toString('base64url');
       for(let attempt=0;attempt<attempts;attempt++) {
         if (beforeAttempt && !(await beforeAttempt())) return {accepted:false, stopped:true};
@@ -70,13 +82,13 @@ export function createGmailEmail({clientId,clientSecret,refreshToken,sender,from
           const {response}=await call(SEND_URL,{method:'POST',headers:{Authorization:`Bearer ${bearer}`,'Content-Type':'application/json'},body:JSON.stringify({raw})});
           if(response.ok) return {accepted:true};
           if(response.status===401 && attempt<attempts-1) { accessToken=null; expiresAt=0; await sleep(250*2**attempt); continue; }
-          const error=new Error('Gmail delivery failed');error.retryable=response.status===429||response.status>=500;throw error;
+          throw fail('Gmail delivery failed',response.status===429?'EMAIL_RATE_LIMITED':'EMAIL_REJECTED',{retryable:response.status===429||response.status>=500});
         } catch(error) {
-          if(error.permanent || error.retryable===false || attempt===attempts-1) throw new Error('Email provider request failed');
+          if(error.permanent || error.retryable===false || attempt===attempts-1) throw fail('Email provider request failed',error.reasonCode||(error.message==='timeout'?'EMAIL_TIMEOUT':'EMAIL_NETWORK_ERROR'));
           await sleep(250*2**attempt);
         }
       }
-      throw new Error('Email provider request failed');
+      throw fail('Email provider request failed','EMAIL_DELIVERY_FAILED');
     }
   };
 }

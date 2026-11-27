@@ -25,10 +25,13 @@ export function createBackendAuthRouter({ prisma, services }) {
     if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
     if (delivery) res.once('finish', () => setImmediate(async () => {
       let timer;
+      // Structured, recipient-free outcome: provider + reason code + request id.
+      const meta = { provider: email.provider, requestId: res.req?.id };
       try {
         if (email.handlesRetries) await email.send(delivery);
-        else await Promise.race([email.send(delivery), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 10000); timer.unref(); })]);
-      } catch { safeLog.error('Auth email delivery failed'); }
+        else await Promise.race([email.send(delivery), new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error('timeout'), { reasonCode: 'EMAIL_TIMEOUT' })), 10000); timer.unref(); })]);
+        safeLog.info({ event: 'auth email sent', ...meta });
+      } catch (error) { safeLog.error({ event: 'auth email delivery failed', code: error?.reasonCode || 'EMAIL_DELIVERY_FAILED', ...meta }); }
       finally { clearTimeout(timer); }
     }));
     return res.status(202).json({ message: 'If eligible, instructions will be sent.' });
