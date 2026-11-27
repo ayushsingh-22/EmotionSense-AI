@@ -375,7 +375,7 @@ export default function ProfilePage() {
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border-2 border-red-200 dark:border-red-800 rounded-xl bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-950/20 dark:to-pink-950/20 hover:from-red-100 hover:to-pink-100 dark:hover:from-red-950/40 dark:hover:to-pink-950/40 transition-all duration-200">
             <div className="mb-3 sm:mb-0">
-              <h4 className="font-semibold text-red-800 dark:text-red-200">Delete Account</h4>
+              <h4 className="font-semibold text-red-800 dark:text-red-200">Delete Account</h4>  
               <p className="text-sm text-red-600 dark:text-red-300">
                 Permanently delete your account and all associated data
               </p>
