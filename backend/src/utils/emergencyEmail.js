@@ -23,17 +23,20 @@ export function createEmergencySender({ email, beforeAttempt = async () => true,
     const to=contact?.contact_email || contact?.email;
     if (!to) return false;
     const text=emergencyAlertText(user);
+    let code='EMAIL_DELIVERY_FAILED';
     for (let attempt=0;attempt<(email.handlesRetries ? 1 : 3);attempt++) {
       let timer;
       try {
         if (!email.handlesRetries && !(await beforeAttempt())) return false;
-        const result = email.handlesRetries ? await email.send({to,subject:'MindHaven check-in',text},{beforeAttempt}) : await Promise.race([email.send({to,subject:'MindHaven check-in',text}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),timeoutMs);timer.unref?.()})]);
+        const result = email.handlesRetries ? await email.send({to,subject:'MindHaven check-in',text},{beforeAttempt}) : await Promise.race([email.send({to,subject:'MindHaven check-in',text}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('timeout'),{reasonCode:'EMAIL_TIMEOUT'})),timeoutMs);timer.unref?.()})]);
         if (result?.accepted === true) return true;
-      } catch { /* Retry without recording provider details. */ }
+        if (result?.stopped) return false; // withdrawn/disabled mid-send: not a delivery failure
+      } catch (error) { if (error?.reasonCode) code=error.reasonCode; /* only the safe reason code is kept */ }
       finally { clearTimeout(timer); }
       if (!email.handlesRetries && attempt<2) await sleep(250 * 2 ** attempt);
     }
-    safeLog.error('Emergency alert delivery failed');
+    // Same structured reason as auth mail; never the contact, user or message.
+    safeLog.error({event:'emergency alert delivery failed',code,provider:email.provider});
     return false;
   };
 }
@@ -61,7 +64,7 @@ export function createGuardedEmergencySender({db,email,sleep}) {
       const accepted=await send(user,contact);
       await db.alertLog.updateMany({where:{id:eventId,userId:user.id},data:{additionalData:{status:accepted?'accepted':withdrawn?'withdrawn_or_disabled':'failed',alertSent:accepted}}});
       return accepted;
-    } catch { safeLog.error('Emergency alert delivery failed'); return false; }
+    } catch (error) { safeLog.error({event:'emergency alert delivery failed',code:typeof error?.code==='string'&&/^P\d{4}$/.test(error.code)?error.code:'EMAIL_DELIVERY_FAILED',provider:email?.provider}); return false; }
   };
 }
 export async function sendEmergencyAlert(user, contact) {

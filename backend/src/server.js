@@ -51,7 +51,8 @@ import insightsRoutes from './routes/insightsRoutes.js';
 import journalRoutes from './routes/journalRoutes.js';
 import activityRoutes from './routes/activityRoutes.js';
 import cronRoutes from './routes/cronRoutes.js';
-import internalRoutes from './routes/internalRoutes.js';
+import { createInternalRouter } from './routes/internalRoutes.js';
+import { checkEmailProvider, logEmailProviderCheck } from './auth/emailHealth.js';
 import { journalService } from './journal-service/index.js';
 
 // Load environment variables
@@ -150,7 +151,7 @@ const configureRoutes = (authServices) => {
   app.use('/api/health', healthRoutes);
   // Secret-gated, not user-facing.
   app.use('/api/cron', cronRoutes);
-  app.use('/api/internal', internalRoutes);
+  app.use('/api/internal', createInternalRouter(undefined, { email: authServices.email }));
   app.use('/api/auth', backendAuth.router);
 
   // Everything below requires a valid bearer token. Failed attempts are
@@ -207,10 +208,12 @@ const configureRoutes = (authServices) => {
  * beyond router imports). Exported for the automated test-suite.
  */
 let built = false;
+let services;
 export const buildApp = (authServices) => {
   if (built) return app;
   configureMiddleware();
-  configureRoutes(authServices || createAuthServices({ prisma }));
+  services = authServices || createAuthServices({ prisma });
+  configureRoutes(services);
   app.use(errorHandler);
   built = true;
   return app;
@@ -232,6 +235,9 @@ const startServer = async () => {
     } catch (err) {
       safeLog.warn('⚠️ Journal service failed:', err.message);
     }
+
+    // One non-blocking email provider check (OAuth refresh only, no mail sent).
+    setImmediate(() => { checkEmailProvider(services?.email).then(result => logEmailProviderCheck(result, { provider: services?.email?.provider, trigger: 'startup' })).catch(() => {}); });
 
     app.listen(PORT, () => {
       safeLog.log('='.repeat(50));
