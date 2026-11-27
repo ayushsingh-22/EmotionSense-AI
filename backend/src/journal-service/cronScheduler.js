@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import pg from 'pg';
+import { strictPgConfig } from '../lib/pgStrictTls.js';
 import journalGenerator from './journalGenerator.js';
 import prisma from '../lib/prisma.js';
 import logger from '../utils/logger.js';
@@ -68,7 +69,7 @@ export class CronScheduler {
     const directUrl = new URL(direct), pooledUrl = new URL(process.env.DATABASE_URL);
     if (directUrl.hostname.includes('-pooler') || pooledUrl.hostname.replace('-pooler.', '.') !== directUrl.hostname || pooledUrl.pathname !== directUrl.pathname) throw new Error('Direct and pooled database targets must match');
     this.isRunning = true;
-    const client = clientFactory({ connectionString: direct, connectionTimeoutMillis: 15000 });
+    const client = clientFactory(strictPgConfig(direct, { connectionTimeoutMillis: 15000 }));
     let locked = false; let disconnected = false;
     client.on('error', () => { disconnected = true; });
     client.on('end', () => { disconnected = true; });

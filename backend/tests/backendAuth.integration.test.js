@@ -7,6 +7,7 @@ import express from 'express';
 import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
 import { assertSafeTestDatabase } from './devDbGuard.js';
+import { cleanAndAssertNoLeftovers } from './syntheticCleanup.js';
 import { createAuthServices } from '../src/auth/index.js';
 import { createFakeEmail } from '../src/auth/emailService.js';
 import { createBackendAuthRouter } from '../src/routes/backendAuthRoutes.js';
@@ -29,9 +30,10 @@ const call=(method,path,body={},access) => {
   return req.send(body);
 };
 const clean=async()=>{if(!guardPassed)return;await prisma.user.deleteMany({where:{email:{startsWith:prefix,endsWith:suffix}}});services.email.messages.length=0;};
-before(async()=>{await assertSafeTestDatabase(prisma);const count=await prisma.user.count();assert.equal(count,0,'Test target must have no users');guardPassed=true});
+// The development DB may hold real manual accounts: only this suite's synthetic users are swept and counted.
+before(async()=>{await assertSafeTestDatabase(prisma);guardPassed=true;await clean()});
 afterEach(clean);
-after(async()=>{try{await clean();const [users,sessions,challenges]=await Promise.all([prisma.user.count(),prisma.authSession.count(),prisma.authChallenge.count()]);console.log(`FINAL_COUNTS users=${users} sessions=${sessions} challenges=${challenges}`);assert.equal(users+sessions+challenges,0)}finally{await prisma.$disconnect()}});
+after(async()=>{try{await clean();if(guardPassed)await cleanAndAssertNoLeftovers(prisma,[prefix],'BACKEND_AUTH')}finally{await prisma.$disconnect()}});
 const ensure=(r,status)=>assert.equal(r.status,status,`Unexpected HTTP status in integration test`);
 async function code(){for(let i=0;i<100;i++){if(services.email.messages.length){const m=services.email.messages.pop();return /\b\d{6}\b/.exec(m.text)?.[0]}await new Promise(r=>setTimeout(r,25))}throw Error('Fake email not delivered')}
 async function register(){currentEmail=`${prefix}${randomUUID()}${suffix}`;ensure(await call('post','register',{email:currentEmail,password,isAdult:true}),202);const otp=await code();ensure(await call('post','verify-email',{email:currentEmail,otp}),200);return currentEmail}
@@ -42,7 +44,7 @@ async function activeCount(familyId){return prisma.authSession.count({where:{fam
 test('full flow and logout',async()=>{const pair=await ready();ensure(await call('get','me',{},pair.accessToken),200);const refreshed=await call('post','refresh',{refreshToken:pair.refreshToken});ensure(refreshed,200);ensure(await call('post','logout',{},refreshed.body.accessToken),200);ensure(await call('get','me',{},refreshed.body.accessToken),401)});
 test('password reset revokes sessions',async()=>{const pair=await ready();ensure(await call('post','forgot-password',{email:currentEmail}),202);const otp=await code();ensure(await call('post','reset-password',{email:currentEmail,password,otp}),200);ensure(await call('get','me',{},pair.accessToken),401)});
 test('password change revokes sessions',async()=>{const pair=await ready();ensure(await call('post','change-password',{currentPassword:password,newPassword:password},pair.accessToken),200);ensure(await call('get','me',{},pair.accessToken),401)});
-test('account deletion cascades',async()=>{const pair=await ready();ensure(await call('delete','account',{password},pair.accessToken),200);assert.equal(await prisma.authSession.count(),0);assert.equal(await prisma.authChallenge.count(),0)});
+test('account deletion cascades',async()=>{const pair=await ready();const {sub:userId}=await services.tokens.verify(pair.accessToken);assert.ok(await prisma.authSession.count({where:{userId}})>0);ensure(await call('delete','account',{password},pair.accessToken),200);assert.equal(await prisma.user.count({where:{id:userId}}),0);assert.equal(await prisma.authSession.count({where:{userId}}),0);assert.equal(await prisma.authChallenge.count({where:{userId}}),0)});
 test('a five concurrent refreshes and b lost response retry',async()=>{const pair=await ready(), id=await family(pair.accessToken),start=performance.now();const r=await Promise.all(Array.from({length:5},()=>call('post','refresh',{refreshToken:pair.refreshToken})));for(const x of r)ensure(x,200);assert.ok(r.every(x=>JSON.stringify(x.body)===JSON.stringify(r[0].body)));assert.equal(await prisma.authSession.count({where:{familyId:id}}),2);const retry=await call('post','refresh',{refreshToken:pair.refreshToken});ensure(retry,200);assert.ok(JSON.stringify(retry.body)===JSON.stringify(r[0].body));console.log(`CONCURRENCY a_b_ms=${Math.round(performance.now()-start)}`)});
 test('c reuse after grace revokes family',async()=>{const pair=await ready(), id=await family(pair.accessToken),start=performance.now();ensure(await call('post','refresh',{refreshToken:pair.refreshToken}),200);await new Promise(r=>setTimeout(r,30500));ensure(await call('post','refresh',{refreshToken:pair.refreshToken}),401);assert.equal(await activeCount(id),0);console.log(`CONCURRENCY c_ms=${Math.round(performance.now()-start)}`)});
 test('d reuse after child use revokes family',async()=>{const pair=await ready(),id=await family(pair.accessToken),start=performance.now();const r=await call('post','refresh',{refreshToken:pair.refreshToken});ensure(r,200);ensure(await call('get','me',{},r.body.accessToken),200);ensure(await call('post','refresh',{refreshToken:pair.refreshToken}),401);assert.equal(await activeCount(id),0);console.log(`CONCURRENCY d_ms=${Math.round(performance.now()-start)}`)});

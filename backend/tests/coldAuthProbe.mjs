@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import express from 'express';
 import request from 'supertest';
 import { assertSafeTestDatabase } from './devDbGuard.js';
+import { deleteSynthetic, syntheticCounts } from './syntheticCleanup.js';
 import { createAuthServices } from '../src/auth/index.js';
 import { createFakeEmail } from '../src/auth/emailService.js';
 import { createBackendAuthRouter } from '../src/routes/backendAuthRoutes.js';
@@ -15,7 +16,7 @@ const prisma=new PrismaClient();
 let id, approved=false;
 try {
   await assertSafeTestDatabase(prisma);
-  if(await prisma.user.count()!==0) throw new Error('Probe requires an empty user table');
+  await deleteSynthetic(prisma,['spike-cold-']); // only this probe's own leftovers; real accounts are never touched
   approved=true;
   const user=await prisma.user.create({data:{email:`spike-cold-${randomUUID()}@example.invalid`,passwordHash:'!',emailVerifiedAt:new Date()}});
   id=user.id;
@@ -40,7 +41,7 @@ try {
 } finally {
   try {
     if(approved&&id) await prisma.user.deleteMany({where:{id,email:{startsWith:'spike-cold-',endsWith:'@example.invalid'}}});
-    if(approved){const [users,sessions,challenges]=await Promise.all([prisma.user.count(),prisma.authSession.count(),prisma.authChallenge.count()]);console.log(`COLD_FINAL_COUNTS users=${users} sessions=${sessions} challenges=${challenges}`);if(users||sessions||challenges)process.exitCode=1;}
+    if(approved){await deleteSynthetic(prisma,['spike-cold-']);const {users,sessions,challenges}=await syntheticCounts(prisma,['spike-cold-']);console.log(`COLD_FINAL_COUNTS synthetic_users=${users} synthetic_sessions=${sessions} synthetic_challenges=${challenges}`);if(users||sessions||challenges)process.exitCode=1;}
   } catch {console.error('COLD_CLEANUP_FAILED');process.exitCode=1}
   await prisma.$disconnect();
 }

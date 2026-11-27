@@ -17,6 +17,18 @@ export function productionCatalogIssues(catalog){
  }
  return issues;
 }
+/**
+ * Items a production run may touch. Drafts that carry test-only sources or
+ * licences are excluded entirely (never seeded, not even as drafts). Every
+ * other item, whatever its status, is kept and must pass the guard, so a
+ * test item marked published/in_review/archived fails instead of being skipped.
+ */
+export function productionCatalogSubset(catalog){
+ if(!catalog||!Array.isArray(catalog.items))throw Error('Invalid catalog');
+ const items=[],excluded=[];
+ for(const item of catalog.items)(item?.status==='draft'&&productionCatalogIssues({items:[item]}).length?excluded:items).push(item);
+ return {catalog:{...catalog,items},excluded};
+}
 export function assertProductionCatalog(catalog){
  const issues=productionCatalogIssues(catalog);if(issues.length)throw Error('Production catalog contains test-only items:\n'+issues.map(x=>`- ${x.title} (${x.id}): ${x.reasons.join(', ')}`).join('\n'));
 }

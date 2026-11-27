@@ -1,3 +1,4 @@
+import { validMediaBaseUrl } from '../wellbeing/mediaBaseUrl.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import { Prisma } from '@prisma/client';
@@ -8,7 +9,7 @@ const types=['audio','breathing','meditation','sleep'];
 const tags=['relax','sleep','focus','anxiety','stress','mindfulness'];
 export function mediaUrl(asset,base=process.env.PUBLIC_MEDIA_BASE_URL){
  if(!asset||asset.storageProvider!=='static_web'||asset.visibility!=='public'||!base)return null;
- try{const b=new URL(base);if(b.protocol!=='https:'||b.username||b.password||b.search||b.hash||b.pathname!=='/media/'||!/^\/media\/(audio|images)\/[a-zA-Z0-9._/-]+$/.test(asset.objectKey)||asset.objectKey.split('/').some(x=>x==='..'||x==='.'))return null;return new URL(asset.objectKey.slice('/media/'.length),b).href}catch{return null}
+ try{const b=new URL(base);if(!validMediaBaseUrl(base)||!/^\/media\/(audio|images)\/[a-zA-Z0-9._/-]+$/.test(asset.objectKey)||asset.objectKey.split('/').some(x=>x==='..'||x==='.'))return null;return new URL(asset.objectKey.slice('/media/'.length),b).href}catch{return null}
 }
 const select={id:true,title:true,description:true,contentType:true,language:true,durationSeconds:true,needTags:true,suitabilityTags:true,createdAt:true,mediaAsset:{select:{storageProvider:true,objectKey:true,visibility:true}},imageAsset:{select:{storageProvider:true,objectKey:true,visibility:true}}};
 const shape=x=>({id:x.id,title:x.title,description:x.description,type:x.contentType,language:x.language,durationSeconds:x.durationSeconds,needTags:x.needTags??[],suitabilityTags:x.suitabilityTags??[],hasAudio:!!mediaUrl(x.mediaAsset),imageUrl:mediaUrl(x.imageAsset)});

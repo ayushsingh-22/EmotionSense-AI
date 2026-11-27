@@ -69,3 +69,16 @@ frontend/build/
 *.pem
 *.tsbuildinfo
 next-env.d.ts
+# Phase 2C-3c: TESTING ONLY media (rights unverified) must never be committed or deployed.
+# NOTE: these were committed earlier (2b13eff); ignore rules do not untrack files.
+# Untrack once with: git rm --cached <the eight paths below>
+frontend/public/media/audio/bell.mp3
+frontend/public/media/audio/meditation.mp3
+frontend/public/media/audio/rain.mp3
+frontend/public/media/audio/wind.mp3
+frontend/public/media/images/bell.webp
+frontend/public/media/images/meditation.webp
+frontend/public/media/images/rain.webp
+frontend/public/media/images/wind.webp
+frontend/public/media/audio/development-tone.wav
+frontend/public/media/images/development-pixel.png
